@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+  COMPLETED
+  NO_SHOW
+}
+
+model Business {
+  id                      String    @id @default(cuid())
+  name                    String
+  slug                    String    @unique
+  bookingWindowDays       Int       @default(7)
+  parallelSeats           Int       @default(1)
+  slotDurationMinutes     Int       @default(30)
+  showAvailableCount      Boolean   @default(false)
+  notifyOwnerEmail        Boolean   @default(true)
+  notifyOwnerWhatsapp     Boolean   @default(false)
+  notifyCustomerEmail     Boolean   @default(true)
+  notifyCustomerWhatsapp  Boolean   @default(false)
+  ownerEmail              String
+  ownerWhatsapp           String?
+  ownerPassword           String
+
+  // Feature flags
+  enableWaitlist          Boolean   @default(false)
+  enableRecurring         Boolean   @default(false)
+  enablePayments          Boolean   @default(false)
+  enableMultiStaff        Boolean   @default(false)
+  paymentMode             String    @default("none") // 'full' | 'deposit' | 'none'
+  depositAmount           Float?
+  depositPercentage       Float?
+  servicePrice            Float?
+  razorpayKeyId           String?
+  razorpayKeySecret       String?
+  razorpayTestMode        Boolean   @default(true)
+  refundPolicy            String?
+  embedAllowedOrigins     String[]  @default([])
+
+  workingHours            WorkingHour[]
+  formFields              FormField[]
+  bookings                Booking[]
+  blockedSlots            BlockedSlot[]
+  staff                   Staff[]
+  waitlistEntries         WaitlistEntry[]
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model WorkingHour {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  openTime    String   // HH:mm format
+  closeTime   String   // HH:mm format
+  isOpen      Boolean  @default(true)
+
+  @@unique([businessId, dayOfWeek])
+}
+
+model FormField {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  label       String
+  fieldType   String   // 'text' | 'number' | 'select' | 'checkbox' | 'tel' | 'email' | 'textarea'
+  required    Boolean  @default(false)
+  options     String[] @default([])
+  placeholder String?
+  order       Int
+  visible     Boolean  @default(true)
+
+  @@index([businessId, order])
+}
+
+model Staff {
+  id           String        @id @default(cuid())
+  businessId   String
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name         String
+  role         String?
+  phone        String?
+  email        String?
+  color        String         @default("#7C3AED") // hex color for calendar display
+  isActive     Boolean        @default(true)
+  bookings     Booking[]
+  blockedSlots BlockedSlot[]
+  createdAt    DateTime       @default(now())
+
+  @@index([businessId, isActive])
+}
+
+model Booking {
+  id               String        @id @default(cuid())
+  businessId       String
+  business         Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staffId          String?
+  staff            Staff?        @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  date             DateTime
+  startTime        String        // HH:mm format
+  endTime          String        // HH:mm format
+  status           BookingStatus @default(CONFIRMED)
+  formData         Json          @default("{}")
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  seatIndex        Int           @default(0)
+  isRecurring      Boolean       @default(false)
+  recurringRule    String?       // RRULE string e.g. "FREQ=WEEKLY;COUNT=8"
+  recurringGroupId String?       // links all bookings in a recurring series
+  paymentStatus    String?       // 'pending' | 'partial' | 'paid' | 'refunded'
+  paymentAmount    Float?
+  razorpayOrderId  String?
+  razorpayPaymentId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  cancelledAt      DateTime?
+
+  @@index([businessId, date, startTime, status])
+  @@index([businessId, staffId])
+  @@index([recurringGroupId])
+}
+
+model BlockedSlot {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staffId     String?
+  staff       Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  date        DateTime
+  startTime   String   // HH:mm format
+  endTime     String   // HH:mm format
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, date])
+}
+
+model WaitlistEntry {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  date          DateTime
+  startTime     String   // HH:mm format
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  staffId       String?
+  formData      Json     @default("{}")
+  notified      Boolean  @default(false)
+  notifiedAt    DateTime?
+  expired       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([businessId, date, startTime, notified, expired])
+}
