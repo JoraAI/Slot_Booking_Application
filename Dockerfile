@@ -1,4 +1,4 @@
-# SlotBook API — Fly.io / Docker image (pnpm monorepo, backend only).
+# Reservly API — Docker image for Render (also works on Fly/Railway).
 FROM node:20-bookworm-slim
 
 WORKDIR /app
@@ -21,9 +21,10 @@ RUN pnpm --filter backend exec prisma generate \
   && pnpm --filter backend build
 
 ENV NODE_ENV=production
-ENV PORT=8080
-EXPOSE 8080
+# Render injects PORT at runtime (often 10000). Keep a local default for other hosts.
+ENV PORT=10000
+EXPOSE 10000
 
-# Fly release_command + runtime both start from the backend package dir.
 WORKDIR /app/packages/backend
-CMD ["node", "dist/index.js"]
+# Migrate on boot, then start the API.
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/index.js"]

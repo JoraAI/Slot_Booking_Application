@@ -154,7 +154,7 @@ test('B1. initiateRefund sends notes as a JSON object and retries byte-identical
 
     assert.strictEqual(captured.length, 2, 'two live attempts captured');
     const body = JSON.parse(captured[0]);
-    assert.deepStrictEqual(body.notes, { slotbook_idempotency_key: 'key-b1-xyz' }, 'notes is the JSON object form');
+    assert.deepStrictEqual(body.notes, { reservly_idempotency_key: 'key-b1-xyz' }, 'notes is the JSON object form');
     assert.ok(!Array.isArray(body.notes), 'notes is NOT an array of {key,value}');
     assert.strictEqual(body.speed, 'optimum');
     assert.strictEqual(body.amount, 50000);

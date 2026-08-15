@@ -1,6 +1,11 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
 
+/** Razorpay refund notes key (written on create / retry). */
+export const REFUND_NOTES_KEY = 'reservly_idempotency_key';
+/** Legacy notes key — still accepted when matching existing refunds. */
+export const LEGACY_REFUND_NOTES_KEY = 'slotbook_idempotency_key';
+
 interface RazorpayOrder {
   id: string;
   amount: number;
@@ -165,7 +170,7 @@ class PaymentService {
         payment_id: paymentId,
         status: 'processed',
         speed: 'optimum',
-        notes: idempotencyKey ? { slotbook_idempotency_key: idempotencyKey } : {},
+        notes: idempotencyKey ? { [REFUND_NOTES_KEY]: idempotencyKey } : {},
         created_at: Math.floor(Date.now() / 1000),
       };
       if (idempotencyKey) this.testRefundsByKey.set(idempotencyKey, refund);
@@ -191,7 +196,7 @@ class PaymentService {
     // Carry the stable key in notes (JSON object — the official Razorpay format)
     // so reconciliation can match a refund even before we have its refund id
     // (byte-identical for a repeated key).
-    if (idempotencyKey) body.notes = { slotbook_idempotency_key: idempotencyKey };
+    if (idempotencyKey) body.notes = { [REFUND_NOTES_KEY]: idempotencyKey };
 
     let response: Response;
     try {
@@ -218,7 +223,7 @@ class PaymentService {
 
   /**
    * Fetch all refunds for a payment (used by reconciliation). Matches a refund
-   * by id or by the `slotbook_idempotency_key` note we always attach.
+   * by id or by the `reservly_idempotency_key` note we always attach.
    */
   async fetchPaymentRefunds(paymentId: string, businessId?: string): Promise<any> {
     if (paymentId.startsWith('pay_test_') || (businessId && await this.isTestMode(businessId))) {

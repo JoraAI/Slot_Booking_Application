@@ -190,7 +190,7 @@ test('A2. network timeout then retry uses the same key/body and cannot duplicate
   paymentService.initiateRefund = async (paymentId: string, amount?: number, businessId?: string, key?: string) => {
     callCount++;
     keys.push(key || '');
-    bodies.push(JSON.stringify({ amount: Math.round((amount || 0) * 100), speed: 'optimum', notes: key ? { slotbook_idempotency_key: key } : {} }));
+    bodies.push(JSON.stringify({ amount: Math.round((amount || 0) * 100), speed: 'optimum', notes: key ? { reservly_idempotency_key: key } : {} }));
     if (callCount === 1) {
       const err: any = new Error('network timeout');
       err.isNetworkError = true;

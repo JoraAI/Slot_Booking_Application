@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
-import { paymentService } from './PaymentService';
+import { paymentService, REFUND_NOTES_KEY, LEGACY_REFUND_NOTES_KEY } from './PaymentService';
 import { reminderService } from './ReminderService';
 
 export interface RefundResult {
@@ -17,8 +17,6 @@ export const REFUND_INITIATED_MESSAGE =
 export const REFUND_FAILED_MESSAGE =
   'Booking cancelled, but the automatic refund needs the salon to complete it. We have notified the salon.';
 
-const NOTES_KEY = 'slotbook_idempotency_key';
-
 function isPaid(booking: any): boolean {
   return !!(booking?.razorpayPaymentId) && booking.paymentAmount != null && booking.paymentAmount > 0;
 }
@@ -27,8 +25,16 @@ function isPaid(booking: any): boolean {
 function notesMatch(refund: any, key: string | null | undefined): boolean {
   if (!key) return false;
   const notes = refund?.notes;
-  if (Array.isArray(notes)) return notes.some((n: any) => n?.key === NOTES_KEY && String(n.value) === key);
-  if (notes && typeof notes === 'object') return notes[NOTES_KEY] === key;
+  if (Array.isArray(notes)) {
+    return notes.some(
+      (n: any) =>
+        (n?.key === REFUND_NOTES_KEY || n?.key === LEGACY_REFUND_NOTES_KEY) &&
+        String(n.value) === key
+    );
+  }
+  if (notes && typeof notes === 'object') {
+    return notes[REFUND_NOTES_KEY] === key || notes[LEGACY_REFUND_NOTES_KEY] === key;
+  }
   return false;
 }
 

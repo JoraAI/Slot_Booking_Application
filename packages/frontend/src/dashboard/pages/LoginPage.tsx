@@ -67,8 +67,8 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">S</div>
-          <h1 className="text-2xl font-bold">SlotBook</h1>
+          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">R</div>
+          <h1 className="text-2xl font-bold">Reservly</h1>
           <p className="text-sm text-gray-500 mt-1">{mode === 'login' ? 'Sign in to your dashboard' : 'Create your booking workspace'}</p>
         </div>
 

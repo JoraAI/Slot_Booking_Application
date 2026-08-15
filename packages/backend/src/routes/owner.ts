@@ -1827,7 +1827,7 @@ ownerRouter.post('/media/signature', async (req: AuthRequest, res: Response) => 
     });
     if (!business) return res.status(404).json({ error: 'Business not found' });
 
-    const folder = `${process.env.CLOUDINARY_FOLDER_PREFIX || 'slotbook-dev'}/${business.publicCode}`;
+    const folder = `${process.env.CLOUDINARY_FOLDER_PREFIX || 'reservly-dev'}/${business.publicCode}`;
     const timestamp = Math.round(Date.now() / 1000);
     const toSign = `folder=${folder}&timestamp=${timestamp}`;
     const signature = require('crypto').createHmac('sha256', apiSecret).update(toSign).digest('hex');

@@ -38,7 +38,7 @@ export const CalendarPage: React.FC = () => {
     const interval = window.setInterval(refresh, 15000)
     window.addEventListener('focus', refresh)
 
-    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('slotbook-bookings') : null
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('reservly-bookings') : null
     if (channel) channel.onmessage = refresh
 
     return () => {

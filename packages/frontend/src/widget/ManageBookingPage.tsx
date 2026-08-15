@@ -98,7 +98,7 @@ export const ManageBookingPage: React.FC = () => {
       setRefund(result.refund || null)
       // Notify an owner calendar open in another tab on the same browser.
       if ('BroadcastChannel' in window) {
-        const channel = new BroadcastChannel('slotbook-bookings')
+        const channel = new BroadcastChannel('reservly-bookings')
         channel.postMessage({ type: 'BOOKING_CANCELLED', bookingId })
         channel.close()
       }

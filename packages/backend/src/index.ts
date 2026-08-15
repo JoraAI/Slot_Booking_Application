@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 // Root route — health check + API info
 app.get('/', (_req, res) => {
   res.json({
-    name: 'Slot Booking Microservice',
+    name: 'Reservly API',
     version: '1.0.0',
     status: 'running',
     endpoints: {
@@ -35,9 +35,9 @@ const swaggerSpec = swaggerJsdoc({
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Slot Booking Microservice API',
+      title: 'Reservly API',
       version: '1.0.0',
-      description: 'Universal Slot Booking SaaS Microservice — Salon-First, Industry-Agnostic. Supports multi-staff, waitlist, recurring bookings, payments (Razorpay), and embeddable booking widgets.',
+      description: 'Flexible reservation platform for service businesses, cafés, and more. Supports staff and capacity-based availability, waitlists, recurring bookings, payments, and embeddable booking widgets.',
     },
     servers: [
       { url: 'http://localhost:3001', description: 'Development server' },
@@ -209,7 +209,7 @@ app.get('/swagger.json', (_req, res) => {
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'Slot Booking API Docs',
+  customSiteTitle: 'Reservly API Docs',
 }));
 
 // Middleware

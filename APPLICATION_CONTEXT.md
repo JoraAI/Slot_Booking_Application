@@ -1,4 +1,4 @@
-# SlotBook — Application Context (source of truth)
+# Reservly — Application Context (source of truth)
 
 This document is generated from the current codebase. Source code is authoritative
 when this document differs.
@@ -119,7 +119,7 @@ when this document differs.
 - **Idempotent refund creation**: every `PaymentRefund` owns a stable
   `idempotencyKey` (UUID, `@unique`, migration `20260821000000_payment_refund_idempotency`)
   sent as Razorpay `X-Refund-Idempotency` with a byte-identical body
-  (`{ amount, speed: 'optimum', notes: { slotbook_idempotency_key: key } }`).
+  (`{ amount, speed: 'optimum', notes: { reservly_idempotency_key: key } }`).
   Retries (network timeout, reconciliation) can never duplicate a refund; a
   Razorpay `409` is reconciled instead of re-created.
 - **Atomic cancel + refund intent**: `RefundService.cancelBookingWithRefundIntent`
@@ -164,7 +164,7 @@ when this document differs.
 ## Batch 2B — live Razorpay notes + status conservatism (§12.9, code-only)
 
 - **Notes are a JSON object** on every live and test-mode create/retry:
-  `notes: { slotbook_idempotency_key: <idempotencyKey> }` (the official Razorpay
+  `notes: { reservly_idempotency_key: <idempotencyKey> }` (the official Razorpay
   format). `X-Refund-Idempotency` remains the primary dedupe mechanism; the body
   stays byte-identical for a repeated key. `notesMatch` reads the object form and
   still tolerates the legacy array form.

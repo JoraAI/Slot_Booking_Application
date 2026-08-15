@@ -1,6 +1,6 @@
-# SlotBook — Universal Slot Booking SaaS Microservice
+# Reservly — Flexible Reservations for Every Business
 
-A fully self-contained, embeddable slot booking microservice inspired by Calendly but purpose-built for physical service businesses (salons, clinics, studios, gyms, etc.).
+A self-contained, embeddable reservation platform for appointment and capacity-based businesses, including salons, clinics, studios, gyms, cafés, and restaurants.
 
 ## Features
 

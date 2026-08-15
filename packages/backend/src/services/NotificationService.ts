@@ -62,7 +62,7 @@ class NotificationService {
     try {
       const transporter = this.getTransporter();
       await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'Slot Booking'}" <${process.env.SMTP_USER}>`,
+        from: `"${process.env.SMTP_FROM_NAME || 'Reservly'}" <${process.env.SMTP_USER}>`,
         to,
         subject,
         html,

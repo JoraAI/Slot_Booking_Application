@@ -49,8 +49,8 @@ export const DashboardLayout: React.FC = () => {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-sm">S</div>
-          <span className="font-bold text-lg">SlotBook</span>
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
+          <span className="font-bold text-lg">Reservly</span>
         </div>
         <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-120px)]">
           {navItems.map((item) => {

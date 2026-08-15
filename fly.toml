@@ -1,8 +1,8 @@
-# Fly.io app config for the SlotBook API.
-# Create the app once with: fly apps create slotbook-api
+# Fly.io app config for the Reservly API.
+# Create the app once with: fly apps create reservly-api
 # Then: fly deploy
 
-app = "slotbook-api"
+app = "reservly-api"
 primary_region = "sin"
 
 [build]

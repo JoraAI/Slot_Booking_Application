@@ -1,0 +1,23 @@
+# Optional Render Blueprint — you can also create the Web Service manually in the UI.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: reservly-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false

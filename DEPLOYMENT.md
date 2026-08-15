@@ -1,193 +1,171 @@
-# Deployment Guide — Fly.io + Vercel + Neon
+# Reservly Deployment Guide — Render + Vercel + Neon
 
-**Shape:** Vercel (frontend) + Fly.io (API) + Neon (Postgres) + external cron.
+**Product:** Reservly  
+**Shape:** Vercel (frontend) + Render (API) + Neon (Postgres) + external cron.
 
-Repo includes `Dockerfile` and `fly.toml` at the monorepo root for the API.
+No credit card required for this path (free tiers). Repo includes `Dockerfile` and optional `render.yaml`.
 
 ---
 
 ## Every-time checklist (after first setup)
 
-```bash
-# 1. Push code (or deploy from local)
-fly deploy
-
-# 2. If you changed VITE_* on Vercel → Redeploy frontend in Vercel UI
-# 3. If you changed secrets:
-fly secrets set KEY=value
-fly apps restart slotbook-api
-
-# 4. Smoke test
-curl https://slotbook-api.fly.dev/api/health
-```
+1. Push to the Git branch Render watches (usually `main`) → auto-deploys API  
+2. If you changed `VITE_*` on Vercel → **Redeploy** the frontend  
+3. Smoke test: `curl https://YOUR-API.onrender.com/api/health`
 
 ---
 
-## Step 0 — Accounts & CLI (one-time)
+## Step 0 — Accounts (one-time)
 
-1. Create accounts: [Fly.io](https://fly.io), [Neon](https://neon.tech), [Vercel](https://vercel.com), [cron-job.org](https://cron-job.org)
-2. Fly needs a payment card on file (free allowance still usually requires a card)
-3. Install Fly CLI and log in:
+Create these (GitHub login is fine; card usually not required):
 
-```bash
-curl -L https://fly.io/install.sh | sh
-# add ~/.fly/bin to PATH if the installer says so
-fly auth login
-```
+1. [Render](https://render.com) — API
+2. [Neon](https://neon.tech) — Postgres (do **not** use Render free Postgres long-term; it expires ~30 days)
+3. [Vercel](https://vercel.com) — frontend
+4. [cron-job.org](https://cron-job.org) — scheduled jobs
 
-You also need Node 20+, pnpm, and git locally.
+Push this repo to **GitHub** if it is not already there (Render + Vercel deploy from Git).
 
 ---
 
 ## Step 1 — Create free Postgres (Neon)
 
-1. Neon → New Project → pick a region near Fly (`sin` / Singapore or closest available)
-2. Copy the connection string
-3. Ensure it includes SSL, e.g. `?sslmode=require`
+1. Neon → **New Project**
+2. Pick a region (any is fine for a pilot)
+3. Copy the connection string
+4. Ensure SSL: add `?sslmode=require` if missing
 
-Save this as `DATABASE_URL`. Do **not** commit it.
-
----
-
-## Step 2 — Create the Fly app (one-time)
-
-From the **repo root** (`Slot_Booking_Application`):
-
-```bash
-cd /path/to/Slot_Booking_Application
-fly apps create slotbook-api
-```
-
-If the name is taken, edit `app = "..."` in `fly.toml` and create that name instead.
-
-`fly.toml` defaults:
-
-- `app = "slotbook-api"`
-- `primary_region = "sin"` (change if you want Mumbai/`bom`, US/`iad`, etc.)
-- HTTP port `8080`
-- Health check `GET /api/health`
-- Auto-stop when idle (`min_machines_running = 0`) — free-friendly, cold starts OK
+That string is `DATABASE_URL`. Never commit it.
 
 ---
 
-## Step 3 — Set Fly secrets (required before first deploy)
+## Step 2 — Create the Render Web Service
 
-Generate secrets:
+1. Render Dashboard → **New** → **Web Service**
+2. Connect your GitHub account and select **Slot_Booking_Application**
+3. Settings:
 
-```bash
-openssl rand -hex 32   # use as JWT_SECRET
-openssl rand -hex 32   # use as CRON_SECRET
-```
+| Field | Value |
+|---|---|
+| Name | `reservly-api` (or any available name) |
+| Region | closest to you |
+| Runtime | **Docker** |
+| Dockerfile path | `./Dockerfile` |
+| Docker build context directory | `.` (repo root) |
+| Branch | `main` |
+| Instance type | **Free** |
+| Health check path | `/api/health` |
 
-Set them (replace placeholders; use your Neon URL):
+4. Do **not** click Create yet — add env vars first (Step 3), or create then add env and redeploy.
 
-```bash
-fly secrets set \
-  DATABASE_URL="postgresql://USER:PASS@HOST/DB?sslmode=require" \
-  JWT_SECRET="PASTE_JWT_SECRET" \
-  CRON_SECRET="PASTE_CRON_SECRET" \
-  FRONTEND_URL="https://placeholder.vercel.app" \
-  FRONTEND_PUBLIC_URL="https://placeholder.vercel.app"
-```
+### Optional: Blueprint instead of manual UI
 
-You will update `FRONTEND_*` after Vercel gives you a real URL (Step 5).
+If you prefer Infrastructure-as-Code:
 
-Optional later (email / WhatsApp / payments / media):
-
-```bash
-fly secrets set \
-  SMTP_HOST="smtp.gmail.com" \
-  SMTP_PORT="587" \
-  SMTP_SECURE="false" \
-  SMTP_USER="you@gmail.com" \
-  SMTP_PASS="app-password" \
-  SMTP_FROM_NAME="SlotBook"
-# Twilio / Razorpay / Cloudinary when needed — see packages/backend/.env.example
-```
-
-```bash
-fly secrets list   # names only
-```
+1. Render → **New** → **Blueprint**
+2. Select the repo (uses `render.yaml`)
+3. Fill in `DATABASE_URL`, `FRONTEND_URL`, `FRONTEND_PUBLIC_URL` when prompted  
+   (`JWT_SECRET` / `CRON_SECRET` can be auto-generated)
 
 ---
 
-## Step 4 — Deploy the API
+## Step 3 — Environment variables on Render
 
-From repo root:
+In the Web Service → **Environment**:
 
-```bash
-fly deploy
-```
-
-What happens:
-
-1. Docker builds the monorepo backend image
-2. `release_command` runs `pnpm exec prisma migrate deploy`
-3. App starts: `node dist/index.js` on port **8080**
-4. Public URL: `https://slotbook-api.fly.dev` (or your app name)
-
-Verify:
+Generate secrets locally:
 
 ```bash
-curl https://slotbook-api.fly.dev/api/health
-fly status
-fly logs
+openssl rand -hex 32   # JWT_SECRET
+openssl rand -hex 32   # CRON_SECRET
 ```
 
-If migrate/release fails:
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | Neon connection string (`?sslmode=require`) |
+| `JWT_SECRET` | long random string |
+| `CRON_SECRET` | long random string |
+| `FRONTEND_URL` | `https://placeholder.vercel.app` (update after Step 5) |
+| `FRONTEND_PUBLIC_URL` | same as `FRONTEND_URL` for now |
+| `NODE_ENV` | `production` |
+
+Optional later (email / WhatsApp / payments / media) — see `packages/backend/.env.example`:
+
+- `SMTP_*`
+- `TWILIO_*`
+- `RAZORPAY_*`
+- `CLOUDINARY_*`
+
+Save with **Save, rebuild, and deploy**.
+
+---
+
+## Step 4 — Wait for deploy & verify API
+
+1. Open the service **Logs** / **Events** until deploy is Live
+2. Copy the URL, e.g. `https://reservly-api.onrender.com`
+3. Test (first request after idle can take ~30–60s while the free instance wakes):
 
 ```bash
-fly logs
-fly ssh console -C "pnpm exec prisma migrate status"
+curl https://reservly-api.onrender.com/api/health
 ```
+
+Expect JSON with a healthy status.
+
+If migrate fails, check logs for `DATABASE_URL` / SSL errors. The container runs:
+
+`pnpm exec prisma migrate deploy && node dist/index.js`
 
 ---
 
 ## Step 5 — Deploy the frontend (Vercel)
 
-1. Import the GitHub repo in Vercel
-2. Prefer **Root Directory = repository root** (pnpm workspace), with:
-   - **Install**: `pnpm install --frozen-lockfile`
-   - **Build**: `pnpm --filter frontend build`
-   - **Output**: `packages/frontend/dist`
-3. Or set Root Directory to `packages/frontend` only if install/build from that package works in your Vercel project settings
-4. Environment variable (Production + Preview):
+1. Vercel → **Add New** → **Project** → import the same GitHub repo
+2. Prefer **Root Directory = repository root** (pnpm workspace):
+
+| Setting | Value |
+|---|---|
+| Install Command | `pnpm install --frozen-lockfile` |
+| Build Command | `pnpm --filter frontend build` |
+| Output Directory | `packages/frontend/dist` |
+
+3. Environment variable (Production + Preview):
 
 ```text
-VITE_API_BASE_URL=https://slotbook-api.fly.dev
+VITE_API_BASE_URL=https://reservly-api.onrender.com
 ```
 
-No trailing slash. Never put `JWT_SECRET`, `CRON_SECRET`, Twilio, or Razorpay in `VITE_*`.
+No trailing slash. Never put `JWT_SECRET` / `CRON_SECRET` / Twilio / Razorpay in `VITE_*`.
 
-5. Deploy → copy the Vercel URL (e.g. `https://slotbook.vercel.app`)
-6. Point the API at that origin:
+4. Deploy → copy the Vercel URL, e.g. `https://reservly.vercel.app`
+5. Update Render env:
 
-```bash
-fly secrets set \
-  FRONTEND_URL="https://slotbook.vercel.app" \
-  FRONTEND_PUBLIC_URL="https://slotbook.vercel.app"
-fly apps restart slotbook-api
-```
+| Key | Value |
+|---|---|
+| `FRONTEND_URL` | `https://reservly.vercel.app` |
+| `FRONTEND_PUBLIC_URL` | `https://reservly.vercel.app` |
 
-After any `VITE_*` change on Vercel: **Redeploy** the frontend (Vite inlines env at build time).
+6. Redeploy the Render service (env change → Save and deploy)
+
+After any `VITE_*` change on Vercel: **Redeploy frontend** (Vite inlines env at build time).
 
 ---
 
 ## Step 6 — External cron (required)
 
-Free Fly machines may sleep. Cron wakes the API and runs jobs.
+Free Render sleeps after ~15 minutes idle. Cron wakes the API and runs jobs.
 
-Create 4 jobs (cron-job.org or similar):
+Create **4** jobs on cron-job.org (or similar):
 
 - Method: **POST**
-- Header: `x-cron-secret: <same CRON_SECRET as Fly>`
-- URLs:
+- Header: `x-cron-secret: <same CRON_SECRET as Render>`
+- URLs (replace host):
 
 ```text
-https://slotbook-api.fly.dev/api/internal/jobs/process-reminders
-https://slotbook-api.fly.dev/api/internal/jobs/process-waitlist-expirations
-https://slotbook-api.fly.dev/api/internal/jobs/process-payment-expirations
-https://slotbook-api.fly.dev/api/internal/jobs/process-refund-reconciliation
+https://reservly-api.onrender.com/api/internal/jobs/process-reminders
+https://reservly-api.onrender.com/api/internal/jobs/process-waitlist-expirations
+https://reservly-api.onrender.com/api/internal/jobs/process-payment-expirations
+https://reservly-api.onrender.com/api/internal/jobs/process-refund-reconciliation
 ```
 
 | Job | Interval |
@@ -197,17 +175,17 @@ https://slotbook-api.fly.dev/api/internal/jobs/process-refund-reconciliation
 | payment expirations | every 1 min |
 | refund reconciliation | every 5 min |
 
-Auth also accepts JSON body `{ "secret": "..." }` if your cron tool cannot set headers.
+If the tool cannot set headers, use JSON body: `{ "secret": "YOUR_CRON_SECRET" }`.
 
 ---
 
 ## Step 7 — Smoke test
 
-1. Open the Vercel site → sign up as an owner
+1. Open the Vercel site → **Sign up** as an owner
 2. Configure services / hours / location
 3. Open public booking URL `/b/{publicCode}`
 4. Create a test booking
-5. Confirm API health still OK
+5. Confirm health still works after a few minutes
 
 Optional seed against production (only if intentional):
 
@@ -217,26 +195,27 @@ DATABASE_URL="your-neon-url" pnpm --filter backend db:seed
 
 ---
 
-## Everyday commands
+## Everyday commands / habits
 
-```bash
-fly deploy
-fly logs
-fly status
-fly secrets set KEY=val
-fly apps restart slotbook-api
-fly scale count 1
-```
+| Action | How |
+|---|---|
+| Deploy API | `git push` to the watched branch (or Manual Deploy in Render) |
+| Deploy frontend | `git push` or Redeploy in Vercel |
+| Change API secrets | Render → Environment → Save & deploy |
+| Change `VITE_API_BASE_URL` | Vercel env → Redeploy frontend |
+| Logs | Render → Logs |
+| Cold start | First hit after ~15 min idle can take 30–60s — normal on free |
 
-Keep API always awake (uses more free allowance / may cost):
+---
 
-```toml
-# in fly.toml [http_service]
-auto_stop_machines = "off"
-min_machines_running = 1
-```
+## Free-tier limits (honest)
 
-Then `fly deploy` again.
+- Render free web service **sleeps** after inactivity → cold starts
+- ~750 free instance hours / month per workspace
+- Neon free may suspend compute → first DB query after idle can be slow
+- Do **not** use Render free Postgres for long-term data (expires ~30 days) — use Neon/Supabase
+- Twilio / Razorpay are paid third parties when you enable them
+- No in-process timers — external cron (Step 6) is required
 
 ---
 
@@ -249,21 +228,9 @@ See `packages/backend/.env.example`.
 | `DATABASE_URL` | Neon Postgres |
 | `JWT_SECRET` | Owner JWT signing |
 | `CRON_SECRET` | Internal job auth |
-| `PORT` | `8080` on Fly (`fly.toml`) |
+| `PORT` | Set by Render automatically |
 | `FRONTEND_URL` | Vercel origin (CORS) |
 | `FRONTEND_PUBLIC_URL` | Links / QR / manage URLs |
-
-Optional: `SMTP_*`, `TWILIO_*`, `RAZORPAY_*`, `CLOUDINARY_*`.
-
----
-
-## Honest free-tier limits
-
-- Fly auto-stop → cold starts after idle
-- Neon free may suspend compute → first query after idle is slow
-- Twilio / Razorpay are paid third parties
-- No in-process timers — external cron (§6) is required
-- Vercel hosts only the static frontend
 
 ---
 
@@ -271,7 +238,8 @@ Optional: `SMTP_*`, `TWILIO_*`, `RAZORPAY_*`, `CLOUDINARY_*`.
 
 | File | Role |
 |---|---|
-| `Dockerfile` | Builds backend for Fly |
-| `fly.toml` | App name, region, port, migrate release, health check |
+| `Dockerfile` | Builds API; runs migrate then `node dist/index.js` |
+| `render.yaml` | Optional Blueprint for one-click Render setup |
 | `.dockerignore` | Keeps image small / excludes secrets |
 | `packages/frontend/vercel.json` | SPA rewrites for deep links |
+| `fly.toml` | Leftover Fly config — ignore if you use Render |
