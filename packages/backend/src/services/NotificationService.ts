@@ -53,12 +53,25 @@ class NotificationService {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
         },
+        // Hosts commonly filter outbound SMTP; without these a send can hang
+        // for minutes and stall the request that triggered it.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
       });
     }
     return this.transporter;
   }
 
   private async sendEmail(to: string, subject: string, html: string, opts: { replyTo?: string; throwOnError?: boolean } = {}): Promise<void> {
+    // Skip before any network I/O when SMTP is unset, matching WhatsApp/SMS.
+    if (!this.smtpConfigured()) {
+      const err = new Error('Email: SMTP is not configured (SMTP_USER / SMTP_PASS)');
+      console.log(err.message);
+      if (opts.throwOnError) throw err;
+      return;
+    }
+
     try {
       const transporter = this.getTransporter();
       await transporter.sendMail({
