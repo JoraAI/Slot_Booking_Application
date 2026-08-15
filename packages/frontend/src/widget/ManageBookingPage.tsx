@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { api } from '../lib/api'
+import { BusyOverlay } from '../components/BusyOverlay'
 import toast from 'react-hot-toast'
 
 interface BookingView {
@@ -121,7 +122,9 @@ export const ManageBookingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary-light to-white dark:from-gray-900 dark:to-gray-950 flex items-start justify-center p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 mt-8 space-y-5">
+      <div className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 mt-8 space-y-5">
+        <BusyOverlay show={busy} message="Working on it…" />
+
         {stage === 'loading' && <p className="text-center text-sm text-gray-500 py-8">Loading your booking…</p>}
 
         {stage === 'error' && (

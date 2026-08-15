@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 import { upiFirstDisplay } from '../razorpayDisplay'
+import { BusyOverlay } from '../../components/BusyOverlay'
 
 interface PaymentStepProps {
   slug: string
@@ -133,6 +134,17 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
     rzp.open()
   }
 
+  const handleOpenCheckout = async (order: any) => {
+    setLoading(true)
+    try {
+      await openCheckout(order)
+    } catch (err: any) {
+      toast.error(err.message || 'Could not open payment')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handlePay = async () => {
     setLoading(true)
     try {
@@ -171,8 +183,10 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
     <motion.div
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="space-y-5"
+      className="relative space-y-5"
     >
+      <BusyOverlay show={loading} message={pendingOrder ? 'Opening secure payment…' : 'Confirming amount…'} />
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Payment</h3>
@@ -251,7 +265,7 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
             </p>
           </div>
           <button
-            onClick={() => openCheckout(pendingOrder)}
+            onClick={() => handleOpenCheckout(pendingOrder)}
             disabled={loading}
             className="w-full flex items-center justify-center gap-2 py-3.5 bg-primary hover:bg-primary-dark text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
           >

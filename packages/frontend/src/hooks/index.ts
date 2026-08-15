@@ -75,9 +75,15 @@ export function useEmbedMode() {
 }
 
 export function usePostMessage() {
+  // Never let embed messaging break the flow that triggered it: a booking can
+  // already be committed server-side by the time this runs.
   const send = useCallback((type: string, data: Record<string, unknown>) => {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type, ...data }, '*')
+    try {
+      if (window.parent !== window) {
+        window.parent.postMessage({ type, ...data }, '*')
+      }
+    } catch {
+      /* embed host unreachable */
     }
   }, [])
   return send

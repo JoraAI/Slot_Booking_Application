@@ -10,6 +10,7 @@ import { CustomerForm, validateCustomerForm } from './steps/CustomerForm'
 import { PaymentStep } from './steps/PaymentStep'
 import { ConfirmationScreen } from './steps/ConfirmationScreen'
 import { WaitlistSheet } from './WaitlistSheet'
+import { BusyOverlay } from '../components/BusyOverlay'
 import type { Booking, BookingSource, FormField } from '../types'
 import toast from 'react-hot-toast'
 
@@ -220,7 +221,10 @@ export const StepRouter: React.FC = () => {
           const reason = result.conflicts[0]?.reason || 'No dates in this series are available'
           throw new Error(reason)
         }
+        // Show the confirmation before any side effect: the booking is already
+        // committed server-side, so nothing after this may block navigation.
         setBooking(first)
+        goNext()
         postMessage('BOOKING_CONFIRMED', {
           bookingId: first.id,
           customerName: first.customerName,
@@ -232,14 +236,13 @@ export const StepRouter: React.FC = () => {
         if (result.conflicts.length > 0) {
           toast.success(`${result.bookings.length} appointments booked; ${result.conflicts.length} unavailable dates skipped`)
         }
-        goNext()
         return
       }
 
       const result = await api.createBooking(slug, bookingData)
       setBooking(result)
-      postMessage('BOOKING_CONFIRMED', { bookingId: result.id, customerName: result.customerName, date: result.date, time: result.startTime })
       goNext()
+      postMessage('BOOKING_CONFIRMED', { bookingId: result.id, customerName: result.customerName, date: result.date, time: result.startTime })
     } catch (err: any) {
       toast.error(err.message || 'Booking failed')
     } finally {
@@ -249,9 +252,9 @@ export const StepRouter: React.FC = () => {
 
   const handlePaymentSuccess = (paidBooking: any) => {
     setBooking(paidBooking)
+    goNext()
     postMessage('BOOKING_CONFIRMED', { bookingId: paidBooking.id, customerName: paidBooking.customerName, date: paidBooking.date, time: paidBooking.startTime })
     postMessage('PAYMENT_COMPLETED', { bookingId: paidBooking.id, amount: paidBooking.paymentAmount })
-    goNext()
   }
 
   const handleWaitlist = (time: string) => {
@@ -273,7 +276,9 @@ export const StepRouter: React.FC = () => {
   const pricing = wizard.displayedPricing
 
   return (
-    <div className="max-w-md mx-auto p-6 space-y-6">
+    <div className="relative max-w-md mx-auto p-6 space-y-6">
+      <BusyOverlay show={submitting} message="Confirming your booking…" />
+
       {/* Branding header */}
       <div className="text-center pt-2">
         {config.business.branding.logoUrl && (
