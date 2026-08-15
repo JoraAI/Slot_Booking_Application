@@ -3,9 +3,14 @@ import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Bookin
 // Split-host friendly API base:
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
 // - Vercel static + external Node API: set VITE_API_BASE_URL to the API origin
-//   (e.g. https://api.example.com). Never put secrets in VITE_* — these vars are
-//   exposed to the browser at build time.
-const API_BASE: string = import.meta.env.VITE_API_BASE_URL || '/api'
+//   (e.g. https://reservly-api.onrender.com) OR origin + `/api`. Never put secrets
+//   in VITE_* — these vars are exposed to the browser at build time.
+function resolveApiBase(): string {
+  const raw = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
+  if (!raw) return '/api'
+  return raw.endsWith('/api') ? raw : `${raw}/api`
+}
+const API_BASE: string = resolveApiBase()
 
 class ApiClient {
   private token: string | null = null

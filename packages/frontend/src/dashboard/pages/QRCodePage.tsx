@@ -14,17 +14,20 @@ export const QRCodePage: React.FC = () => {
       .then((info) => {
         setUrl(info.url)
         setName(info.businessName)
-        if (canvasRef.current) {
-          QRCode.toCanvas(canvasRef.current, info.url, {
-            width: 256,
-            margin: 2,
-            color: { dark: '#111827', light: '#ffffff' },
-          })
-        }
       })
       .catch(() => toast.error('Failed to load QR code'))
       .finally(() => setLoading(false))
   }, [])
+
+  // The canvas only exists once loading finishes, so draw after it mounts.
+  useEffect(() => {
+    if (loading || !url || !canvasRef.current) return
+    QRCode.toCanvas(canvasRef.current, url, {
+      width: 256,
+      margin: 2,
+      color: { dark: '#111827', light: '#ffffff' },
+    }).catch(() => toast.error('Failed to render QR code'))
+  }, [loading, url])
 
   const download = () => {
     const canvas = canvasRef.current
