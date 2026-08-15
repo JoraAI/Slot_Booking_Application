@@ -3,10 +3,19 @@ import prisma from '../lib/prisma';
 import { bookingService } from './BookingService';
 import { notificationService } from './NotificationService';
 import { waitlistService } from './WaitlistService';
+import { availabilityService } from './AvailabilityService';
+import { timeService } from './TimeService';
 
 class RecurringService {
-  generateDates(startDate: string, frequency: 'weekly' | 'biweekly' | 'monthly', count: number): Date[] {
-    const start = new Date(startDate);
+  /**
+   * Generate recurrence dates as BUSINESS-LOCAL date strings (YYYY-MM-DD).
+   * The RRule dtstart is anchored at UTC midnight of the start date and each
+   * occurrence is converted to the business timezone, so the result never
+   * depends on the host timezone or toISOString date derivation.
+   */
+  generateDates(startDate: string, frequency: 'weekly' | 'biweekly' | 'monthly', count: number, tz: string): string[] {
+    const [y, m, d] = startDate.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d));
 
     const freqMap = {
       weekly: RRule.WEEKLY,
@@ -21,96 +30,97 @@ class RecurringService {
       dtstart: start,
     });
 
-    return rule.all();
+    return rule.all().map((dt) => timeService.toDateStr(dt, tz));
   }
 
-  async createRecurringBooking(slug: string, data: {
+  async createRecurringBooking(identifier: string, data: {
     startDate: string;
     startTime: string;
-    staffId?: string;
+    serviceId: string;
+    staffId?: string | null;
     customerName: string;
     customerPhone: string;
-    customerEmail?: string;
+    customerEmail?: string | null;
     formData?: any;
     frequency: 'weekly' | 'biweekly' | 'monthly';
     count: number;
     skipDates?: string[];
+    source?: string | null;
   }) {
-    const business = await prisma.business.findUnique({ where: { slug } });
+    const business = await prisma.business.findFirst({
+      where: { OR: [{ publicCode: identifier }, { slug: identifier }] },
+    });
     if (!business) throw new Error('Business not found');
     if (!business.enableRecurring) throw new Error('Recurring feature not enabled');
+    if (business.enablePayments && business.paymentMode !== 'none') {
+      throw new Error('Recurring series are unavailable while online payment is required');
+    }
 
-    const dates = this.generateDates(data.startDate, data.frequency, data.count);
+    const service = await prisma.service.findFirst({
+      where: { id: data.serviceId, businessId: business.id, isActive: true },
+      include: { staff: true },
+    });
+    if (!service) throw new Error('Service not found or inactive');
+
+    if (service.resourceMode === 'STAFF_BASED' && data.staffId) {
+      const assigned = service.staff.some((s) => s.staffId === data.staffId);
+      if (!assigned) throw new Error('Selected staff member is not assigned to this service');
+    }
+
+    const tz = business.timezone || 'Asia/Kolkata';
+    const dates = this.generateDates(data.startDate, data.frequency, data.count, tz);
     const skipSet = new Set(data.skipDates || []);
     const recurringGroupId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     const rruleStr = `FREQ=${data.frequency === 'biweekly' ? 'WEEKLY' : data.frequency.toUpperCase()};COUNT=${data.count}${data.frequency === 'biweekly' ? ';INTERVAL=2' : ''}`;
 
     const bookings: any[] = [];
+    const conflicts: { date: string; reason: string }[] = [];
 
-    // Use transaction for atomic creation
-    await prisma.$transaction(async (tx) => {
-      for (const date of dates) {
-        const dateStr = date.toISOString().split('T')[0];
-        if (skipSet.has(dateStr)) continue;
+    // Each occurrence must pass service-aware availability. Conflicts are
+    // reported instead of silently creating overlapping bookings.
+    for (const dateStr of dates) {
+      if (skipSet.has(dateStr)) continue;
 
-        const [startH, startM] = data.startTime.split(':').map(Number);
-        const endTimeMinutes = startH * 60 + startM + business.slotDurationMinutes;
-        const endH = Math.floor(endTimeMinutes / 60);
-        const endM = endTimeMinutes % 60;
-        const endTime = `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
-
-        // Check availability for this date
-        const startOfDay = new Date(dateStr);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(dateStr);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        const existingBookings = await tx.booking.count({
-          where: {
-            businessId: business.id,
-            date: { gte: startOfDay, lte: endOfDay },
-            startTime: data.startTime,
-            status: 'CONFIRMED',
-            ...(data.staffId ? { staffId: data.staffId } : {}),
-          },
-        });
-
-        const blockedSlots = await tx.blockedSlot.count({
-          where: {
-            businessId: business.id,
-            date: { gte: startOfDay, lte: endOfDay },
-            startTime: data.startTime,
-            ...(data.staffId ? { staffId: data.staffId } : {}),
-          },
-        });
-
-        if (blockedSlots > 0 || existingBookings >= business.parallelSeats) {
-          throw new Error(`No availability on ${dateStr} at ${data.startTime}`);
+      try {
+        const availability = await availabilityService.computeAvailability(
+          business,
+          service,
+          dateStr,
+          service.resourceMode === 'STAFF_BASED' ? (data.staffId ?? undefined) : undefined
+        );
+        const slot = availability.slots.find((s) => s.startTime === data.startTime);
+        if (!slot) {
+          conflicts.push({ date: dateStr, reason: 'Slot unavailable' });
+          continue;
+        }
+        if (service.resourceMode === 'STAFF_BASED' && data.staffId) {
+          if (!slot.eligibleStaffIds.includes(data.staffId)) {
+            conflicts.push({ date: dateStr, reason: 'Staff unavailable' });
+            continue;
+          }
         }
 
-        const booking = await tx.booking.create({
-          data: {
-            businessId: business.id,
-            staffId: data.staffId || null,
-            date,
-            startTime: data.startTime,
-            endTime,
-            customerName: data.customerName,
-            customerPhone: data.customerPhone,
-            customerEmail: data.customerEmail || null,
-            formData: data.formData || {},
-            seatIndex: 0,
-            isRecurring: true,
-            recurringRule: rruleStr,
-            recurringGroupId,
-          },
-          include: { staff: true },
+        const booking = await bookingService.createBooking(identifier, {
+          date: dateStr,
+          startTime: data.startTime,
+          serviceId: service.id,
+          staffId: service.resourceMode === 'STAFF_BASED' ? data.staffId : null,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          customerEmail: data.customerEmail || null,
+          formData: data.formData || {},
+          isRecurring: true,
+          recurringRule: rruleStr,
+          recurringGroupId,
+          source: data.source || undefined,
         });
 
         bookings.push(booking);
+      } catch (e: any) {
+        conflicts.push({ date: dateStr, reason: e.message || 'Unavailable' });
       }
-    });
+    }
 
     // Send recurring confirmation notification
     if (bookings.length > 0) {
@@ -120,7 +130,7 @@ class RecurringService {
       );
     }
 
-    return { bookings, recurringGroupId };
+    return { bookings, recurringGroupId, conflicts };
   }
 
   async cancelSeries(businessId: string, recurringGroupId: string, cancelFutureOnly: boolean = true) {
@@ -149,11 +159,14 @@ class RecurringService {
     if (business && bookings.length > 0) {
       await notificationService.sendRecurringSeriesCancellation(bookings, business);
 
-      // Trigger waitlist notifications for each freed slot
+      // Trigger waitlist notifications for each freed slot (business-local date)
       for (const booking of bookings) {
-        const dateStr = new Date(booking.date).toISOString().split('T')[0];
         if (business.enableWaitlist) {
-          await waitlistService.notifyNext(businessId, dateStr, booking.startTime);
+          const dateStr = timeService.toDateStr(booking.date, business.timezone || 'Asia/Kolkata');
+          await waitlistService.notifyNext(businessId, dateStr, booking.startTime, {
+            serviceId: booking.serviceId,
+            staffId: booking.staffId,
+          });
         }
       }
     }

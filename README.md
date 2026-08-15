@@ -5,17 +5,25 @@ A fully self-contained, embeddable slot booking microservice inspired by Calendl
 ## Features
 
 ### Core
+- **Service catalog** — Categories + services with per-service duration, buffer time, capacity, staff assignment, and pricing
+- **Server-side pricing engine** — Percentage/flat discounts with validity windows; prices and snapshots are always computed on the backend
+- **Service-aware availability** — Slot grids adapt to each service's duration, buffer, capacity, resource mode (staff-based vs pooled), and granularity
 - **Parallel seat booking** — Multiple simultaneous bookings per time slot
 - **Dynamic intake forms** — Drag-and-drop field builder with live preview
-- **Business-specific slugs** — Each business gets a unique booking URL
+- **Opaque public codes** — Each business gets a secure, URL-safe `publicCode`; customer links resolve to exactly one business
+- **Business timezone engine** — All booking dates/times resolve in the owner's IANA timezone
+- **Customizable public page** — Branding (colors, logo, cover) and page sections (Hero, Services, Offers, About, Hours…)
+- **QR codes** — Dedicated QR page; bookings from QR links are tracked as a distinct source
 - **Slot blocking** — Block individual time slots for holidays/maintenance
 - **Booking status workflow** — CONFIRMED → COMPLETED / NO_SHOW / CANCELLED
+- **Owner signup** — Create an isolated business workspace in seconds
 
 ### Optional Features (Owner-Toggled)
 - 🕐 **Waitlist** — Auto-notify customers when slots free up (30-min expiry cascade)
 - 🔄 **Recurring Bookings** — Weekly/bi-weekly/monthly with conflict preview
-- 👥 **Multi-Staff** — Book specific staff members or "any available"
-- 💳 **Payments (Razorpay)** — UPI, Cards, Netbanking; full or deposit mode
+- 👥 **Multi-Staff** — Book specific staff members, staff working hours, staff-per-service assignment
+- 💳 **Payments (Razorpay)** — UPI, Cards, Netbanking; full or deposit mode; authoritative server-side amounts
+- 🔔 **Reminders** — Database-backed appointment reminders (durable, cron-friendly)
 
 ### Analytics Dashboard
 - KPI cards with real-time data
@@ -76,14 +84,14 @@ pnpm --filter frontend dev   # Frontend on http://localhost:5173
 ```
 
 ### 5. Access
-- **Customer Widget**: `http://localhost:5173/b/demo-salon` (or `http://localhost:5173/demo-salon`)
+- **Customer Widget**: `http://localhost:5173/b/{publicCode}` — the demo's public code is shown at login/QR page; the legacy slug `demo-salon` redirects to it
 - **Owner Dashboard**: `http://localhost:5173/login`
 - **API Docs (Swagger)**: `http://localhost:3001/api-docs`
 - **API Health**: `http://localhost:3001/api/health`
 
 ### 6. Demo Credentials
 - **Owner Login**: `owner@demosalon.com` / `admin123`
-- **Business Slug**: `demo-salon`
+- **Business Slug / Public Code**: `demo-salon` (slug) — the opaque `publicCode` is generated per business and used in customer URLs
 
 ## Docker Deployment
 
@@ -101,31 +109,49 @@ This starts:
 ### Public (Customer-facing)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/:slug/config` | Get business config |
-| GET | `/api/:slug/availability?date=&staffId=` | Get slot availability |
-| POST | `/api/:slug/bookings` | Create booking |
-| GET | `/api/:slug/bookings/:id` | Get booking |
-| PUT | `/api/:slug/bookings/:id` | Update booking |
-| DELETE | `/api/:slug/bookings/:id` | Cancel booking |
-| POST | `/api/:slug/waitlist` | Join waitlist *[feature: waitlist]* |
-| POST | `/api/:slug/payments/initiate` | Initiate payment *[feature: payments]* |
-| POST | `/api/:slug/payments/verify` | Verify payment *[feature: payments]* |
+| POST | `/api/signup` | Create a business workspace |
+| GET | `/api/:code/config` | Get public business config (branding, services, sections) |
+| GET | `/api/:code/availability?date=&serviceId=&staffId=` | Service-aware slot availability |
+| POST | `/api/:code/bookings` | Create booking (server derives price/duration/source) |
+| GET | `/api/:code/bookings/:id` | Get booking |
+| PUT | `/api/:code/bookings/:id` | Update/reschedule booking |
+| DELETE | `/api/:code/bookings/:id` | Cancel booking |
+| POST | `/api/:code/waitlist` | Join waitlist *[feature: waitlist]* |
+| POST | `/api/:code/payments/initiate` | Initiate Razorpay order *[feature: payments]* |
+| POST | `/api/:code/payments/verify` | Verify payment *[feature: payments]* |
+| POST | `/api/:code/recurring` | Create recurring series *[feature: recurring]* |
+
+`/api/:code` accepts either the opaque `publicCode` or the legacy slug for compatibility.
 
 ### Owner (JWT-protected)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/owner/login` | Login |
+| GET | `/api/owner/me` | Full business config (incl. services, categories, sections) |
 | GET | `/api/owner/bookings` | List bookings |
 | PUT | `/api/owner/bookings/:id` | Update booking |
 | POST | `/api/owner/block` | Block slot |
 | GET | `/api/owner/blocks` | List blocks |
-| PUT | `/api/owner/config` | Update config |
+| PUT | `/api/owner/config` | Update config (incl. branding, timezone, reminders) |
 | PUT | `/api/owner/working-hours` | Update working hours |
 | PUT | `/api/owner/form-fields` | Update form fields |
-| GET | `/api/owner/analytics` | Get analytics data |
+| GET | `/api/owner/categories` · POST · PUT/:id · DELETE/:id | Service category CRUD |
+| GET | `/api/owner/services` · POST · PUT/:id · DELETE/:id | Service CRUD |
+| GET/PUT | `/api/owner/services/:id/hours` | Per-service working hours |
+| GET/PUT | `/api/owner/staff/:id/hours` | Per-staff working hours |
+| GET/POST/PUT/DELETE | `/api/owner/page-sections` | Public page section CRUD |
+| GET | `/api/owner/qr` | QR link + public code |
+| GET | `/api/owner/analytics` | Analytics (incl. by-service, by-source, QR rate, discounts) |
 | GET | `/api/owner/staff` | List staff *[feature: multi-staff]* |
 | POST | `/api/owner/staff` | Create staff *[feature: multi-staff]* |
 | GET | `/api/owner/payments` | List payments *[feature: payments]* |
+
+### Internal (cron)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/internal/jobs/process-reminders` | Process due reminders. Protect with `CRON_SECRET` via `x-cron-secret` header or `secret` body |
+| POST | `/api/internal/jobs/process-waitlist-expirations` | Expire notified waitlist entries and cascade when the slot is still available |
+| POST | `/api/internal/jobs/process-payment-expirations` | Expire stale 10-minute payment capacity holds |
 
 ## Project Structure
 
@@ -189,7 +215,7 @@ Toggle from: **Dashboard → Settings → Features**
 
 ### iframe
 ```html
-<iframe src="https://your-domain.com/b/your-slug?embed=true" 
+<iframe src="https://your-domain.com/b/{publicCode}?embed=true"
         style="border:0; width:100%; min-height:600px;" />
 ```
 

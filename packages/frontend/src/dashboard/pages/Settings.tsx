@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import { useStore } from '../../store'
+import { MediaUploadButton } from '../components/MediaUploadButton'
+import { geoFailureMessage, geolocationAvailable, mapPositionError, secureContextAvailable } from '../geolocation'
 import toast from 'react-hot-toast'
 
 const FEATURES = [
@@ -15,11 +17,35 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 export const Settings: React.FC = () => {
   const { config, setConfig } = useStore()
   const [saving, setSaving] = useState(false)
+  const [providerStatus, setProviderStatus] = useState<{
+    smtpConfigured: boolean
+    twilioSmsConfigured: boolean
+    twilioWhatsappConfigured: boolean
+    frontendUrlConfigured: boolean
+    locationComplete: boolean
+    ownerEmailPresent: boolean
+    ownerWhatsappPresent: boolean
+  } | null>(null)
+  const [geoError, setGeoError] = useState('')
+  const [geoLoading, setGeoLoading] = useState(false)
   const [form, setForm] = useState({
     name: config?.name || '',
+    description: config?.description || '',
+    timezone: config?.timezone || 'Asia/Kolkata',
+    primaryColor: config?.primaryColor || '#7C3AED',
+    secondaryColor: config?.secondaryColor || '',
+    accentColor: config?.accentColor || '',
+    logoUrl: config?.logoUrl || '',
+    coverImageUrl: config?.coverImageUrl || '',
+    address: config?.address || '',
+    latitude: config?.latitude ?? null,
+    longitude: config?.longitude ?? null,
+    slotGranularityMinutes: config?.slotGranularityMinutes || 15,
+    remindersEnabled: config?.remindersEnabled ?? true,
+    reminderOffsetsMinutes: config?.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
+    bookingManagementOtpEnabled: config?.bookingManagementOtpEnabled ?? false,
+    bookingManagementOtpChannel: config?.bookingManagementOtpChannel || 'EMAIL',
     bookingWindowDays: config?.bookingWindowDays || 7,
-    parallelSeats: config?.parallelSeats || 1,
-    slotDurationMinutes: config?.slotDurationMinutes || 30,
     showAvailableCount: config?.showAvailableCount || false,
     notifyOwnerEmail: config?.notifyOwnerEmail ?? true,
     notifyOwnerWhatsapp: config?.notifyOwnerWhatsapp ?? false,
@@ -32,8 +58,9 @@ export const Settings: React.FC = () => {
     paymentMode: config?.paymentMode || 'none',
     depositAmount: config?.depositAmount || null,
     depositPercentage: config?.depositPercentage || null,
-    servicePrice: config?.servicePrice || null,
     razorpayKeyId: config?.razorpayKeyId || '',
+    razorpayKeySecret: '',
+    clearRazorpayKeySecret: false,
     razorpayTestMode: config?.razorpayTestMode ?? true,
     refundPolicy: config?.refundPolicy || '',
   })
@@ -43,9 +70,22 @@ export const Settings: React.FC = () => {
     if (config) {
       setForm({
         name: config.name || '',
+        description: config.description || '',
+        timezone: config.timezone || 'Asia/Kolkata',
+        primaryColor: config.primaryColor || '#7C3AED',
+        secondaryColor: config.secondaryColor || '',
+        accentColor: config.accentColor || '',
+        logoUrl: config.logoUrl || '',
+        coverImageUrl: config.coverImageUrl || '',
+        address: config.address || '',
+        latitude: config.latitude ?? null,
+        longitude: config.longitude ?? null,
+        slotGranularityMinutes: config.slotGranularityMinutes || 15,
+        remindersEnabled: config.remindersEnabled ?? true,
+        reminderOffsetsMinutes: config.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
+        bookingManagementOtpEnabled: config.bookingManagementOtpEnabled ?? false,
+        bookingManagementOtpChannel: config.bookingManagementOtpChannel || 'EMAIL',
         bookingWindowDays: config.bookingWindowDays || 7,
-        parallelSeats: config.parallelSeats || 1,
-        slotDurationMinutes: config.slotDurationMinutes || 30,
         showAvailableCount: config.showAvailableCount || false,
         notifyOwnerEmail: config.notifyOwnerEmail ?? true,
         notifyOwnerWhatsapp: config.notifyOwnerWhatsapp ?? false,
@@ -58,13 +98,60 @@ export const Settings: React.FC = () => {
         paymentMode: config.paymentMode || 'none',
         depositAmount: config.depositAmount || null,
         depositPercentage: config.depositPercentage || null,
-        servicePrice: config.servicePrice || null,
         razorpayKeyId: config.razorpayKeyId || '',
+        razorpayKeySecret: '',
+        clearRazorpayKeySecret: false,
         razorpayTestMode: config.razorpayTestMode ?? true,
         refundPolicy: config.refundPolicy || '',
       })
     }
   }, [config])
+
+  // Load delivery-provider status so the OTP UI can surface config errors
+  useEffect(() => {
+    api.getOwnerSettingsStatus()
+      .then(setProviderStatus)
+      .catch(() => setProviderStatus(null))
+  }, [])
+
+  // Batch 4 — fill lat/lng from the browser when the owner is at the salon.
+  // Geolocation requires a secure context (HTTPS or localhost) + permission.
+  const useMyLocation = () => {
+    setGeoError('')
+    if (!geolocationAvailable()) {
+      setGeoError(geoFailureMessage('unsupported'))
+      return
+    }
+    if (!secureContextAvailable()) {
+      setGeoError(geoFailureMessage('insecure'))
+      return
+    }
+    setGeoLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(p => ({ ...p, latitude: Math.round(pos.coords.latitude * 1e6) / 1e6, longitude: Math.round(pos.coords.longitude * 1e6) / 1e6 }))
+        setGeoLoading(false)
+        toast.success('Location captured from your device')
+      },
+      (err) => {
+        setGeoLoading(false)
+        setGeoError(geoFailureMessage(mapPositionError(err.code)))
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    )
+  }
+
+  const clearLocation = () => {
+    setForm(p => ({ ...p, address: '', latitude: null, longitude: null }))
+    setGeoError('')
+  }
+
+  const mapPreviewUrl =
+    form.latitude != null && form.longitude != null
+      ? `https://www.google.com/maps/dir/?api=1&destination=${form.latitude},${form.longitude}`
+      : form.address.trim()
+        ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(form.address.trim())}`
+        : null
 
   const handleToggle = (key: string, value: boolean) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -122,21 +209,21 @@ export const Settings: React.FC = () => {
       {form.enablePayments && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
           <h2 className="text-lg font-semibold">Payment Settings</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Service Price (₹)</label>
-              <input type="number" value={form.servicePrice || ''} onChange={(e) => setForm(p => ({ ...p, servicePrice: parseFloat(e.target.value) || null }))}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Payment Mode</label>
-              <select value={form.paymentMode} onChange={(e) => setForm(p => ({ ...p, paymentMode: e.target.value as 'full' | 'deposit' | 'none' }))}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
-                <option value="none">No Payment</option>
-                <option value="full">Full Payment</option>
-                <option value="deposit">Deposit</option>
-              </select>
-            </div>
+          <p className="text-xs text-gray-500 leading-relaxed">
+            UPI payments run through <strong>your own Razorpay account</strong> — connect the Key ID/Secret
+            below. Customers pay with installed UPI apps (Google Pay, PhonePe, Paytm) on mobile; money
+            settles to the bank account linked in your Razorpay dashboard. Cancellations automatically
+            refund what was collected back to the customer's original payment method.
+          </p>
+          <div>
+            <label className="block text-sm font-medium mb-1">Payment Mode</label>
+            <p className="text-xs text-gray-500 mb-1">Prices come from each service in Services. This only controls whether customers pay full or deposit.</p>
+            <select value={form.paymentMode} onChange={(e) => setForm(p => ({ ...p, paymentMode: e.target.value as 'full' | 'deposit' | 'none' }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
+              <option value="none">No Payment</option>
+              <option value="full">Full Payment</option>
+              <option value="deposit">Deposit</option>
+            </select>
           </div>
           {form.paymentMode === 'deposit' && (
             <div className="grid grid-cols-2 gap-4">
@@ -152,10 +239,14 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           )}
+          <p className="text-xs text-gray-400 -mt-1">
+            Choose exactly one of a fixed amount or a percentage (1–100). Saving both is rejected.
+          </p>
           <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
             <div>
               <p className="text-sm font-medium">Test Mode</p>
               <p className="text-xs text-gray-500">Use mock payments (no real charges). Switch off for production.</p>
+              <p className="text-xs text-gray-400">Live mode requires both the Razorpay Key ID and Key Secret below, or saving is rejected.</p>
             </div>
             <button onClick={() => setForm(p => ({ ...p, razorpayTestMode: !p.razorpayTestMode }))}
               className={`relative w-12 h-6 rounded-full transition-colors ${form.razorpayTestMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -163,18 +254,40 @@ export const Settings: React.FC = () => {
             </button>
           </div>
           {!form.razorpayTestMode && (
-            <div>
-              <label className="block text-sm font-medium mb-1">Razorpay Key ID</label>
-              <input type="text" value={form.razorpayKeyId} onChange={(e) => setForm(p => ({ ...p, razorpayKeyId: e.target.value }))}
-                placeholder="rzp_live_xxxxxxxx"
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 font-mono" />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1">Razorpay Key ID</label>
+                <input type="text" value={form.razorpayKeyId} onChange={(e) => setForm(p => ({ ...p, razorpayKeyId: e.target.value }))}
+                  placeholder="rzp_live_xxxxxxxx"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 font-mono" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Razorpay Key Secret</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  {config?.razorpayKeySecretConfigured ? '✓ Configured (write-only — the value is never shown)' : 'Not configured.'}{' '}
+                  Enter a new value to set or replace it. Leave blank to keep the current secret.
+                </p>
+                <input type="password" value={form.razorpayKeySecret || ''} onChange={(e) => setForm(p => ({ ...p, razorpayKeySecret: e.target.value }))}
+                  placeholder="Only set to write a new secret"
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 font-mono" />
+                {config?.razorpayKeySecretConfigured && (
+                  <label className="flex items-center gap-2 mt-2 text-xs text-red-600">
+                    <input type="checkbox" checked={form.clearRazorpayKeySecret || false} onChange={(e) => setForm(p => ({ ...p, clearRazorpayKeySecret: e.target.checked }))} className="rounded border-gray-300" />
+                    Clear the configured secret
+                  </label>
+                )}
+              </div>
+            </>
           )}
           <div>
-            <label className="block text-sm font-medium mb-1">Refund Policy</label>
+            <label className="block text-sm font-medium mb-1">Refund Policy (informational)</label>
             <textarea value={form.refundPolicy} onChange={(e) => setForm(p => ({ ...p, refundPolicy: e.target.value }))}
-              rows={2} placeholder="e.g. Full refund if cancelled 24 hours before the appointment."
+              rows={2} placeholder="Shown to customers for information only."
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400">
+              Online payments are always refunded automatically in full when a customer cancels, regardless of this text.
+            </p>
           </div>
         </div>
       )}
@@ -187,21 +300,22 @@ export const Settings: React.FC = () => {
           <input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))}
             className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Booking Window (days)</label>
             <input type="number" value={form.bookingWindowDays} onChange={(e) => setForm(p => ({ ...p, bookingWindowDays: parseInt(e.target.value) || 7 }))}
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Parallel Seats</label>
-            <input type="number" value={form.parallelSeats} onChange={(e) => setForm(p => ({ ...p, parallelSeats: parseInt(e.target.value) || 1 }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Slot Duration (min)</label>
-            <input type="number" value={form.slotDurationMinutes} onChange={(e) => setForm(p => ({ ...p, slotDurationMinutes: parseInt(e.target.value) || 30 }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <label className="block text-sm font-medium mb-1">Slot Grid Granularity (minutes)</label>
+            <select value={form.slotGranularityMinutes} onChange={(e) => setForm(p => ({ ...p, slotGranularityMinutes: parseInt(e.target.value) || 15 }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
+              <option value={5}>5 minutes</option>
+              <option value={10}>10 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Duration and parallel capacity are set per service in Services.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -211,14 +325,186 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
+      {/* Salon Location */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Salon Location</h2>
+        <p className="text-sm text-gray-500">
+          Shown on booking confirmations and customer manage pages, with a Google Maps
+          "Get directions" link (no API key). Leave all fields empty to hide directions.
+        </p>
+        <div>
+          <label className="block text-sm font-medium mb-1">Address</label>
+          <textarea value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))}
+            rows={2} maxLength={500} placeholder="e.g. 12 MG Road, Bengaluru, Karnataka 560001"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Latitude</label>
+            <input type="number" step="any" value={form.latitude ?? ''} onChange={(e) => setForm(p => ({ ...p, latitude: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+              placeholder="e.g. 12.9716" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Longitude</label>
+            <input type="number" step="any" value={form.longitude ?? ''} onChange={(e) => setForm(p => ({ ...p, longitude: e.target.value === '' ? null : parseFloat(e.target.value) }))}
+              placeholder="e.g. 77.5946" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={useMyLocation} disabled={geoLoading}
+            className="px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
+            {geoLoading ? 'Locating…' : '📍 Use my current location'}
+          </button>
+          <button type="button" onClick={clearLocation}
+            className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+            Clear
+          </button>
+          {mapPreviewUrl && (
+            <a href={mapPreviewUrl} target="_blank" rel="noopener noreferrer"
+              className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-800">
+              🗺️ Preview directions
+            </a>
+          )}
+        </div>
+        {geoError && (
+          <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">{geoError}</p>
+        )}
+        <p className="text-xs text-gray-400">
+          Geolocation requires a secure context (HTTPS or localhost) and your permission.
+          If either latitude or longitude is set, both must be set (lat −90…90, lng −180…180).
+        </p>
+      </div>
+
+      {/* Branding & Public Page */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Branding & Public Page</h2>
+        <div>
+          <label className="block text-sm font-medium mb-1">Tagline / Description</label>
+          <input value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
+            placeholder="A short line shown on your public page"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Timezone</label>
+          <input value={form.timezone} onChange={(e) => setForm(p => ({ ...p, timezone: e.target.value }))}
+            placeholder="IANA timezone, e.g. Asia/Kolkata"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Primary Color</label>
+            <input type="color" value={form.primaryColor} onChange={(e) => setForm(p => ({ ...p, primaryColor: e.target.value }))}
+              className="w-full h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-pointer" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Secondary Color</label>
+            <input type="color" value={form.secondaryColor} onChange={(e) => setForm(p => ({ ...p, secondaryColor: e.target.value }))}
+              className="w-full h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-pointer" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Accent Color</label>
+            <input type="color" value={form.accentColor} onChange={(e) => setForm(p => ({ ...p, accentColor: e.target.value }))}
+              className="w-full h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-pointer" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Logo URL</label>
+            <div className="flex gap-2">
+              <input value={form.logoUrl} onChange={(e) => setForm(p => ({ ...p, logoUrl: e.target.value }))} placeholder="https://..." className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <MediaUploadButton onUploaded={(url) => setForm(p => ({ ...p, logoUrl: url }))} label="⬆ Upload" />
+            </div>
+            {form.logoUrl && <img src={form.logoUrl} alt="Logo preview" className="mt-2 w-14 h-14 rounded-lg object-cover" />}
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Cover Image URL</label>
+            <div className="flex gap-2">
+              <input value={form.coverImageUrl} onChange={(e) => setForm(p => ({ ...p, coverImageUrl: e.target.value }))} placeholder="https://..." className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <MediaUploadButton onUploaded={(url) => setForm(p => ({ ...p, coverImageUrl: url }))} label="⬆ Upload" />
+            </div>
+            {form.coverImageUrl && <img src={form.coverImageUrl} alt="Cover preview" className="mt-2 w-full h-20 rounded-lg object-cover" />}
+          </div>
+        </div>
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div>
+            <p className="text-sm font-medium">Appointment Reminders</p>
+            <p className="text-xs text-gray-500">Automatically remind customers before their appointment (24h / 2h by default).</p>
+          </div>
+          <button onClick={() => setForm(p => ({ ...p, remindersEnabled: !p.remindersEnabled }))}
+            className={`relative w-12 h-6 rounded-full transition-colors ${form.remindersEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.remindersEnabled ? 'left-6' : 'left-0.5'}`} />
+          </button>
+        </div>
+        {form.remindersEnabled && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Reminder Offsets (minutes before appointment)</label>
+            <input
+              value={form.reminderOffsetsMinutes.join(', ')}
+              onChange={(e) => setForm(p => ({ ...p, reminderOffsetsMinutes: e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => Number.isFinite(n) && n > 0) }))}
+              placeholder="1440, 120"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Comma-separated. Example: <code>1440, 120</code> = 1 day and 2 hours before.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Booking Management Security */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Booking Management Security</h2>
+        <p className="text-sm text-gray-500">Customers manage bookings with a secure link. Optionally require a one-time verification code (OTP) before they can view, reschedule, or cancel.</p>
+
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div>
+            <p className="text-sm font-medium">Require OTP for booking management</p>
+            <p className="text-xs text-gray-500">Adds an email or SMS verification step.</p>
+          </div>
+          <button onClick={() => setForm(p => ({ ...p, bookingManagementOtpEnabled: !p.bookingManagementOtpEnabled }))}
+            className={`relative w-12 h-6 rounded-full transition-colors ${form.bookingManagementOtpEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.bookingManagementOtpEnabled ? 'left-6' : 'left-0.5'}`} />
+          </button>
+        </div>
+
+        {form.bookingManagementOtpEnabled && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">OTP Channel</label>
+              <select value={form.bookingManagementOtpChannel} onChange={(e) => setForm(p => ({ ...p, bookingManagementOtpChannel: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
+                <option value="EMAIL">Email</option>
+                <option value="SMS">SMS</option>
+                <option value="EITHER">Email or SMS</option>
+              </select>
+            </div>
+            <div className="space-y-1 text-xs">
+              <p className={providerStatus?.smtpConfigured ? 'text-green-600' : 'text-amber-600'}>
+                {providerStatus?.smtpConfigured ? '✓ SMTP configured' : '⚠ SMTP not configured — Email OTP will be unavailable'}
+              </p>
+              <p className={providerStatus?.twilioSmsConfigured ? 'text-green-600' : 'text-amber-600'}>
+                {providerStatus?.twilioSmsConfigured ? '✓ Twilio SMS configured' : '⚠ Twilio SMS not configured — SMS OTP will be unavailable'}
+              </p>
+            </div>
+            {!providerStatus?.smtpConfigured && form.bookingManagementOtpChannel === 'EMAIL' && (
+              <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+                Enable Email OTP only after adding SMTP credentials (SMTP_USER / SMTP_PASS).
+              </p>
+            )}
+            {!providerStatus?.twilioSmsConfigured && form.bookingManagementOtpChannel === 'SMS' && (
+              <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+                Enable SMS OTP only after adding Twilio SMS credentials (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_SMS_FROM).
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* QR Code */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
         <h2 className="text-lg font-semibold">Booking Widget</h2>
         <p className="text-sm text-gray-500">Share this link or QR code with your customers for booking.</p>
         <div className="flex gap-2">
-          <input readOnly value={`${window.location.origin}/b/${config?.slug || ''}`}
+          <input readOnly value={`${window.location.origin}/b/${config?.publicCode || ''}`}
             className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-gray-50 dark:bg-gray-800" />
-          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/b/${config?.slug || ''}`); toast.success('Copied!') }}
+          <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/b/${config?.publicCode || ''}`); toast.success('Copied!') }}
             className="px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm hover:bg-gray-200">Copy</button>
         </div>
       </div>

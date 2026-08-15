@@ -1,4 +1,8 @@
-version: '3.8'
+# Local development database ONLY.
+# This does NOT start the backend or frontend — run those with pnpm.
+#
+# Host port 5433 is used deliberately so we do not collide with another
+# Postgres already listening on the common host port 5432.
 
 services:
   postgres:
@@ -9,14 +13,14 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: slot_booking
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d slot_booking"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
 volumes:
   pgdata:

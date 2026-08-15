@@ -3,11 +3,12 @@ import { CalendarPicker } from '../CalendarPicker'
 import { TimeSlotGrid } from '../TimeSlotGrid'
 import { RecurringPreview } from '../RecurringPreview'
 import { useAvailability } from '../../hooks'
-import type { BusinessConfig } from '../../types'
+import type { PublicConfig } from '../../types'
 
 interface DateTimePickerProps {
-  config: BusinessConfig
+  config: PublicConfig
   slug: string
+  serviceId: string | null
   selectedDate: string | null
   selectedTime: string | null
   staffId: string | null
@@ -27,6 +28,7 @@ interface DateTimePickerProps {
 export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   config,
   slug,
+  serviceId,
   selectedDate,
   selectedTime,
   staffId,
@@ -42,18 +44,27 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   onRecurringCount,
   onSkipToggle,
 }) => {
-  const { slots, loading } = useAvailability(slug, selectedDate, staffId)
+  const { availability, slots, loading } = useAvailability(slug, selectedDate, serviceId, staffId)
   const staffName = staffId ? config.staff.find((s) => s.id === staffId)?.name : null
+  const selectedService = config.services.find((s) => s.id === serviceId)
+  const recurringRequiresUnsupportedPayment =
+    config.featureFlags.recurring && config.featureFlags.payments && config.payment.mode !== 'none'
 
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold">Select Date & Time</h3>
+        {selectedService && (
+          <p className="text-sm text-gray-500">
+            {selectedService.name} · {selectedService.durationMinutes} min
+            {selectedService.bufferMinutes > 0 ? ` + ${selectedService.bufferMinutes} min buffer` : ''}
+          </p>
+        )}
         {staffName && <p className="text-sm text-gray-500">Availability for {staffName}</p>}
       </div>
 
       <CalendarPicker
-        bookingWindowDays={config.bookingWindowDays}
+        bookingWindowDays={config.business.bookingWindowDays}
         selectedDate={selectedDate}
         onSelect={onSelectDate}
         workingHours={config.workingHours}
@@ -66,15 +77,21 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
             slots={slots}
             selectedTime={selectedTime}
             onSelect={onSelectTime}
-            onWaitlist={onWaitlist}
-            showAvailableCount={config.showAvailableCount}
-            parallelSeats={config.parallelSeats}
+            showAvailableCount={config.business.showAvailableCount}
             loading={loading}
           />
+          {!loading && slots.length === 0 && availability?.nextAvailable && (
+            <button
+              onClick={() => onSelectDate(availability.nextAvailable as string)}
+              className="w-full text-sm text-primary hover:underline text-left"
+            >
+              No slots this day — next available: {availability.nextAvailable}. Tap to jump →
+            </button>
+          )}
         </div>
       )}
 
-      {config.enableRecurring && selectedTime && (
+      {config.featureFlags.recurring && selectedTime && !recurringRequiresUnsupportedPayment && (
         <div className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -121,6 +138,12 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {recurringRequiresUnsupportedPayment && selectedTime && (
+        <p className="text-xs text-gray-500 border-t border-gray-200 dark:border-gray-700 pt-4">
+          Recurring series are unavailable while online payment is required. Book this appointment first, then choose another date.
+        </p>
       )}
     </div>
   )

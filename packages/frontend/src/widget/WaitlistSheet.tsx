@@ -9,9 +9,10 @@ interface WaitlistSheetProps {
   slotDate: string
   onClose: () => void
   staffId?: string | null
+  serviceId?: string | null
 }
 
-export const WaitlistSheet: React.FC<WaitlistSheetProps> = ({ slug, slotTime, slotDate, onClose, staffId }) => {
+export const WaitlistSheet: React.FC<WaitlistSheetProps> = ({ slug, slotTime, slotDate, onClose, staffId, serviceId }) => {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -29,6 +30,7 @@ export const WaitlistSheet: React.FC<WaitlistSheetProps> = ({ slug, slotTime, sl
         customerPhone: phone,
         customerEmail: email || undefined,
         staffId: staffId || undefined,
+        serviceId: serviceId || undefined,
       })
       setJoined(true)
       toast.success('Added to waitlist!')

@@ -1,16 +1,31 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 
 export const Notifications: React.FC = () => {
-  const [testEmail, setTestEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<{
+    smtpConfigured: boolean
+    twilioWhatsappConfigured: boolean
+    frontendUrlConfigured: boolean
+    ownerEmailPresent: boolean
+    ownerWhatsappPresent: boolean
+  } | null>(null)
+  const [result, setResult] = useState<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } } | null>(null)
+
+  useEffect(() => {
+    api.getOwnerSettingsStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null))
+  }, [])
 
   const handleTest = async () => {
     setLoading(true)
     try {
-      await api.sendTestNotification()
-      toast.success('Test notification sent!')
+      const res = await api.sendTestNotification()
+      setResult(res)
+      if (res.email.ok || res.whatsapp.ok) toast.success('Test sent to at least one channel')
+      else toast.error('Test failed — see channel details below')
     } catch (err: any) {
       toast.error(err.message || 'Failed')
     } finally {
@@ -18,16 +33,48 @@ export const Notifications: React.FC = () => {
     }
   }
 
+  const Row = ({ ok, label, error }: { ok?: boolean; label: string; error?: string }) => (
+    <p className={`text-xs ${ok ? 'text-green-600' : 'text-amber-600'}`}>
+      {ok ? '✓' : '⚠'} {label}
+      {error ? ` — ${error}` : ''}
+    </p>
+  )
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Notifications</h1>
+
+      {/* Readiness — platform prerequisites for email/WhatsApp channels */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
+        <h2 className="text-lg font-semibold">Channel Readiness</h2>
+        <p className="text-sm text-gray-500">
+          Customer email/WhatsApp notifications are sent through the platform SMTP / Twilio
+          senders. Channels whose prerequisites fail cannot be enabled.
+        </p>
+        <Row ok={status?.smtpConfigured} label="SMTP configured (customer + owner emails)" error="SMTP_USER / SMTP_PASS" />
+        <Row ok={status?.ownerEmailPresent} label="Owner email present (replyTo / owner alerts)" />
+        <Row ok={status?.twilioWhatsappConfigured} label="Twilio WhatsApp configured" error="TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM" />
+        <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />
+        <Row ok={status?.frontendUrlConfigured} label="HTTPS frontend URL configured (manage link)" error="FRONTEND_PUBLIC_URL" />
+      </div>
+
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-lg">
         <h2 className="text-lg font-semibold">Test Notification</h2>
-        <p className="text-sm text-gray-500">Send a test notification to verify your email and WhatsApp settings.</p>
+        <p className="text-sm text-gray-500">Send a test notification to verify your email and WhatsApp settings. Failures are reported per channel.</p>
         <button onClick={handleTest} disabled={loading}
           className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
           {loading ? 'Sending...' : 'Send Test Notification'}
         </button>
+        {result && (
+          <div className="space-y-1 text-xs">
+            <p className={result.email.ok ? 'text-green-600' : 'text-amber-600'}>
+              Email: {result.email.ok ? 'sent' : 'failed'}{result.email.error ? ` — ${result.email.error}` : ''}
+            </p>
+            <p className={result.whatsapp.ok ? 'text-green-600' : 'text-amber-600'}>
+              WhatsApp: {result.whatsapp.ok ? 'sent' : 'failed'}{result.whatsapp.error ? ` — ${result.whatsapp.error}` : ''}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">

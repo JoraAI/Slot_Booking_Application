@@ -15,14 +15,79 @@ enum BookingStatus {
   NO_SHOW
 }
 
+enum ServiceResourceMode {
+  STAFF_BASED
+  POOLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum BookingSource {
+  DIRECT
+  QR
+  EMBED
+  WIDGET
+}
+
+enum PageSectionType {
+  HERO
+  OFFERS
+  GALLERY
+  ABOUT
+  SERVICES
+  BUSINESS_HOURS
+  WHY_CHOOSE_US
+  TESTIMONIALS
+  CONTACT
+  CUSTOM_TEXT
+}
+
+enum PaymentAttemptStatus {
+  INITIATING
+  PENDING
+  VERIFIED
+  CONSUMED
+  EXPIRED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentRefundStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
 model Business {
   id                      String    @id @default(cuid())
   name                    String
   slug                    String    @unique
+  publicCode              String    @unique
+  timezone                String    @default("Asia/Kolkata")
+  description             String?
+  logoUrl                 String?
+  logoPublicId            String?
+  coverImageUrl           String?
+  coverImagePublicId      String?
+  primaryColor            String    @default("#7C3AED")
+  secondaryColor          String?
+  accentColor             String?
+  slotGranularityMinutes  Int       @default(15)
+  reminderOffsetsMinutes  Int[]     @default([1440, 120])
+  remindersEnabled        Boolean   @default(true)
   bookingWindowDays       Int       @default(7)
-  parallelSeats           Int       @default(1)
-  slotDurationMinutes     Int       @default(30)
   showAvailableCount      Boolean   @default(false)
+  bookingManagementOtpEnabled Boolean @default(false)
+  bookingManagementOtpChannel String? // 'EMAIL' | 'SMS' | 'EITHER'
+  // Batch 4 — salon location (address + optional lat/lng pair, directions
+  // links are generated server-side; no Maps API key is used).
+  address                 String?
+  latitude                Float?
+  longitude               Float?
   notifyOwnerEmail        Boolean   @default(true)
   notifyOwnerWhatsapp     Boolean   @default(false)
   notifyCustomerEmail     Boolean   @default(true)
@@ -39,7 +104,6 @@ model Business {
   paymentMode             String    @default("none") // 'full' | 'deposit' | 'none'
   depositAmount           Float?
   depositPercentage       Float?
-  servicePrice            Float?
   razorpayKeyId           String?
   razorpayKeySecret       String?
   razorpayTestMode        Boolean   @default(true)
@@ -52,6 +116,15 @@ model Business {
   blockedSlots            BlockedSlot[]
   staff                   Staff[]
   waitlistEntries         WaitlistEntry[]
+  serviceCategories       ServiceCategory[]
+  services                Service[]
+  pageSections            PageSection[]
+  serviceWorkingHours     ServiceWorkingHour[]
+  staffWorkingHours       StaffWorkingHour[]
+  reminders               BookingReminder[]
+  paymentAttempts         PaymentAttempt[]
+  paymentRefunds          PaymentRefund[]
+  managementOtps          BookingManagementOtp[]
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }
@@ -95,40 +168,169 @@ model Staff {
   isActive     Boolean        @default(true)
   bookings     Booking[]
   blockedSlots BlockedSlot[]
+  services     StaffService[]
+  workingHours StaffWorkingHour[]
+  paymentAttempts PaymentAttempt[]
   createdAt    DateTime       @default(now())
 
   @@index([businessId, isActive])
 }
 
+model ServiceCategory {
+  id            String    @id @default(cuid())
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  imageUrl      String?
+  imagePublicId String?
+  displayOrder  Int       @default(0)
+  isActive      Boolean   @default(true)
+  services      Service[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([businessId, isActive, displayOrder])
+}
+
+model Service {
+  id                 String              @id @default(cuid())
+  businessId         String
+  business           Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  categoryId         String
+  category           ServiceCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name               String
+  description        String?
+  durationMinutes    Int
+  bufferMinutes      Int                 @default(0)
+  price              Float
+  resourceMode       ServiceResourceMode @default(POOLED)
+  capacity           Int                 @default(1) // meaningful only for POOLED
+  isActive           Boolean             @default(true)
+  displayOrder       Int                 @default(0)
+  imageUrl           String?
+  imagePublicId      String?
+  discountType       DiscountType?
+  discountValue      Float?
+  discountLabel      String?
+  discountValidFrom  DateTime?
+  discountValidUntil DateTime?
+  discountActive     Boolean             @default(false)
+  bookings           Booking[]
+  staff              StaffService[]
+  workingHours       ServiceWorkingHour[]
+  paymentAttempts    PaymentAttempt[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([businessId, categoryId, isActive, displayOrder])
+}
+
+model StaffService {
+  staffId    String
+  staff      Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  businessId String
+  createdAt  DateTime @default(now())
+
+  @@id([staffId, serviceId])
+  @@index([businessId])
+}
+
+model ServiceWorkingHour {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  openTime    String   // HH:mm format
+  closeTime   String   // HH:mm format
+  isOpen      Boolean  @default(true)
+
+  @@index([businessId, serviceId, dayOfWeek])
+}
+
+model StaffWorkingHour {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staffId     String
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  openTime    String   // HH:mm format
+  closeTime   String   // HH:mm format
+  isOpen      Boolean  @default(true)
+
+  @@index([businessId, staffId, dayOfWeek])
+}
+
+model PageSection {
+  id            String          @id @default(cuid())
+  businessId    String
+  business      Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  type          PageSectionType
+  title         String?
+  content       String?
+  configuration Json            @default("{}")
+  displayOrder  Int             @default(0)
+  isVisible     Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([businessId, isVisible, displayOrder])
+}
+
 model Booking {
-  id               String        @id @default(cuid())
-  businessId       String
-  business         Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  staffId          String?
-  staff            Staff?        @relation(fields: [staffId], references: [id], onDelete: SetNull)
-  date             DateTime
-  startTime        String        // HH:mm format
-  endTime          String        // HH:mm format
-  status           BookingStatus @default(CONFIRMED)
-  formData         Json          @default("{}")
-  customerName     String
-  customerPhone    String
-  customerEmail    String?
-  seatIndex        Int           @default(0)
-  isRecurring      Boolean       @default(false)
-  recurringRule    String?       // RRULE string e.g. "FREQ=WEEKLY;COUNT=8"
-  recurringGroupId String?       // links all bookings in a recurring series
-  paymentStatus    String?       // 'pending' | 'partial' | 'paid' | 'refunded'
-  paymentAmount    Float?
-  razorpayOrderId  String?
-  razorpayPaymentId String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  cancelledAt      DateTime?
+  id                      String             @id @default(cuid())
+  businessId              String
+  business                Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId               String?
+  service                 Service?           @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  staffId                 String?
+  staff                   Staff?             @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  date                    DateTime
+  startTime               String             // HH:mm format
+  endTime                 String             // HH:mm format
+  status                  BookingStatus      @default(CONFIRMED)
+  formData                Json               @default("{}")
+  customerName            String
+  customerPhone           String
+  customerEmail           String?
+  seatIndex               Int                @default(0)
+  isRecurring             Boolean            @default(false)
+  recurringRule           String?            // RRULE string e.g. "FREQ=WEEKLY;COUNT=8"
+  recurringGroupId        String?            // links all bookings in a recurring series
+  // Pricing snapshots (nullable for legacy rows)
+  originalPrice           Float?
+  discountAmount          Float?
+  finalPrice              Float?
+  source                  BookingSource      @default(DIRECT)
+  serviceNameSnapshot     String?
+  durationMinutesSnapshot Int?
+  bufferMinutesSnapshot   Int?
+  currency                String             @default("INR")
+  managementTokenHash     String?
+  managementOtps          BookingManagementOtp[]
+  managementSessions      BookingManagementSession[]
+  // Payment
+  paymentStatus           String?            // 'pending' | 'partial' | 'paid' | 'refunded'
+  paymentAmount           Float?
+  razorpayOrderId         String?
+  razorpayPaymentId       String?
+  reminders               BookingReminder[]
+  paymentAttempts         PaymentAttempt[]
+  paymentRefund           PaymentRefund?      // one durable refund pipeline per booking (bookingId unique)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  cancelledAt             DateTime?
 
   @@index([businessId, date, startTime, status])
   @@index([businessId, staffId])
   @@index([recurringGroupId])
+  @@index([businessId, serviceId, status])
+  @@index([businessId, source])
 }
 
 model BlockedSlot {
@@ -147,20 +349,135 @@ model BlockedSlot {
 }
 
 model WaitlistEntry {
-  id            String   @id @default(cuid())
-  businessId    String
-  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  date          DateTime
-  startTime     String   // HH:mm format
-  customerName  String
-  customerPhone String
-  customerEmail String?
-  staffId       String?
-  formData      Json     @default("{}")
-  notified      Boolean  @default(false)
-  notifiedAt    DateTime?
-  expired       Boolean  @default(false)
-  createdAt     DateTime @default(now())
+  id                      String        @id @default(cuid())
+  businessId              String
+  business                Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId               String?
+  date                    DateTime
+  startTime               String        // HH:mm format
+  customerName            String
+  customerPhone           String
+  customerEmail           String?
+  staffId                 String?
+  durationMinutesSnapshot Int?
+  source                  BookingSource @default(DIRECT)
+  formData                Json          @default("{}")
+  notified                Boolean       @default(false)
+  notifiedAt              DateTime?
+  expiresAt               DateTime?
+  expired                 Boolean       @default(false)
+  createdAt               DateTime      @default(now())
 
   @@index([businessId, date, startTime, notified, expired])
+}
+
+model BookingReminder {
+  id            String    @id @default(cuid())
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookingId     String
+  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  channel       String    // 'email' | 'whatsapp'
+  reminderType  String    // 'BOOKING_REMINDER'
+  offsetMinutes Int?      // minutes before the appointment; NULL for legacy rows
+  scheduledFor  DateTime
+  status        String    @default("PENDING") // 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED'
+  attempts      Int       @default(0)
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([bookingId, channel, reminderType, offsetMinutes])
+  @@index([status, scheduledFor])
+  @@index([businessId])
+}
+model PaymentAttempt {
+  id              String               @id @default(cuid())
+  razorpayOrderId String?              @unique
+  businessId      String
+  business        Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  serviceId       String?
+  service         Service?             @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  staffId         String?
+  staff           Staff?               @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  date            DateTime
+  startTime       String               // HH:mm business-local
+  endTime         String               // HH:mm business-local (visible end)
+  occupiedEndTime String               // HH:mm business-local (visible end + buffer)
+  customerData    Json
+  formData        Json
+  originalPrice   Float
+  discountAmount  Float
+  finalPrice      Float
+  payableMinor    Int                  // amount charged, in minor units (paise)
+  paymentMode     String               // 'full' | 'deposit' (server-decided only)
+  currency        String               @default("INR")
+  status          PaymentAttemptStatus @default(INITIATING)
+  holdExpiresAt   DateTime             // capacity hold expiry (10 minutes)
+  consumedAt      DateTime?
+  bookingId       String?
+  booking         Booking?             @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  source          BookingSource        @default(DIRECT)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([businessId, status, holdExpiresAt])
+  @@index([businessId, serviceId, status])
+  @@index([businessId, date, startTime])
+  @@index([businessId, staffId])
+}
+
+model PaymentRefund {
+  id                String              @id @default(cuid())
+  businessId        String
+  business          Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookingId         String              @unique // one refund pipeline per booking (idempotency)
+  booking           Booking             @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  razorpayPaymentId String
+  razorpayRefundId  String?
+  idempotencyKey    String              @unique // stable key for Razorpay X-Refund-Idempotency
+  amountMinor       Int                 // paise; equals the amount actually collected
+  currency          String              @default("INR")
+  status            PaymentRefundStatus @default(PENDING)
+  failureReason     String?
+  initiatedAt       DateTime?
+  processedAt       DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model BookingManagementOtp {
+  id              String   @id @default(cuid())
+  businessId      String
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookingId       String
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  channel         String   // 'EMAIL' | 'SMS'
+  destinationHash String   // SHA-256 of the masked destination (email/phone)
+  codeHash        String   // SHA-256 of the OTP code (never plaintext)
+  expiresAt       DateTime
+  attempts        Int      @default(0)
+  maxAttempts     Int      @default(5)
+  requesterIp     String?
+  consumedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([bookingId, consumedAt])
+  @@index([businessId])
+}
+
+model BookingManagementSession {
+  id               String   @id @default(cuid())
+  bookingId        String
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sessionTokenHash String   @unique
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([expiresAt])
 }

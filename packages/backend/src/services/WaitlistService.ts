@@ -1,29 +1,60 @@
 import prisma from '../lib/prisma';
 import { notificationService } from './NotificationService';
+import { normalizeSource } from './BookingService';
+import { timeService } from './TimeService';
+import { availabilityService } from './AvailabilityService';
 
+const NOTIFIED_HOLD_MINUTES = 30;
+const BATCH_LIMIT = 50;
+
+/**
+ * Waitlist handling. Expiry is DURABLE and DB-backed: a notified entry carries
+ * `expiresAt` and is expired by the authenticated cron job
+ * (POST /api/internal/jobs/process-waitlist-expirations), not by an in-process
+ * timer that dies with the process.
+ */
 class WaitlistService {
-  async addToWaitlist(slug: string, data: {
+  async addToWaitlist(identifier: string, data: {
     date: string;
     startTime: string;
     customerName: string;
     customerPhone: string;
-    customerEmail?: string;
-    staffId?: string;
+    customerEmail?: string | null;
+    staffId?: string | null;
+    serviceId?: string | null;
+    durationMinutes?: number;
+    source?: string | null;
     formData?: any;
   }) {
-    const business = await prisma.business.findUnique({ where: { slug } });
+    const business = await prisma.business.findFirst({
+      where: { OR: [{ publicCode: identifier }, { slug: identifier }] },
+    });
     if (!business) throw new Error('Business not found');
     if (!business.enableWaitlist) throw new Error('Waitlist feature not enabled');
+
+    // Validate service belongs to this business when provided
+    let durationSnapshot: number | undefined;
+    if (data.serviceId) {
+      const service = await prisma.service.findFirst({
+        where: { id: data.serviceId, businessId: business.id },
+      });
+      if (!service) throw new Error('Service not found');
+      durationSnapshot = service.durationMinutes;
+    }
+    durationSnapshot = durationSnapshot ?? data.durationMinutes;
 
     const entry = await prisma.waitlistEntry.create({
       data: {
         businessId: business.id,
-        date: new Date(data.date),
+        date: timeService.dateToUtcMidnight(data.date),
         startTime: data.startTime,
         customerName: data.customerName,
         customerPhone: data.customerPhone,
         customerEmail: data.customerEmail || null,
         staffId: data.staffId || null,
+        serviceId: data.serviceId || null,
+        durationMinutesSnapshot: durationSnapshot || null,
+        source: normalizeSource(data.source),
         formData: data.formData || {},
       },
     });
@@ -33,14 +64,20 @@ class WaitlistService {
     return entry;
   }
 
-  async notifyNext(businessId: string, date: string, startTime: string): Promise<void> {
+  /**
+   * Notify the next eligible waiting entry (optionally scoped to a
+   * service/staff). The notified entry gets a 30-minute, DB-backed expiresAt.
+   */
+  async notifyNext(
+    businessId: string,
+    date: string,
+    startTime: string,
+    opts?: { serviceId?: string | null; staffId?: string | null }
+  ): Promise<void> {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
     if (!business) return;
 
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const { gte: startOfDay, lte: endOfDay } = timeService.dayRangeUtc(date);
 
     const nextEntry = await prisma.waitlistEntry.findFirst({
       where: {
@@ -49,55 +86,95 @@ class WaitlistService {
         startTime,
         notified: false,
         expired: false,
+        ...(opts?.serviceId ? { serviceId: opts.serviceId } : {}),
+        ...(opts?.staffId ? { staffId: opts.staffId } : {}),
       },
       orderBy: { createdAt: 'asc' },
     });
 
     if (!nextEntry) return;
 
-    const bookingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${business.slug}?date=${date}&time=${startTime}`;
+    const bookingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/b/${business.publicCode}?date=${date}&time=${startTime}`;
 
     await prisma.waitlistEntry.update({
       where: { id: nextEntry.id },
-      data: { notified: true, notifiedAt: new Date() },
+      data: {
+        notified: true,
+        notifiedAt: new Date(),
+        expiresAt: new Date(Date.now() + NOTIFIED_HOLD_MINUTES * 60000),
+      },
     });
 
     await notificationService.sendWaitlistOpened(nextEntry, business, bookingLink);
-
-    // Set 30-minute expiry timer
-    setTimeout(() => {
-      this.expireAndCascade(nextEntry.id, businessId, date, startTime);
-    }, 30 * 60 * 1000);
   }
 
-  async expireAndCascade(entryId: string, businessId?: string, date?: string, startTime?: string): Promise<void> {
-    const entry = await prisma.waitlistEntry.findUnique({ where: { id: entryId } });
-    if (!entry || entry.expired) return;
-
-    // Check if the entry was already converted (booking made)
-    // For now, just mark as expired
-    await prisma.waitlistEntry.update({
-      where: { id: entryId },
-      data: { expired: true },
+  /**
+   * Durable cron processor: expire notified-but-stale entries and cascade to the
+   * next eligible entry ONLY if the slot is still authoritatively available for
+   * that service/staff. Idempotent by status guard.
+   */
+  async processExpired(now: Date = new Date()): Promise<number> {
+    const due = await prisma.waitlistEntry.findMany({
+      where: { notified: true, expired: false, expiresAt: { lte: now } },
+      take: BATCH_LIMIT,
     });
 
-    const business = await prisma.business.findUnique({ where: { id: entry.businessId } });
-    if (business) {
-      await notificationService.sendWaitlistExpired(entry, business);
-    }
+    let processed = 0;
+    for (const entry of due) {
+      // Idempotent guard: re-read state before mutating
+      const fresh = await prisma.waitlistEntry.findUnique({
+        where: { id: entry.id },
+        select: { notified: true, expired: true, expiresAt: true },
+      });
+      if (!fresh || !fresh.notified || fresh.expired) continue;
+      if (fresh.expiresAt === null || fresh.expiresAt > now) continue;
 
-    // Notify next in queue
-    if (entry.businessId && entry.date && entry.startTime) {
-      const dateStr = entry.date.toISOString().split('T')[0];
-      await this.notifyNext(entry.businessId, dateStr, entry.startTime);
+      await prisma.waitlistEntry.update({ where: { id: entry.id }, data: { expired: true } });
+      processed++;
+
+      const business = await prisma.business.findUnique({ where: { id: entry.businessId } });
+      if (business) {
+        await notificationService.sendWaitlistExpired(entry, business);
+        const dateStr = timeService.toDateStr(entry.date, business.timezone || 'Asia/Kolkata');
+        await this.notifyNextIfAvailable(business, dateStr, entry.startTime, entry.serviceId, entry.staffId);
+      }
     }
+    return processed;
+  }
+
+  /** Cascade only when the slot is still available for that service/staff. */
+  private async notifyNextIfAvailable(
+    business: any,
+    date: string,
+    startTime: string,
+    serviceId: string | null,
+    staffId: string | null
+  ): Promise<void> {
+    if (serviceId) {
+      const service = await prisma.service.findFirst({
+        where: { id: serviceId, businessId: business.id, isActive: true },
+      });
+      if (!service) return;
+      const availability = await availabilityService.computeAvailability(
+        business,
+        service,
+        date,
+        service.resourceMode === 'STAFF_BASED' ? (staffId || undefined) : undefined
+      );
+      const slot = availability.slots.find((s) => s.startTime === startTime);
+      if (!slot) return;
+      if (service.resourceMode === 'STAFF_BASED' && staffId && !slot.eligibleStaffIds.includes(staffId)) return;
+    } else {
+      // Legacy entry without a service: authoritative flat slot check
+      const legacy = await availabilityService.getLegacyAvailability(business.slug, date, staffId || undefined);
+      const slot = legacy.slots.find((s) => s.time === startTime);
+      if (!slot || !slot.isAvailable) return;
+    }
+    await this.notifyNext(business.id, date, startTime, { serviceId, staffId });
   }
 
   async getWaitlistForSlot(businessId: string, date: string, startTime: string) {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    const { gte: startOfDay, lte: endOfDay } = timeService.dayRangeUtc(date);
 
     return prisma.waitlistEntry.findMany({
       where: {
@@ -120,10 +197,7 @@ class WaitlistService {
 
     const where: any = { businessId };
     if (filters?.date) {
-      const startOfDay = new Date(filters.date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(filters.date);
-      endOfDay.setHours(23, 59, 59, 999);
+      const { gte: startOfDay, lte: endOfDay } = timeService.dayRangeUtc(filters.date);
       where.date = { gte: startOfDay, lte: endOfDay };
     }
     if (filters?.status === 'waiting') {
@@ -150,9 +224,15 @@ class WaitlistService {
   }
 
   async removeEntry(businessId: string, entryId: string) {
-    return prisma.waitlistEntry.delete({
+    const entry = await prisma.waitlistEntry.findFirst({
       where: { id: entryId, businessId },
     });
+    if (!entry) {
+      const err: any = new Error('Waitlist entry not found');
+      err.status = 404;
+      throw err;
+    }
+    return prisma.waitlistEntry.delete({ where: { id: entryId } });
   }
 
   async manuallyNotify(businessId: string, entryId: string) {
@@ -164,12 +244,16 @@ class WaitlistService {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new Error('Business not found');
 
-    const dateStr = entry.date.toISOString().split('T')[0];
-    const bookingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/book/${business.slug}?date=${dateStr}&time=${entry.startTime}`;
+    const dateStr = timeService.toDateStr(entry.date, business.timezone || 'Asia/Kolkata');
+    const bookingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/b/${business.publicCode}?date=${dateStr}&time=${entry.startTime}`;
 
     await prisma.waitlistEntry.update({
       where: { id: entryId },
-      data: { notified: true, notifiedAt: new Date() },
+      data: {
+        notified: true,
+        notifiedAt: new Date(),
+        expiresAt: new Date(Date.now() + NOTIFIED_HOLD_MINUTES * 60000),
+      },
     });
 
     await notificationService.sendWaitlistOpened(entry, business, bookingLink);

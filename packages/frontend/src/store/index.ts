@@ -1,10 +1,14 @@
 import { create } from 'zustand'
-import type { BusinessConfig, BookingWizardState } from '../types'
+import type { BusinessConfig, PublicConfig, BookingWizardState } from '../types'
 
 interface AppState {
-  // Business config (for widget)
+  // Owner business config (dashboard)
   config: BusinessConfig | null
   setConfig: (config: BusinessConfig) => void
+
+  // Public config (customer widget)
+  publicConfig: PublicConfig | null
+  setPublicConfig: (config: PublicConfig) => void
 
   // Owner auth
   isAuthenticated: boolean
@@ -23,9 +27,13 @@ interface AppState {
 const initialWizard: BookingWizardState = {
   currentStep: 0,
   steps: [],
+  selectedCategoryId: null,
+  selectedServiceId: null,
   selectedStaff: null,
   selectedDate: null,
   selectedTime: null,
+  source: 'DIRECT',
+  displayedPricing: null,
   formData: {},
   isRecurring: false,
   recurringFrequency: 'WEEKLY',
@@ -39,12 +47,15 @@ export const useStore = create<AppState>((set) => ({
   config: null,
   setConfig: (config) => set({ config }),
 
+  publicConfig: null,
+  setPublicConfig: (publicConfig) => set({ publicConfig }),
+
   isAuthenticated: !!localStorage.getItem('owner_token'),
   setIsAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
 
   wizard: initialWizard,
   setWizard: (partial) => set((state) => ({ wizard: { ...state.wizard, ...partial } })),
-  resetWizard: () => set({ wizard: initialWizard }),
+  resetWizard: () => set({ wizard: { ...initialWizard, source: 'DIRECT' } }),
 
   isEmbedded: false,
   setIsEmbedded: (isEmbedded) => set({ isEmbedded }),

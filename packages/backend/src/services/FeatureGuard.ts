@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
+import { businessResolver } from './BusinessResolver';
 
 const featureMap: Record<string, string> = {
   waitlist: 'enableWaitlist',
@@ -11,16 +12,15 @@ const featureMap: Record<string, string> = {
 export const featureGuard = (feature: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const slug = req.params.slug;
+      const identifier = req.params.identifier || req.params.slug;
       const configField = featureMap[feature];
       if (!configField) {
         return res.status(400).json({ error: `Unknown feature: ${feature}` });
       }
 
-      const business = await prisma.business.findUnique({
-        where: { slug },
-        select: { id: true, [configField]: true },
-      });
+      // Route public identifier resolution through the single BusinessResolver
+      // (publicCode-first, slug fallback) instead of a duplicate OR lookup.
+      const business = await businessResolver.resolve(identifier);
 
       if (!business) {
         return res.status(404).json({ error: 'Business not found' });

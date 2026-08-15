@@ -1,6 +1,11 @@
-import type { BusinessConfig, TimeSlot, Booking, WaitlistEntry, BlockedSlot, AnalyticsData } from '../types'
+import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult } from '../types'
 
-const API_BASE = '/api'
+// Split-host friendly API base:
+// - Local development / single-service deploys: relative `/api` (vite proxies it).
+// - Vercel static + external Node API: set VITE_API_BASE_URL to the API origin
+//   (e.g. https://api.example.com). Never put secrets in VITE_* — these vars are
+//   exposed to the browser at build time.
+const API_BASE: string = import.meta.env.VITE_API_BASE_URL || '/api'
 
 class ApiClient {
   private token: string | null = null
@@ -29,73 +34,117 @@ class ApiClient {
     return data
   }
 
-  // Public endpoints
-  getConfig(slug: string) {
-    return this.request<BusinessConfig>(`/${slug}/config`)
+  // ---------- Public endpoints ----------
+
+  getConfig(identifier: string) {
+    return this.request<PublicConfig>(`/${identifier}/config`)
   }
 
-  getAvailability(slug: string, date: string, staffId?: string) {
+  getAvailability(identifier: string, date: string, serviceId: string, staffId?: string) {
+    const params = new URLSearchParams({ date, serviceId })
+    if (staffId) params.set('staffId', staffId)
+    return this.request<AvailabilityResult>(`/${identifier}/availability?${params}`)
+  }
+
+  getLegacyAvailability(identifier: string, date: string, staffId?: string) {
     const params = new URLSearchParams({ date })
     if (staffId) params.set('staffId', staffId)
-    return this.request<TimeSlot[]>(`/${slug}/availability?${params}`)
+    return this.request<TimeSlot[]>(`/${identifier}/availability?${params}`)
   }
 
-  createBooking(slug: string, data: Record<string, unknown>) {
-    return this.request<Booking>(`/${slug}/bookings`, {
+  createBooking(identifier: string, data: Record<string, unknown>) {
+    return this.request<Booking>(`/${identifier}/bookings`, {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
 
-  getBooking(slug: string, id: string) {
-    return this.request<Booking>(`/${slug}/bookings/${id}`)
+  createRecurringBooking(identifier: string, data: Record<string, unknown>) {
+    return this.request<{ bookings: Booking[]; recurringGroupId: string; conflicts: { date: string; reason: string }[] }>(
+      `/${identifier}/recurring`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    )
   }
 
-  updateBooking(slug: string, id: string, data: Record<string, unknown>) {
-    return this.request<Booking>(`/${slug}/bookings/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
+  // ---------- Customer booking management (token + optional OTP) ----------
+
+  manageSession(identifier: string, bookingId: string, token: string) {
+    return this.request<{ otpRequired: boolean; sessionToken?: string; booking?: any }>(`/${identifier}/bookings/${bookingId}/manage/session`, {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     })
   }
 
-  cancelBooking(slug: string, id: string) {
-    return this.request<void>(`/${slug}/bookings/${id}`, { method: 'DELETE' })
+  manageRequestOtp(identifier: string, bookingId: string, token: string) {
+    return this.request<{ maskedDestination: string; expiresInMinutes: number }>(`/${identifier}/bookings/${bookingId}/manage/otp/request`, {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
   }
 
-  joinWaitlist(slug: string, data: Record<string, unknown>) {
-    return this.request<WaitlistEntry>(`/${slug}/waitlist`, {
+  manageVerifyOtp(identifier: string, bookingId: string, token: string, code: string) {
+    return this.request<{ sessionToken: string; booking: any }>(`/${identifier}/bookings/${bookingId}/manage/otp/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ token, code }),
+    })
+  }
+
+  manageGetBooking(identifier: string, bookingId: string, sessionToken: string) {
+    return this.request<{ booking: any }>(`/${identifier}/bookings/${bookingId}/manage`, {
+      headers: { 'X-Booking-Session': sessionToken },
+    })
+  }
+
+  manageCancelBooking(identifier: string, bookingId: string, sessionToken: string) {
+    return this.request<{ success: boolean; booking: any; refund: RefundResult | null }>(`/${identifier}/bookings/${bookingId}/manage`, {
+      method: 'DELETE',
+      headers: { 'X-Booking-Session': sessionToken },
+    })
+  }
+
+  joinWaitlist(identifier: string, data: Record<string, unknown>) {
+    return this.request<WaitlistEntry>(`/${identifier}/waitlist`, {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
 
-  leaveWaitlist(slug: string, id: string) {
-    return this.request<void>(`/${slug}/waitlist/${id}`, { method: 'DELETE' })
+  leaveWaitlist(identifier: string, id: string) {
+    return this.request<void>(`/${identifier}/waitlist/${id}`, { method: 'DELETE' })
   }
 
-  initiatePayment(slug: string, data: { bookingId?: string; amount: number }) {
-    return this.request<{ orderId: string; amount: number; currency: string; key: string; name: string; prefill?: any }>(`/${slug}/payments/initiate`, {
+  initiatePayment(identifier: string, data: {
+    serviceId: string
+    date: string
+    startTime: string
+    staffId?: string | null
+    source?: string | null
+    customerName: string
+    customerPhone: string
+    customerEmail?: string | null
+    formData?: Record<string, unknown>
+  }) {
+    return this.request<{ orderId: string; amount: number; currency: string; key: string; name: string; payable?: number; pricing?: any; prefill?: any; free?: boolean; booking?: Booking; attemptId?: string }>(`/${identifier}/payments/initiate`, {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
 
-  verifyPayment(slug: string, data: {
+  verifyPayment(identifier: string, data: {
     razorpay_order_id: string
     razorpay_payment_id: string
     razorpay_signature: string
-    bookingData?: Record<string, unknown>
   }) {
-    return this.request<{ success: boolean; booking: any }>(`/${slug}/payments/verify`, {
+    return this.request<{ success: boolean; booking: Booking; idempotent?: boolean }>(`/${identifier}/payments/verify`, {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
 
-  // Owner endpoints
-  getOwnerMe() {
-    return this.request<BusinessConfig>('/owner/me')
-  }
+  // ---------- Owner auth ----------
 
   ownerLogin(email: string, password: string) {
     return this.request<{ token: string; business: { id: string; name: string; slug: string; email: string } }>('/owner/login', {
@@ -104,9 +153,20 @@ class ApiClient {
     })
   }
 
+  ownerSignup(data: { name: string; ownerEmail: string; ownerPassword: string; timezone?: string }) {
+    return this.request<{ token: string; business: { id: string; name: string; slug: string; publicCode: string; email: string } }>('/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  getOwnerMe() {
+    return this.request<BusinessConfig>('/owner/me')
+  }
+
   getOwnerBookings(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return this.request<{ bookings: Booking[]; total: number }>(`/owner/bookings${qs}`)
+    return this.request<{ bookings: Booking[]; total: number; page: number; totalPages: number }>(`/owner/bookings${qs}`)
   }
 
   getOwnerBooking(id: string) {
@@ -171,13 +231,24 @@ class ApiClient {
   }
 
   sendTestNotification() {
-    return this.request<void>('/owner/notify/test', { method: 'POST' })
+    return this.request<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } }>('/owner/notify/test', { method: 'POST' })
   }
 
-  // Waitlist (owner)
+  getOwnerSettingsStatus() {
+    return this.request<{
+      smtpConfigured: boolean
+      twilioSmsConfigured: boolean
+      twilioWhatsappConfigured: boolean
+      frontendUrlConfigured: boolean
+      locationComplete: boolean
+      ownerEmailPresent: boolean
+      ownerWhatsappPresent: boolean
+    }>('/owner/settings/status')
+  }
+
   getWaitlist(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return this.request<WaitlistEntry[]>(`/owner/waitlist${qs}`)
+    return this.request<{ entries: WaitlistEntry[]; total: number; page: number; totalPages: number }>(`/owner/waitlist${qs}`)
   }
 
   notifyWaitlistEntry(id: string) {
@@ -188,7 +259,6 @@ class ApiClient {
     return this.request<void>(`/owner/waitlist/${id}`, { method: 'DELETE' })
   }
 
-  // Staff (owner)
   getStaff() {
     return this.request<import('../types').Staff[]>('/owner/staff')
   }
@@ -211,14 +281,122 @@ class ApiClient {
     return this.request<void>(`/owner/staff/${id}`, { method: 'DELETE' })
   }
 
-  // Payments (owner)
-  getPayments(params?: Record<string, string>) {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    return this.request<any[]>(`/owner/payments${qs}`)
+  // ---------- Categories & Services (owner) ----------
+
+  getCategories() {
+    return this.request<ServiceCategory[]>('/owner/categories')
   }
 
-  refundPayment(id: string, data?: { reason?: string }) {
-    return this.request<any>(`/owner/payments/${id}/refund`, {
+  createCategory(data: Record<string, unknown>) {
+    return this.request<ServiceCategory>('/owner/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  updateCategory(id: string, data: Record<string, unknown>) {
+    return this.request<ServiceCategory>(`/owner/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deleteCategory(id: string) {
+    return this.request<void>(`/owner/categories/${id}`, { method: 'DELETE' })
+  }
+
+  getServices() {
+    return this.request<Service[]>('/owner/services')
+  }
+
+  createService(data: Record<string, unknown>) {
+    return this.request<Service>('/owner/services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  updateService(id: string, data: Record<string, unknown>) {
+    return this.request<Service>(`/owner/services/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deleteService(id: string) {
+    return this.request<{ success: boolean; softDeleted?: boolean }>(`/owner/services/${id}`, { method: 'DELETE' })
+  }
+
+  getServiceHours(id: string) {
+    return this.request<{ id: string; serviceId: string; dayOfWeek: number; openTime: string; closeTime: string; isOpen: boolean }[]>(`/owner/services/${id}/hours`)
+  }
+
+  updateServiceHours(id: string, hours: Record<string, unknown>[]) {
+    return this.request<void>(`/owner/services/${id}/hours`, {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    })
+  }
+
+  getStaffHours(id: string) {
+    return this.request<StaffWorkingHour[]>(`/owner/staff/${id}/hours`)
+  }
+
+  updateStaffHours(id: string, hours: Record<string, unknown>[]) {
+    return this.request<void>(`/owner/staff/${id}/hours`, {
+      method: 'PUT',
+      body: JSON.stringify({ hours }),
+    })
+  }
+
+  // ---------- Page sections (owner) ----------
+
+  getPageSections() {
+    return this.request<PageSection[]>('/owner/page-sections')
+  }
+
+  createPageSection(data: Record<string, unknown>) {
+    return this.request<PageSection>('/owner/page-sections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  updatePageSection(id: string, data: Record<string, unknown>) {
+    return this.request<PageSection>(`/owner/page-sections/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deletePageSection(id: string) {
+    return this.request<void>(`/owner/page-sections/${id}`, { method: 'DELETE' })
+  }
+
+  // ---------- Media (Cloudinary) ----------
+
+  getMediaSignature() {
+    return this.request<{ cloudName: string; apiKey: string; signature: string; timestamp: number; folder: string; maxFileSizeBytes: number; allowedFormats: string[] }>('/owner/media/signature', {
+      method: 'POST',
+      body: '{}',
+    })
+  }
+
+  // ---------- QR ----------
+
+  getQrInfo() {
+    return this.request<{ url: string; publicCode: string; businessName: string }>('/owner/qr')
+  }
+
+  // ---------- Payments (owner) ----------
+
+  getPayments(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return this.request<{ bookings: Booking[]; total: number; page: number; totalPages: number }>(`/owner/payments${qs}`)
+  }
+
+  refundPayment(id: string, data?: { amount?: number }) {
+    return this.request<{ refund: RefundResult; booking: Booking }>(`/owner/payments/${id}/refund`, {
       method: 'POST',
       body: JSON.stringify(data || {}),
     })

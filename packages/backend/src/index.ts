@@ -8,6 +8,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import { publicRouter } from './routes/public';
 import { ownerRouter } from './routes/owner';
+import { internalRouter } from './routes/internal';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -57,8 +58,6 @@ const swaggerSpec = swaggerJsdoc({
             name: { type: 'string' },
             slug: { type: 'string' },
             bookingWindowDays: { type: 'integer', default: 7 },
-            parallelSeats: { type: 'integer', default: 1 },
-            slotDurationMinutes: { type: 'integer', default: 30 },
             showAvailableCount: { type: 'boolean' },
             enableWaitlist: { type: 'boolean' },
             enableRecurring: { type: 'boolean' },
@@ -226,9 +225,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use('/api', publicRouter);
+// Routes. Owner + internal namespaces are mounted BEFORE the public router so
+// the public `/:identifier/...` routes can never shadow `/api/owner/...` or
+// `/api/internal/...` (e.g. identifier="owner" must not capture owner routes).
 app.use('/api/owner', ownerRouter);
+app.use('/api/internal', internalRouter);
+app.use('/api', publicRouter);
 
 // Serve frontend static files in production (single-service deployment)
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
@@ -257,8 +259,9 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// Bind 0.0.0.0 so container hosts (Fly.io, Docker) can reach the process.
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
 });
 
 server.on('error', (err: any) => {

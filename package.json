@@ -13,7 +13,9 @@
     "db:migrate": "pnpm --filter backend db:migrate",
     "db:seed": "pnpm --filter backend db:seed",
     "db:studio": "pnpm --filter backend db:studio",
-    "start": "pnpm --filter backend start"
+    "start": "pnpm --filter backend start",
+    "test": "pnpm --filter backend test",
+    "test:frontend": "pnpm --filter backend exec tsx --test ../../packages/frontend/src/widget/razorpayDisplay.test.ts ../../packages/frontend/src/dashboard/geolocation.test.ts"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

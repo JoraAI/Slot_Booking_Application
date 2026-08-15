@@ -1,15 +1,19 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import prisma from '../lib/prisma';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { bookingService } from '../services/BookingService';
 import { waitlistService } from '../services/WaitlistService';
 import { recurringService } from '../services/RecurringService';
-import { paymentService } from '../services/PaymentService';
+import { refundService } from '../services/RefundService';
 import { notificationService } from '../services/NotificationService';
+import { reminderService } from '../services/ReminderService';
 import { analyticsService } from '../services/AnalyticsService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
+import { timeService } from '../services/TimeService';
+import { validateLocation } from '../services/LocationService';
 
 export const ownerRouter = Router();
 
@@ -123,6 +127,13 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
         workingHours: { orderBy: { dayOfWeek: 'asc' } },
         formFields: { orderBy: { order: 'asc' } },
         staff: { orderBy: { createdAt: 'asc' } },
+        serviceCategories: { orderBy: { displayOrder: 'asc' } },
+        services: {
+          orderBy: [{ displayOrder: 'asc' }],
+          include: { staff: true, workingHours: true },
+        },
+        pageSections: { orderBy: { displayOrder: 'asc' } },
+        staffWorkingHours: true,
       },
     });
 
@@ -131,7 +142,10 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
     }
 
     const { ownerPassword, razorpayKeySecret, ...safeData } = business;
-    res.json(safeData);
+    res.json({
+      ...safeData,
+      razorpayKeySecretConfigured: !!razorpayKeySecret,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -258,6 +272,50 @@ ownerRouter.get('/bookings/:id', async (req: AuthRequest, res: Response) => {
  */
 ownerRouter.put('/bookings/:id', async (req: AuthRequest, res: Response) => {
   try {
+    // Reschedule path: validate availability (excluding the moved booking) and
+    // rebuild reminders only after success.
+    if (req.body.date || req.body.startTime) {
+      const business = await prisma.business.findUnique({
+        where: { id: req.owner!.businessId },
+        select: { id: true, publicCode: true, timezone: true, remindersEnabled: true, reminderOffsetsMinutes: true, notifyCustomerEmail: true, notifyCustomerWhatsapp: true },
+      });
+      if (!business) return res.status(404).json({ error: 'Business not found' });
+
+      const updated = await bookingService.updateBooking(
+        business.publicCode,
+        req.params.id,
+        { date: req.body.date, startTime: req.body.startTime, staffId: req.body.staffId },
+        { excludeBookingId: req.params.id }
+      );
+
+      await reminderService.cancelForBooking(updated.id);
+      await reminderService.scheduleForBooking(business as any, updated);
+      await notificationService.sendBookingUpdate(updated, business as any, req.body);
+      return res.json(updated);
+    }
+
+    if (req.body.status === 'CANCELLED') {
+      // Batch 2A: owner cancellation routes through the same atomic
+      // cancel + durable refund orchestration as customer cancels.
+      const business = await prisma.business.findUnique({ where: { id: req.owner!.businessId } });
+      if (!business) return res.status(404).json({ error: 'Business not found' });
+
+      const { booking: cancelled, refundIntent, createdIntent } =
+        await refundService.cancelBookingWithRefundIntent(business, req.params.id);
+
+      if (business.enableWaitlist) {
+        const dateStr = timeService.toDateStr(cancelled.date, business.timezone || 'Asia/Kolkata');
+        await waitlistService.notifyNext(business.id, dateStr, cancelled.startTime, {
+          serviceId: cancelled.serviceId,
+          staffId: cancelled.staffId,
+        });
+      }
+
+      const refund = await refundService.initiateOrReconcileRefund(refundIntent, cancelled, { createdIntent });
+      await notificationService.sendBookingCancellation(cancelled, business, refund);
+      return res.json({ ...cancelled, refund });
+    }
+
     const booking = await bookingService.updateBookingStatus(
       req.owner!.businessId,
       req.params.id,
@@ -265,7 +323,7 @@ ownerRouter.put('/bookings/:id', async (req: AuthRequest, res: Response) => {
     );
     res.json(booking);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -297,27 +355,24 @@ ownerRouter.delete('/bookings/:id', async (req: AuthRequest, res: Response) => {
     });
     if (!business) return res.status(404).json({ error: 'Business not found' });
 
-    const booking = await prisma.booking.findFirst({
-      where: { id: req.params.id, businessId: business.id },
-    });
-    if (!booking) return res.status(404).json({ error: 'Booking not found' });
-
-    const updated = await prisma.booking.update({
-      where: { id: req.params.id },
-      data: { status: 'CANCELLED', cancelledAt: new Date() },
-      include: { staff: true, business: true },
-    });
-
-    await notificationService.sendBookingCancellation(updated, business);
+    // Batch 2A: route through the atomic cancel + durable refund orchestration.
+    const { booking: cancelled, refundIntent, createdIntent } =
+      await refundService.cancelBookingWithRefundIntent(business, req.params.id);
 
     if (business.enableWaitlist) {
-      const dateStr = new Date(booking.date).toISOString().split('T')[0];
-      await waitlistService.notifyNext(business.id, dateStr, booking.startTime);
+      const dateStr = timeService.toDateStr(cancelled.date, business.timezone || 'Asia/Kolkata');
+      await waitlistService.notifyNext(business.id, dateStr, cancelled.startTime, {
+        serviceId: cancelled.serviceId,
+        staffId: cancelled.staffId,
+      });
     }
 
-    res.json(updated);
+    const refund = await refundService.initiateOrReconcileRefund(refundIntent, cancelled, { createdIntent });
+    await notificationService.sendBookingCancellation(cancelled, business, refund);
+
+    res.json({ ...cancelled, refund });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -357,7 +412,7 @@ ownerRouter.post('/block', async (req: AuthRequest, res: Response) => {
     const block = await prisma.blockedSlot.create({
       data: {
         businessId: req.owner!.businessId,
-        date: new Date(date),
+        date: timeService.dateToUtcMidnight(date),
         startTime,
         endTime,
         staffId: staffId || null,
@@ -433,8 +488,8 @@ ownerRouter.get('/blocks', async (req: AuthRequest, res: Response) => {
     const where: any = { businessId: req.owner!.businessId };
     if (dateFrom || dateTo) {
       where.date = {};
-      if (dateFrom) where.date.gte = new Date(dateFrom);
-      if (dateTo) where.date.lte = new Date(dateTo);
+      if (dateFrom) where.date.gte = new Date(dateFrom + 'T00:00:00Z');
+      if (dateTo) where.date.lte = new Date(dateTo + 'T23:59:59Z');
     }
     if (staffId) where.staffId = staffId;
 
@@ -466,8 +521,6 @@ ownerRouter.get('/blocks', async (req: AuthRequest, res: Response) => {
  *             properties:
  *               name: { type: string }
  *               bookingWindowDays: { type: integer }
- *               parallelSeats: { type: integer }
- *               slotDurationMinutes: { type: integer }
  *               showAvailableCount: { type: boolean }
  *               notifyOwnerEmail: { type: boolean }
  *               notifyOwnerWhatsapp: { type: boolean }
@@ -481,7 +534,6 @@ ownerRouter.get('/blocks', async (req: AuthRequest, res: Response) => {
  *               paymentMode: { type: string, enum: [full, deposit, none] }
  *               depositAmount: { type: number }
  *               depositPercentage: { type: number }
- *               servicePrice: { type: number }
  *               razorpayKeyId: { type: string }
  *               razorpayTestMode: { type: boolean }
  *               refundPolicy: { type: string }
@@ -504,13 +556,18 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
 
     const allowedFields = [
-      'name', 'bookingWindowDays', 'parallelSeats', 'slotDurationMinutes',
+      'name', 'description', 'timezone', 'primaryColor', 'secondaryColor', 'accentColor',
+      'logoUrl', 'logoPublicId', 'coverImageUrl', 'coverImagePublicId',
+      'slotGranularityMinutes', 'remindersEnabled', 'reminderOffsetsMinutes',
+      'bookingManagementOtpEnabled', 'bookingManagementOtpChannel',
+      'bookingWindowDays',
       'showAvailableCount', 'notifyOwnerEmail', 'notifyOwnerWhatsapp',
       'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerWhatsapp',
       'enableWaitlist', 'enableRecurring', 'enablePayments', 'enableMultiStaff',
-      'paymentMode', 'depositAmount', 'depositPercentage', 'servicePrice',
-      'razorpayKeyId', 'razorpayKeySecret', 'refundPolicy', 'embedAllowedOrigins',
+      'paymentMode', 'depositAmount', 'depositPercentage',
+      'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
       'razorpayTestMode',
+      'address', 'latitude', 'longitude',
     ];
 
     const updateData: any = {};
@@ -520,13 +577,132 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Razorpay secret is WRITE-ONLY: never read back, never echoed.
+    // - a non-empty value replaces the stored secret
+    // - blank/null is ignored (keeps the existing secret)
+    // - clearRazorpayKeySecret === true is the explicit intentional clear
+    if (typeof req.body.razorpayKeySecret === 'string' && req.body.razorpayKeySecret.trim() !== '') {
+      updateData.razorpayKeySecret = req.body.razorpayKeySecret.trim();
+    } else if (req.body.clearRazorpayKeySecret === true) {
+      updateData.razorpayKeySecret = null;
+    }
+
+    // OTP requires a configured delivery channel. Refuse enabling a channel
+    // whose provider is unconfigured rather than failing silently later.
+    if (updateData.bookingManagementOtpEnabled === true) {
+      const channel = updateData.bookingManagementOtpChannel ?? existing.bookingManagementOtpChannel;
+      if (!channel) {
+        return res.status(400).json({ error: 'Select an OTP channel (EMAIL, SMS, or EITHER)' });
+      }
+      if (!['EMAIL', 'SMS', 'EITHER'].includes(channel)) {
+        return res.status(400).json({ error: 'Invalid OTP channel' });
+      }
+      const smtp = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+      const sms = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM);
+      if (channel === 'EMAIL' && !smtp) {
+        return res.status(400).json({ error: 'Email OTP requires SMTP configuration (SMTP_USER / SMTP_PASS)' });
+      }
+      if (channel === 'SMS' && !sms) {
+        return res.status(400).json({ error: 'SMS OTP requires Twilio SMS configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_SMS_FROM)' });
+      }
+      if (channel === 'EITHER' && !smtp && !sms) {
+        return res.status(400).json({ error: 'OTP (EITHER) requires at least one configured channel (SMTP or Twilio SMS)' });
+      }
+    }
+
+    // Batch 2 — live paid checkout requires usable Razorpay credentials.
+    // Test mode keeps working with no real keys. Refuse enabling a live
+    // (non-test) paid checkout when Key ID or Key Secret are missing.
+    const livePayments = updateData.enablePayments !== undefined ? updateData.enablePayments : existing.enablePayments;
+    const liveMode = updateData.razorpayTestMode !== undefined ? updateData.razorpayTestMode : existing.razorpayTestMode;
+    const liveModeEnabled = !!livePayments && liveMode === false;
+    const mode = updateData.paymentMode !== undefined ? updateData.paymentMode : existing.paymentMode;
+    if (liveModeEnabled && mode !== 'none') {
+      const keyId = updateData.razorpayKeyId !== undefined ? updateData.razorpayKeyId : existing.razorpayKeyId;
+      const newSecret = typeof req.body.razorpayKeySecret === 'string' ? req.body.razorpayKeySecret.trim() : '';
+      const hasNewSecret = updateData.razorpayKeySecret != null && newSecret !== '';
+      const hasExistingSecret = req.body.clearRazorpayKeySecret !== true && !!existing.razorpayKeySecret;
+      if (!keyId || !(hasNewSecret || hasExistingSecret)) {
+        return res.status(400).json({
+          error: 'Live payments require both a Razorpay Key ID and Key Secret. Add the credentials or keep Test Mode enabled.',
+        });
+      }
+    }
+
+    // Deposit configuration: exactly one of a fixed amount or a percentage,
+    // both positive, percentage <= 100.
+    const depositMode =
+      (updateData.paymentMode !== undefined ? updateData.paymentMode : existing.paymentMode) === 'deposit';
+    if (depositMode) {
+      const amount = updateData.depositAmount !== undefined ? updateData.depositAmount : existing.depositAmount;
+      const pct = updateData.depositPercentage !== undefined ? updateData.depositPercentage : existing.depositPercentage;
+      const hasAmount = amount != null && amount > 0;
+      const hasPct = pct != null && pct > 0;
+      if (hasAmount && hasPct) {
+        return res.status(400).json({ error: 'Choose exactly one of deposit amount or deposit percentage' });
+      }
+      if (!hasAmount && !hasPct) {
+        return res.status(400).json({ error: 'Deposit mode requires a fixed amount or a percentage' });
+      }
+      if (hasPct && (pct <= 0 || pct > 100)) {
+        return res.status(400).json({ error: 'Deposit percentage must be between 1 and 100' });
+      }
+      if (hasAmount && amount <= 0) {
+        return res.status(400).json({ error: 'Deposit amount must be positive' });
+      }
+    }
+
+    // Batch 4 — salon location validation (address ≤ 500; lat/lng pair; bounds).
+    if (typeof updateData.address === 'string') {
+      updateData.address = updateData.address.trim() || null;
+    }
+    if (updateData.address === '') updateData.address = null;
+    const locationError = validateLocation({
+      address: updateData.address,
+      latitude: updateData.latitude,
+      longitude: updateData.longitude,
+    });
+    if (locationError) {
+      return res.status(400).json({ error: locationError });
+    }
+
+    // Batch 4 — notification prerequisites. Refuse ENABLING a channel when its
+    // platform prerequisites fail (same pattern as the OTP channel guards).
+    // A flag already true in the DB (legacy default) is left alone so unrelated
+    // settings saves are not blocked; the readiness UI warns about it.
+    const smtp = notificationService.smtpConfigured();
+    const twilioWhatsapp = notificationService.twilioWhatsappConfigured();
+    const enabling = (field: string) => updateData[field] === true && (existing as any)[field] !== true;
+    if (enabling('notifyCustomerEmail') && !smtp) {
+      return res.status(400).json({ error: 'Customer email notifications require SMTP configuration (SMTP_USER / SMTP_PASS). Configure SMTP or keep customer email notifications off.' });
+    }
+    if (enabling('notifyCustomerWhatsapp')) {
+      if (!twilioWhatsapp) {
+        return res.status(400).json({ error: 'Customer WhatsApp notifications require Twilio WhatsApp configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM).' });
+      }
+      if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
+        return res.status(400).json({ error: 'Customer WhatsApp notifications require the salon owner WhatsApp number (used as the customer contact).' });
+      }
+    }
+    if (enabling('notifyOwnerWhatsapp')) {
+      if (!twilioWhatsapp) {
+        return res.status(400).json({ error: 'Owner WhatsApp notifications require Twilio WhatsApp configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM).' });
+      }
+      if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
+        return res.status(400).json({ error: 'Owner WhatsApp notifications require an owner WhatsApp number.' });
+      }
+    }
+
     const business = await prisma.business.update({
       where: { id: req.owner!.businessId },
       data: updateData,
     });
 
-    const { ownerPassword, ...safeData } = business;
-    res.json(safeData);
+    const { ownerPassword, razorpayKeySecret, ...safeData } = business;
+    res.json({
+      ...safeData,
+      razorpayKeySecretConfigured: !!razorpayKeySecret,
+    });
   } catch (error: any) {
     if (error.code === 'P2025') {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
@@ -688,8 +864,8 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
 ownerRouter.get('/analytics', async (req: AuthRequest, res: Response) => {
   try {
     const { dateFrom, dateTo, staffId } = req.query as any;
-    const from = dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const to = dateTo || new Date().toISOString().split('T')[0];
+    const from = dateFrom || timeService.toDateStr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'UTC');
+    const to = dateTo || timeService.toDateStr(new Date(), 'UTC');
 
     const analytics = await analyticsService.getAnalytics(
       req.owner!.businessId,
@@ -725,6 +901,34 @@ ownerRouter.post('/notify/test', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
+});
+
+/**
+ * @openapi
+ * /owner/settings/status:
+ *   get:
+ *     tags: [Owner - Config]
+ *     summary: Notification/location readiness status
+ *     description: Reports platform prerequisites for email/WhatsApp channels and
+ *       location completeness so the Settings UI can surface configuration errors.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Readiness flags
+ */
+ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
+  const business = await prisma.business.findUnique({ where: { id: req.owner!.businessId } });
+  const frontendUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').trim();
+  const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
+  res.json({
+    smtpConfigured: notificationService.smtpConfigured(),
+    twilioSmsConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM),
+    twilioWhatsappConfigured: notificationService.twilioWhatsappConfigured(),
+    frontendUrlConfigured: isHttpsAbsolute,
+    locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),
+    ownerEmailPresent: !!business?.ownerEmail,
+    ownerWhatsappPresent: !!business?.ownerWhatsapp,
+  });
 });
 
 /**
@@ -786,7 +990,8 @@ ownerRouter.post('/waitlist/:id/notify', ownerFeatureGuard('waitlist'), async (r
     const entry = await waitlistService.manuallyNotify(req.owner!.businessId, req.params.id);
     res.json(entry);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    const status = error.message === 'Waitlist entry not found' ? 404 : (error.status || 400);
+    res.status(status).json({ error: error.message });
   }
 });
 
@@ -814,7 +1019,7 @@ ownerRouter.delete('/waitlist/:id', ownerFeatureGuard('waitlist'), async (req: A
     await waitlistService.removeEntry(req.owner!.businessId, req.params.id);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || (error.code === 'P2025' ? 404 : 400)).json({ error: error.message });
   }
 });
 
@@ -930,13 +1135,14 @@ ownerRouter.post('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthReq
  */
 ownerRouter.put('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
-    const staff = await prisma.staff.update({
+    const staff = await prisma.staff.findFirst({
       where: { id: req.params.id, businessId: req.owner!.businessId },
-      data: req.body,
     });
-    res.json(staff);
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    const updated = await prisma.staff.update({ where: { id: staff.id }, data: req.body });
+    res.json(updated);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -961,12 +1167,14 @@ ownerRouter.put('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: Auth
  */
 ownerRouter.delete('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
-    await prisma.staff.delete({
+    const staff = await prisma.staff.findFirst({
       where: { id: req.params.id, businessId: req.owner!.businessId },
     });
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    await prisma.staff.delete({ where: { id: staff.id } });
     res.json({ success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -1015,7 +1223,7 @@ ownerRouter.get('/payments', ownerFeatureGuard('payments'), async (req: AuthRequ
     const [bookings, total] = await Promise.all([
       prisma.booking.findMany({
         where,
-        include: { staff: true },
+        include: { staff: true, paymentRefund: true },
         orderBy: { createdAt: 'desc' },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
@@ -1066,27 +1274,33 @@ ownerRouter.post('/payments/:id/refund', ownerFeatureGuard('payments'), async (r
       where: { id: req.params.id, businessId: req.owner!.businessId },
     });
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    if (!booking.razorpayPaymentId) return res.status(400).json({ error: 'No payment to refund' });
+    if (!booking.razorpayPaymentId || !booking.paymentAmount || booking.paymentAmount <= 0) {
+      return res.status(400).json({ error: 'No payment to refund' });
+    }
 
-    const refundAmount = req.body.amount || booking.paymentAmount;
-    const refund = await paymentService.initiateRefund(booking.razorpayPaymentId, refundAmount, req.owner!.businessId);
+    // Batch 2A: full-paid-amount only, through the durable idempotent pipeline.
+    // `amount` (if provided) must be the full paid amount in integer minor units.
+    const fullMinor = Math.round(booking.paymentAmount * 100);
+    if (req.body?.amount != null && req.body.amount !== fullMinor) {
+      return res.status(400).json({ error: 'This version refunds the full paid amount only' });
+    }
 
-    await prisma.booking.update({
-      where: { id: booking.id },
-      data: { paymentStatus: 'refunded' },
-    });
+    // Idempotent: creates or returns the single PaymentRefund intent. If an
+    // automatic cancel already created/processed one, no duplicate is made.
+    const { refundIntent, createdIntent } =
+      await refundService.ensureRefundIntentForBooking(req.owner!.businessId, booking);
+
+    const refund = await refundService.initiateOrReconcileRefund(refundIntent, booking, { createdIntent });
 
     const business = await prisma.business.findUnique({ where: { id: req.owner!.businessId } });
     if (business) {
-      await notificationService.sendPaymentRefundConfirmation(
-        { ...booking, paymentAmount: refundAmount },
-        business
-      );
+      await notificationService.sendPaymentRefundConfirmation(booking, business, refund);
     }
 
-    res.json({ refund, booking });
+    const freshBooking = await prisma.booking.findUnique({ where: { id: booking.id } });
+    res.json({ refund, booking: freshBooking });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -1167,3 +1381,481 @@ ownerRouter.delete('/recurring/:groupId', async (req: AuthRequest, res: Response
 });
 
 export default ownerRouter;
+
+// ---------- Service categories (owner CRUD) ----------
+
+ownerRouter.get('/categories', async (req: AuthRequest, res: Response) => {
+  try {
+    const categories = await prisma.serviceCategory.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: { displayOrder: 'asc' },
+    });
+    res.json(categories);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/categories', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, description, displayOrder, isActive } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+    const category = await prisma.serviceCategory.create({
+      data: {
+        businessId: req.owner!.businessId,
+        name: name.trim(),
+        description: description || null,
+        displayOrder: Number(displayOrder) || 0,
+        isActive: isActive !== false,
+      },
+    });
+    res.status(201).json(category);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/categories/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, description, displayOrder, isActive, imageUrl } = req.body;
+    const category = await prisma.serviceCategory.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+
+    const updated = await prisma.serviceCategory.update({
+      where: { id: category.id },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(displayOrder !== undefined ? { displayOrder: Number(displayOrder) } : {}),
+        ...(isActive !== undefined ? { isActive } : {}),
+        ...(imageUrl !== undefined ? { imageUrl } : {}),
+      },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const category = await prisma.serviceCategory.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!category) return res.status(404).json({ error: 'Category not found' });
+
+    const serviceCount = await prisma.service.count({ where: { categoryId: category.id } });
+    if (serviceCount > 0) {
+      return res.status(400).json({ error: 'Category has services. Move or delete them first.' });
+    }
+    await prisma.serviceCategory.delete({ where: { id: category.id } });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- Services (owner CRUD) ----------
+
+ownerRouter.get('/services', async (req: AuthRequest, res: Response) => {
+  try {
+    const services = await prisma.service.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: [{ displayOrder: 'asc' }],
+      include: { staff: true, workingHours: true, category: true },
+    });
+    res.json(services);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/services', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      categoryId: z.string().min(1),
+      name: z.string().trim().min(1).max(120),
+      description: z.string().optional().nullable(),
+      durationMinutes: z.number().int().min(5).max(600),
+      bufferMinutes: z.number().int().min(0).max(120).default(0),
+      price: z.number().min(0),
+      resourceMode: z.enum(['STAFF_BASED', 'POOLED']).default('POOLED'),
+      capacity: z.number().int().min(1).max(100).default(1),
+      isActive: z.boolean().default(true),
+      displayOrder: z.number().int().default(0),
+      imageUrl: z.string().optional().nullable(),
+      assignedStaffIds: z.array(z.string()).optional(),
+      discountType: z.enum(['PERCENTAGE', 'FLAT']).optional().nullable(),
+      discountValue: z.number().min(0).optional().nullable(),
+      discountLabel: z.string().optional().nullable(),
+      discountActive: z.boolean().default(false),
+      discountValidFrom: z.string().optional().nullable(),
+      discountValidUntil: z.string().optional().nullable(),
+    });
+    const parsed = schema.parse(req.body);
+
+    const category = await prisma.serviceCategory.findFirst({
+      where: { id: parsed.categoryId, businessId: req.owner!.businessId },
+    });
+    if (!category) return res.status(400).json({ error: 'Category not found for this business' });
+
+    const assignedStaffIds = parsed.resourceMode === 'STAFF_BASED' ? (parsed.assignedStaffIds || []) : [];
+    if (parsed.resourceMode === 'STAFF_BASED' && assignedStaffIds.length === 0) {
+      return res.status(400).json({ error: 'STAFF_BASED services require at least one assigned staff member' });
+    }
+    if (assignedStaffIds.length > 0) {
+      const staffCount = await prisma.staff.count({
+        where: { id: { in: assignedStaffIds }, businessId: req.owner!.businessId },
+      });
+      if (staffCount !== assignedStaffIds.length) {
+        return res.status(400).json({ error: 'One or more staff members do not belong to this business' });
+      }
+    }
+
+    const service = await prisma.service.create({
+      data: {
+        businessId: req.owner!.businessId,
+        categoryId: parsed.categoryId,
+        name: parsed.name,
+        description: parsed.description || null,
+        durationMinutes: parsed.durationMinutes,
+        bufferMinutes: parsed.bufferMinutes,
+        price: parsed.price,
+        resourceMode: parsed.resourceMode,
+        capacity: parsed.capacity,
+        isActive: parsed.isActive,
+        displayOrder: parsed.displayOrder,
+        imageUrl: parsed.imageUrl || null,
+        discountType: parsed.discountType || null,
+        discountValue: parsed.discountValue ?? null,
+        discountLabel: parsed.discountLabel || null,
+        discountActive: parsed.discountActive,
+        discountValidFrom: parsed.discountValidFrom ? new Date(parsed.discountValidFrom) : null,
+        discountValidUntil: parsed.discountValidUntil ? new Date(parsed.discountValidUntil) : null,
+        staff: assignedStaffIds.length > 0
+          ? { create: assignedStaffIds.map((staffId) => ({ staffId, businessId: req.owner!.businessId })) }
+          : undefined,
+      },
+      include: { staff: true, category: true },
+    });
+    res.status(201).json(service);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/services/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const service = await prisma.service.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
+
+    const { assignedStaffIds, ...fields } = req.body;
+    const data: any = { ...fields };
+    delete data.id;
+    delete data.businessId;
+    delete data.createdAt;
+    delete data.updatedAt;
+    delete data.category;
+    delete data.staff;
+    delete data.workingHours;
+
+    if (data.discountValidFrom) data.discountValidFrom = new Date(data.discountValidFrom);
+    if (data.discountValidUntil) data.discountValidUntil = new Date(data.discountValidUntil);
+
+    const result = await prisma.$transaction(async (tx) => {
+      if (Array.isArray(assignedStaffIds)) {
+        const staffCount = await tx.staff.count({
+          where: { id: { in: assignedStaffIds }, businessId: req.owner!.businessId },
+        });
+        if (staffCount !== assignedStaffIds.length) {
+          throw new Error('One or more staff members do not belong to this business');
+        }
+        await tx.staffService.deleteMany({ where: { serviceId: service.id } });
+        if (assignedStaffIds.length > 0) {
+          await tx.staffService.createMany({
+            data: assignedStaffIds.map((staffId: string) => ({ staffId, serviceId: service.id, businessId: req.owner!.businessId })),
+          });
+        }
+      }
+      return tx.service.update({
+        where: { id: service.id },
+        data,
+        include: { staff: true, category: true, workingHours: true },
+      });
+    });
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.delete('/services/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const service = await prisma.service.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
+
+    const bookingCount = await prisma.booking.count({ where: { serviceId: service.id } });
+    if (bookingCount > 0) {
+      // Soft-delete: keep historical snapshots intact
+      await prisma.service.update({ where: { id: service.id }, data: { isActive: false } });
+      return res.json({ success: true, softDeleted: true });
+    }
+    await prisma.service.delete({ where: { id: service.id } });
+    res.json({ success: true, softDeleted: false });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- Service-specific working hours ----------
+
+ownerRouter.get('/services/:id/hours', async (req: AuthRequest, res: Response) => {
+  try {
+    const service = await prisma.service.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
+    const hours = await prisma.serviceWorkingHour.findMany({
+      where: { serviceId: service.id },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+    res.json(hours);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/services/:id/hours', async (req: AuthRequest, res: Response) => {
+  try {
+    const service = await prisma.service.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
+
+    const hours: { dayOfWeek: number; openTime: string; closeTime: string; isOpen: boolean }[] = req.body.hours || [];
+    await prisma.$transaction(async (tx) => {
+      await tx.serviceWorkingHour.deleteMany({ where: { serviceId: service.id } });
+      if (hours.length > 0) {
+        await tx.serviceWorkingHour.createMany({
+          data: hours.map((h) => ({
+            businessId: req.owner!.businessId,
+            serviceId: service.id,
+            dayOfWeek: h.dayOfWeek,
+            openTime: h.openTime,
+            closeTime: h.closeTime,
+            isOpen: h.isOpen,
+          })),
+        });
+      }
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- Staff-specific working hours ----------
+
+ownerRouter.get('/staff/:id/hours', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const staff = await prisma.staff.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+    const hours = await prisma.staffWorkingHour.findMany({
+      where: { staffId: staff.id },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+    res.json(hours);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/staff/:id/hours', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const staff = await prisma.staff.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!staff) return res.status(404).json({ error: 'Staff not found' });
+
+    const hours: { dayOfWeek: number; openTime: string; closeTime: string; isOpen: boolean }[] = req.body.hours || [];
+    await prisma.$transaction(async (tx) => {
+      await tx.staffWorkingHour.deleteMany({ where: { staffId: staff.id } });
+      if (hours.length > 0) {
+        await tx.staffWorkingHour.createMany({
+          data: hours.map((h) => ({
+            businessId: req.owner!.businessId,
+            staffId: staff.id,
+            dayOfWeek: h.dayOfWeek,
+            openTime: h.openTime,
+            closeTime: h.closeTime,
+            isOpen: h.isOpen,
+          })),
+        });
+      }
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- Public page sections (owner CRUD) ----------
+
+ownerRouter.get('/page-sections', async (req: AuthRequest, res: Response) => {
+  try {
+    const sections = await prisma.pageSection.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: { displayOrder: 'asc' },
+    });
+    res.json(sections);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/page-sections', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      type: z.enum(['HERO', 'OFFERS', 'GALLERY', 'ABOUT', 'SERVICES', 'BUSINESS_HOURS', 'WHY_CHOOSE_US', 'TESTIMONIALS', 'CONTACT', 'CUSTOM_TEXT']),
+      title: z.string().optional().nullable(),
+      content: z.string().optional().nullable(),
+      configuration: z.record(z.any()).default({}),
+      displayOrder: z.number().int().default(0),
+      isVisible: z.boolean().default(true),
+    });
+    const parsed = schema.parse(req.body);
+    const section = await prisma.pageSection.create({
+      data: {
+        businessId: req.owner!.businessId,
+        ...parsed,
+        configuration: parsed.configuration || {},
+      },
+    });
+    res.status(201).json(section);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/page-sections/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const section = await prisma.pageSection.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+
+    const { id, businessId, createdAt, updatedAt, ...fields } = req.body;
+    const updated = await prisma.pageSection.update({
+      where: { id: section.id },
+      data: fields,
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.delete('/page-sections/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const section = await prisma.pageSection.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+    await prisma.pageSection.delete({ where: { id: section.id } });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- QR code ----------
+
+ownerRouter.get('/qr', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findUnique({
+      where: { id: req.owner!.businessId },
+      select: { slug: true, publicCode: true, name: true },
+    });
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+
+    const baseUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    res.json({
+      url: `${baseUrl}/b/${business.publicCode}`,
+      publicCode: business.publicCode,
+      businessName: business.name,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Media (Cloudinary signed upload) ----------
+
+/**
+ * Backend-signed Cloudinary upload credentials. The frontend uploads media
+ * directly to Cloudinary using these params; the API secret is never exposed.
+ * Requires CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET.
+ */
+ownerRouter.post('/media/signature', async (req: AuthRequest, res: Response) => {
+  try {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(503).json({ error: 'Media upload is not configured for this workspace' });
+    }
+
+    const business = await prisma.business.findUnique({
+      where: { id: req.owner!.businessId },
+      select: { publicCode: true },
+    });
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+
+    const folder = `${process.env.CLOUDINARY_FOLDER_PREFIX || 'slotbook-dev'}/${business.publicCode}`;
+    const timestamp = Math.round(Date.now() / 1000);
+    const toSign = `folder=${folder}&timestamp=${timestamp}`;
+    const signature = require('crypto').createHmac('sha256', apiSecret).update(toSign).digest('hex');
+
+    res.json({
+      cloudName,
+      apiKey,
+      signature,
+      timestamp,
+      folder,
+      maxFileSizeBytes: 5 * 1024 * 1024,
+      allowedFormats: ['jpg', 'png', 'webp'],
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Settings provider status (for OTP UI) ----------
+
+ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
+  try {
+    void req.owner;
+    res.json({
+      smtpConfigured: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+      twilioSmsConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});

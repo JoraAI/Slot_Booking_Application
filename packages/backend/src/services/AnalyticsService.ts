@@ -1,11 +1,10 @@
 import prisma from '../lib/prisma';
+import { timeService } from './TimeService';
 
 class AnalyticsService {
   async getAnalytics(businessId: string, dateFrom: string, dateTo: string, staffId?: string) {
-    const from = new Date(dateFrom);
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(dateTo);
-    to.setHours(23, 59, 59, 999);
+    const from = new Date(dateFrom + 'T00:00:00Z');
+    const to = new Date(dateTo + 'T23:59:59Z');
 
     const baseFilter: any = {
       businessId,
@@ -70,7 +69,7 @@ class AnalyticsService {
     });
     const trend: Record<string, number> = {};
     trendData.forEach(b => {
-      const d = new Date(b.date).toISOString().split('T')[0];
+      const d = timeService.toDateStr(b.date, 'UTC');
       trend[d] = (trend[d] || 0) + 1;
     });
 
@@ -87,7 +86,7 @@ class AnalyticsService {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(to);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = timeService.toDateStr(d, 'UTC');
       sparkline.push(trend[dateStr] || 0);
     }
 
@@ -130,7 +129,7 @@ class AnalyticsService {
       // Revenue by day
       const revenueByDay: Record<string, number> = {};
       paidBookings.forEach(b => {
-        const d = new Date(b.createdAt).toISOString().split('T')[0];
+        const d = timeService.toDateStr(b.createdAt, 'UTC');
         revenueByDay[d] = (revenueByDay[d] || 0) + (b.paymentAmount || 0);
       });
 
@@ -238,6 +237,78 @@ class AnalyticsService {
       staffPerformance = staffStats;
     }
 
+    // Revenue metrics
+    const revenueRows = await prisma.booking.findMany({
+      where: baseFilter,
+      select: {
+        finalPrice: true,
+        originalPrice: true,
+        discountAmount: true,
+        paymentStatus: true,
+        source: true,
+        serviceId: true,
+        serviceNameSnapshot: true,
+        durationMinutesSnapshot: true,
+      },
+    });
+
+    const totalCollected = revenueRows.reduce(
+      (sum, b) => sum + (b.finalPrice && b.paymentStatus !== 'refunded' ? b.finalPrice : 0),
+      0
+    );
+    const totalListed = revenueRows.reduce((sum, b) => sum + (b.originalPrice || 0), 0);
+    const discountsGiven = revenueRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
+    const avgBookingValue = totalBookings > 0 ? Math.round((totalCollected / totalBookings) * 100) / 100 : 0;
+    const discountUsageCount = revenueRows.filter(b => (b.discountAmount || 0) > 0).length;
+
+    // Bookings by service (legacy rows appear under "Legacy/Unassigned")
+    const byServiceMap: Record<string, { name: string; count: number; revenue: number }> = {};
+    revenueRows.forEach(b => {
+      const key = b.serviceId || '__legacy__';
+      if (!byServiceMap[key]) {
+        byServiceMap[key] = { name: b.serviceNameSnapshot || 'Legacy/Unassigned', count: 0, revenue: 0 };
+      }
+      byServiceMap[key].count += 1;
+      byServiceMap[key].revenue += b.finalPrice && b.paymentStatus !== 'refunded' ? b.finalPrice : 0;
+    });
+    const bookingsByService = Object.values(byServiceMap).sort((a, b) => b.count - a.count);
+
+    // Revenue by service (reuse byServiceMap, filter zero-revenue rows out later)
+    const revenueByService = Object.values(byServiceMap)
+      .map(s => ({ name: s.name, revenue: Math.round(s.revenue * 100) / 100 }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // Popular services = bookingsByService order (already sorted by count)
+    const popularServices = bookingsByService.slice(0, 5).map(s => ({ name: s.name, bookings: s.count }));
+
+    // Bookings by category (join service -> category snapshot at query time)
+    const categoryRows = revenueRows.length > 0
+      ? await prisma.booking.findMany({
+          where: baseFilter,
+          select: { service: { select: { category: { select: { name: true } } } } },
+        })
+      : [];
+    const byCategoryMap: Record<string, number> = {};
+    categoryRows.forEach(b => {
+      const name = b.service?.category?.name || 'Legacy/Unassigned';
+      byCategoryMap[name] = (byCategoryMap[name] || 0) + 1;
+    });
+    const bookingsByCategory = Object.entries(byCategoryMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Bookings by source
+    const bySourceMap: Record<string, number> = {};
+    revenueRows.forEach(b => {
+      const source = b.source || 'DIRECT';
+      bySourceMap[source] = (bySourceMap[source] || 0) + 1;
+    });
+    const bookingsBySource = Object.entries(bySourceMap)
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count);
+    const qrBookingCount = bySourceMap['QR'] || 0;
+    const qrBookingRate = totalBookings > 0 ? Math.round((qrBookingCount / totalBookings) * 10000) / 100 : 0;
+
     return {
       totalBookings,
       cancellationRate,
@@ -252,6 +323,24 @@ class AnalyticsService {
       waitlist,
       recurring,
       staffPerformance,
+      // New v4 analytics
+      revenueMetrics: {
+        totalCollected: Math.round(totalCollected * 100) / 100,
+        totalListed: Math.round(totalListed * 100) / 100,
+        discountsGiven: Math.round(discountsGiven * 100) / 100,
+        avgBookingValue,
+        discountUsageCount,
+      },
+      bookingsByService,
+      revenueByService,
+      bookingsByCategory,
+      bookingsBySource,
+      qrBooking: {
+        count: qrBookingCount,
+        rate: qrBookingRate,
+      },
+      popularServices,
+      avgBookingValue,
     };
   }
 }

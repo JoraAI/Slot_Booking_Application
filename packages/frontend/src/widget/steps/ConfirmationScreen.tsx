@@ -1,10 +1,11 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import type { Booking } from '../../types'
+import type { Booking, LocationInfo } from '../../types'
 
 interface ConfirmationScreenProps {
   booking: Booking
   businessName: string
+  location?: LocationInfo | null
   depositPaid?: number | null
   remainder?: number
 }
@@ -12,6 +13,7 @@ interface ConfirmationScreenProps {
 export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
   booking,
   businessName,
+  location,
   depositPaid,
   remainder,
 }) => {
@@ -73,10 +75,52 @@ export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
             <p className="text-sm text-primary font-medium">🔄 Recurring booking</p>
           </div>
         )}
+        {booking.serviceNameSnapshot && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Service</span>
+            <span className="font-medium">{booking.serviceNameSnapshot}</span>
+          </div>
+        )}
+        {booking.finalPrice != null && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Amount</span>
+            <span className="font-medium">₹{booking.finalPrice}</span>
+          </div>
+        )}
       </div>
 
+      {booking.managementUrl && (
+        <div className="max-w-sm mx-auto space-y-2">
+          <p className="text-xs text-gray-500">Save this link to view or cancel your booking:</p>
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={booking.managementUrl}
+              className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-gray-50 dark:bg-gray-800"
+            />
+            <button
+              onClick={() => { navigator.clipboard.writeText(booking.managementUrl || ''); }}
+              className="px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs hover:bg-gray-200"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
+
+      {location?.directionsUrl && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 text-left max-w-sm mx-auto space-y-1">
+          <p className="text-sm font-medium">📍 {businessName}</p>
+          {location.address && <p className="text-xs text-gray-600 dark:text-gray-400">{location.address}</p>}
+          <a href={location.directionsUrl} target="_blank" rel="noopener noreferrer"
+            className="inline-block text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+            🗺️ Get directions
+          </a>
+        </div>
+      )}
+
       <p className="text-xs text-gray-400">
-        Booking ID: {booking.id}<br />
+        Booking Reference: {booking.id}<br />
         Confirmation sent to {booking.customerEmail || booking.customerPhone}
       </p>
     </motion.div>
