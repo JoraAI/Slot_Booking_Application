@@ -11,7 +11,9 @@ import { ownerRouter } from './routes/owner';
 import { internalRouter } from './routes/internal';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+// Render/Fly inject PORT (often 10000). Local default stays 3001.
+// Do not hardcode 3001 in cloud env vars — that breaks public routing.
+const PORT = Number(process.env.PORT) || (process.env.NODE_ENV === 'production' ? 10000 : 3001);
 
 // Root route — health check + API info
 app.get('/', (_req, res) => {

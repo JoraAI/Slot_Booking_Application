@@ -89,6 +89,8 @@ openssl rand -hex 32   # CRON_SECRET
 | `FRONTEND_PUBLIC_URL` | same as `FRONTEND_URL` for now |
 | `NODE_ENV` | `production` |
 
+Do **not** set `PORT=3001` on Render. Leave `PORT` unset so Render injects it (usually `10000`), or set `PORT=10000` explicitly. Listening on `3001` makes the service look live in logs but return `Not Found` on the public URL.
+
 Optional later (email / WhatsApp / payments / media) — see `packages/backend/.env.example`:
 
 - `SMTP_*`
