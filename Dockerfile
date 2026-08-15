@@ -10,7 +10,8 @@ RUN apt-get update \
   && corepack prepare pnpm@9.15.0 --activate
 
 # Install workspace deps first (better layer caching).
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The backend tsconfig extends this root config, so it must exist in the image.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 RUN pnpm install --frozen-lockfile
