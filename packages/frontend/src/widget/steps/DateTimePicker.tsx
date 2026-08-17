@@ -70,6 +70,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
 
       <CalendarPicker
         bookingWindowDays={config.business.bookingWindowDays}
+        timezone={config.business.timezone}
         selectedDate={selectedDate}
         onSelect={onSelectDate}
         workingHours={config.workingHours}

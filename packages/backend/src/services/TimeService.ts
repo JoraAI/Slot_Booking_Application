@@ -92,20 +92,22 @@ export class TimeService {
     return `${get('year')}-${get('month')}-${get('day')}`;
   }
 
-  /** Format an absolute Date in the business timezone as "HH:mm" (00-23, never 24). */
+  /**
+   * Format an absolute Date in the business timezone as "HH:mm" (00-23).
+   * Uses the zone offset rather than Intl hour parts — `hour12: false` / `h23`
+   * can emit hour "24" just after local midnight, which then hides every slot.
+   */
   toTimeStr(date: Date, tz: string): string {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(date);
-    const get = (t: string) => parts.find((p) => p.type === t)?.value || '';
-    let hour = get('hour');
-    const minute = get('minute').padStart(2, '0');
-    hour = hour.padStart(2, '0');
-    if (hour === '24') hour = '00';
-    return `${hour}:${minute}`;
+    const offset = this.timeZoneOffsetMs(tz, date.getTime());
+    const local = new Date(date.getTime() + offset);
+    return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
+  }
+
+  /** Instant of a business-local date + HH:mm, compared against `at` + notice hours. */
+  isAtOrBeforeNotice(tz: string, dateStr: string, timeStr: string, noticeHours: number, at: Date = new Date()): boolean {
+    const hours = Math.max(0, Number(noticeHours) || 0);
+    const slotStart = this.toUtc(tz, dateStr, timeStr);
+    return slotStart.getTime() <= at.getTime() + hours * 60 * 60 * 1000;
   }
 
   /**

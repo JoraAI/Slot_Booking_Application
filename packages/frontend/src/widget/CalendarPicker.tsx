@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { localDateStr } from '../lib/localDate'
+import { localDateStr, startOfTodayInTimeZone } from '../lib/localDate'
 
 interface CalendarPickerProps {
   bookingWindowDays: number
+  timezone: string
   selectedDate: string | null
   onSelect: (date: string) => void
   workingHours: { dayOfWeek: number; isOpen: boolean }[]
@@ -14,17 +15,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 export const CalendarPicker: React.FC<CalendarPickerProps> = ({
   bookingWindowDays,
+  timezone,
   selectedDate,
   onSelect,
   workingHours,
 }) => {
-  const [viewMonth, setViewMonth] = useState(() => {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
-  })
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = startOfTodayInTimeZone(timezone || 'Asia/Kolkata')
+  const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const maxDate = new Date(today)
   maxDate.setDate(maxDate.getDate() + bookingWindowDays)
 

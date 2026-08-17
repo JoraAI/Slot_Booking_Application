@@ -419,14 +419,14 @@ class AvailabilityService {
     return result;
   }
 
-  /** Slots at or before now + minBookingNoticeHours are not offered. */
+  /**
+   * Slots at or before now + minBookingNoticeHours are not offered.
+   * Compares the slot's real start instant so midnight formatting cannot
+   * treat all of today's remaining office hours as already passed.
+   */
   private isTooSoon(business: BusinessLike, tz: string, dateStr: string, startMin: number): boolean {
     const hours = Math.max(0, Number(business.minBookingNoticeHours) || 0);
-    const earliest = new Date(Date.now() + hours * 60 * 60 * 1000);
-    const earliestDate = timeService.toDateStr(earliest, tz);
-    if (dateStr < earliestDate) return true;
-    if (dateStr > earliestDate) return false;
-    return startMin <= MINUTES(timeService.toTimeStr(earliest, tz));
+    return timeService.isAtOrBeforeNotice(tz, dateStr, HHMM(startMin), hours);
   }
 
   /**
