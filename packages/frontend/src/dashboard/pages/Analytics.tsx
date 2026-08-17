@@ -101,7 +101,7 @@ export const Analytics: React.FC = () => {
 
           {/* Revenue row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Kpi label="Collected" value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`} icon="💰" />
+            <Kpi label="Collected" hint="Paid and not cancelled or refunded" value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`} icon="💰" />
             <Kpi label="Avg Booking Value" value={`₹${(data.avgBookingValue ?? 0).toLocaleString('en-IN')}`} icon="🧾" />
             <Kpi label="Discounts Given" value={`₹${(data.revenueMetrics?.discountsGiven ?? 0).toLocaleString('en-IN')}`} icon="🏷️" />
             <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" />
@@ -196,12 +196,13 @@ export const Analytics: React.FC = () => {
   )
 }
 
-function Kpi({ label, value, icon }: { label: string; value: string; icon: string }) {
+function Kpi({ label, value, icon, hint }: { label: string; value: string; icon: string; hint?: string }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
       <p className="text-lg">{icon}</p>
       <p className="text-xl font-bold mt-1 truncate">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
   )
 }

@@ -161,13 +161,15 @@ If migrate fails, check logs for `DATABASE_URL` / SSL errors. The container runs
 | Build Command | `pnpm --filter frontend build` |
 | Output Directory | `packages/frontend/dist` |
 
-3. Environment variable (Production + Preview):
+3. `vercel.json` rewrites `/api/*` to `https://reservly-api.onrender.com/api/*`, so the browser can keep using same-origin `/api`. You do **not** need `VITE_API_BASE_URL` unless the API host is different.
+
+Optional override (Production + Preview) only if the API is not `reservly-api.onrender.com`:
 
 ```text
-VITE_API_BASE_URL=https://reservly-api.onrender.com
+VITE_API_BASE_URL=https://your-api-host.example
 ```
 
-No trailing slash. Never put `JWT_SECRET` / `CRON_SECRET` / Twilio / Razorpay in `VITE_*`.
+No trailing slash. Never put `JWT_SECRET` / `CRON_SECRET` / Twilio / Razorpay in `VITE_*`. Do **not** set this to the Vercel frontend URL.
 
 4. Deploy → copy the Vercel URL, e.g. `https://reservly.vercel.app`
 5. Update Render env:

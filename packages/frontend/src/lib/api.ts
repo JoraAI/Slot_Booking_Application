@@ -8,7 +8,19 @@ import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Bookin
 function resolveApiBase(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
   if (!raw) return '/api'
-  return raw.endsWith('/api') ? raw : `${raw}/api`
+  // Same-origin `/api` is always correct: Vite proxies it in dev, Vercel
+  // rewrites it to the Render API in production. A VITE value that points at
+  // the frontend host would fetch index.html and break JSON parsing.
+  try {
+    const resolved = raw.endsWith('/api') ? raw : `${raw}/api`
+    if (typeof window !== 'undefined') {
+      const target = new URL(resolved, window.location.origin)
+      if (target.origin === window.location.origin) return '/api'
+    }
+    return resolved
+  } catch {
+    return '/api'
+  }
 }
 const API_BASE: string = resolveApiBase()
 

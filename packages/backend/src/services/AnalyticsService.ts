@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { timeService } from './TimeService';
+import { netCollectedAmount } from './analyticsCollected';
 
 class AnalyticsService {
   async getAnalytics(businessId: string, dateFrom: string, dateTo: string, staffId?: string) {
@@ -110,11 +111,19 @@ class AnalyticsService {
     let revenue: any = null;
     if (business?.enablePayments) {
       const paidBookings = await prisma.booking.findMany({
-        where: { ...baseFilter, paymentStatus: { in: ['paid', 'partial'] } },
+        where: {
+          ...baseFilter,
+          status: { not: 'CANCELLED' },
+          paymentStatus: { in: ['paid', 'partial'] },
+        },
         select: { paymentAmount: true, createdAt: true, paymentStatus: true },
       });
 
-      const totalRevenue = paidBookings.reduce((sum, b) => sum + (b.paymentAmount || 0), 0);
+      const totalRevenue = paidBookings.reduce((sum, b) => sum + netCollectedAmount({
+        status: 'CONFIRMED',
+        paymentStatus: b.paymentStatus,
+        paymentAmount: b.paymentAmount,
+      }), 0);
 
       const refundedBookings = await prisma.booking.findMany({
         where: { ...baseFilter, paymentStatus: 'refunded' },
@@ -241,10 +250,12 @@ class AnalyticsService {
     const revenueRows = await prisma.booking.findMany({
       where: baseFilter,
       select: {
+        status: true,
         finalPrice: true,
         originalPrice: true,
         discountAmount: true,
         paymentStatus: true,
+        paymentAmount: true,
         source: true,
         serviceId: true,
         serviceNameSnapshot: true,
@@ -252,14 +263,14 @@ class AnalyticsService {
       },
     });
 
-    const totalCollected = revenueRows.reduce(
-      (sum, b) => sum + (b.finalPrice && b.paymentStatus !== 'refunded' ? b.finalPrice : 0),
-      0
-    );
-    const totalListed = revenueRows.reduce((sum, b) => sum + (b.originalPrice || 0), 0);
-    const discountsGiven = revenueRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
-    const avgBookingValue = totalBookings > 0 ? Math.round((totalCollected / totalBookings) * 100) / 100 : 0;
-    const discountUsageCount = revenueRows.filter(b => (b.discountAmount || 0) > 0).length;
+    const totalCollected = revenueRows.reduce((sum, b) => sum + netCollectedAmount(b), 0);
+    const activeRows = revenueRows.filter(b => b.status !== 'CANCELLED');
+    const totalListed = activeRows.reduce((sum, b) => sum + (b.originalPrice || 0), 0);
+    const discountsGiven = activeRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
+    const avgBookingValue = activeRows.length > 0
+      ? Math.round((totalCollected / activeRows.length) * 100) / 100
+      : 0;
+    const discountUsageCount = activeRows.filter(b => (b.discountAmount || 0) > 0).length;
 
     // Bookings by service (legacy rows appear under "Legacy/Unassigned")
     const byServiceMap: Record<string, { name: string; count: number; revenue: number }> = {};
@@ -269,7 +280,7 @@ class AnalyticsService {
         byServiceMap[key] = { name: b.serviceNameSnapshot || 'Legacy/Unassigned', count: 0, revenue: 0 };
       }
       byServiceMap[key].count += 1;
-      byServiceMap[key].revenue += b.finalPrice && b.paymentStatus !== 'refunded' ? b.finalPrice : 0;
+      byServiceMap[key].revenue += netCollectedAmount(b);
     });
     const bookingsByService = Object.values(byServiceMap).sort((a, b) => b.count - a.count);
 
