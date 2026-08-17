@@ -32,6 +32,19 @@ export interface BusinessConfig {
   notifyCustomerWhatsapp: boolean
   ownerEmail: string
   ownerWhatsapp: string | null
+  smtpHost: string | null
+  smtpPort: number | null
+  smtpSecure: boolean
+  smtpUser: string | null
+  smtpFromName: string | null
+  smtpPassConfigured?: boolean
+  smtpConfigured?: boolean
+  twilioAccountSid: string | null
+  twilioWhatsappFrom: string | null
+  twilioSmsFrom: string | null
+  twilioAuthTokenConfigured?: boolean
+  twilioWhatsappConfigured?: boolean
+  twilioSmsConfigured?: boolean
   enableWaitlist: boolean
   enableRecurring: boolean
   enablePayments: boolean

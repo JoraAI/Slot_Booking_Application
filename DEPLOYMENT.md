@@ -121,11 +121,9 @@ openssl rand -hex 32   # CRON_SECRET
 
 Do **not** set `PORT=3001` on Render. Leave `PORT` unset so Render injects it (usually `10000`), or set `PORT=10000` explicitly. Listening on `3001` makes the service look live in logs but return `Not Found` on the public URL.
 
-Optional later (email / WhatsApp / payments / media) — see `packages/backend/.env.example`:
+Optional later (Cloudinary media, or a platform-wide SMTP/Twilio fallback) — see `packages/backend/.env.example`.
+Owners enter their own SMTP and Twilio credentials in Dashboard → Settings; those are stored encrypted in the database.
 
-- `SMTP_*`
-- `TWILIO_*`
-- `RAZORPAY_*`
 - `CLOUDINARY_*`
 
 Save with **Save, rebuild, and deploy**.

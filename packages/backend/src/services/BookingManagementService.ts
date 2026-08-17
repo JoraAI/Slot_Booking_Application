@@ -2,6 +2,10 @@ import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import { notificationService } from './NotificationService';
 import { locationInfo } from './LocationService';
+import {
+  smtpConfigured as smtpReady,
+  twilioSmsConfigured as smsReady,
+} from './notificationCredentials';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -155,8 +159,8 @@ class BookingManagementService {
   /** Resolve which channel/destination to use for a booking's OTP. */
   private resolveOtpTarget(business: any, booking: any): { channel: 'EMAIL' | 'SMS'; destination: string } {
     const configured = business.bookingManagementOtpChannel || 'EITHER';
-    const smtp = this.smtpConfigured();
-    const sms = this.twilioSmsConfigured();
+    const smtp = this.smtpConfigured(business);
+    const sms = this.twilioSmsConfigured(business);
     const email = booking.customerEmail;
     const phone = booking.customerPhone;
 
@@ -202,8 +206,8 @@ class BookingManagementService {
     const code = this.generateOtpCode();
 
     try {
-      if (channel === 'EMAIL') await notificationService.sendOtpEmail(destination, code, business.name);
-      else await notificationService.sendOtpSms(destination, code, business.name);
+      if (channel === 'EMAIL') await notificationService.sendOtpEmail(destination, code, business.name, business);
+      else await notificationService.sendOtpSms(destination, code, business.name, business);
     } catch {
       // Never leak whether delivery succeeded/failed to unauthenticated callers
       // beyond a generic error; the token is already verified so this is fine.
@@ -267,12 +271,12 @@ class BookingManagementService {
     return { sessionToken };
   }
 
-  smtpConfigured(): boolean {
-    return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  smtpConfigured(business?: any): boolean {
+    return smtpReady(business);
   }
 
-  twilioSmsConfigured(): boolean {
-    return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM);
+  twilioSmsConfigured(business?: any): boolean {
+    return smsReady(business);
   }
 }
 

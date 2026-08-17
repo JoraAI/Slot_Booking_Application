@@ -16,29 +16,53 @@ export const SetupGuide: React.FC = () => (
         <li>Open <Link className="text-primary underline" to="/dashboard/customers">Customers</Link>.</li>
         <li>Existing booking customers are added automatically and new bookings update the matching phone-number contact.</li>
         <li>Use Add, Edit, or Delete to maintain manual contacts. Deleting a contact never deletes bookings.</li>
-        <li>Select Notify to compose an email, WhatsApp message, or both.</li>
+        <li>
+          Select Notify to compose an email, WhatsApp message, or both. Delivery uses the SMTP and
+          Twilio credentials you save under <a href="#notifications" className="text-primary underline">Email and WhatsApp notifications</a>.
+        </li>
       </ol>
     </GuideSection>
 
     <GuideSection id="notifications" title="Email and WhatsApp notifications">
       <ol className="list-decimal pl-5 space-y-2">
-        <li>In <Link className="text-primary underline" to="/dashboard/settings">Settings</Link>, enter the owner email and WhatsApp number.</li>
         <li>
-          On the backend host, configure <code>SMTP_USER</code>, <code>SMTP_PASS</code>, and optionally
-          <code> SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_FROM_NAME</code>.
+          In <Link className="text-primary underline" to="/dashboard/settings">Settings → Owner Contact</Link>,
+          enter the owner email and WhatsApp number where you want alerts. Changing owner email also
+          changes the dashboard login email.
         </li>
         <li>
-          For WhatsApp, configure <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, and
-          <code> TWILIO_WHATSAPP_FROM</code>. The From value must be a Twilio-approved WhatsApp sender.
+          On the same page, open <strong>Email &amp; WhatsApp delivery</strong>. These are <em>your</em>
+          mailbox and Twilio account — they are stored in the database, encrypted, and never shown
+          again after save. Leave a password/token field blank to keep the saved value.
         </li>
-        <li>Redeploy the backend after changing environment variables.</li>
-        <li>Open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link> and use Send Test Notification.</li>
+        <li>
+          <strong>Email:</strong> SMTP host (Gmail: <code>smtp.gmail.com</code>), port <code>587</code>
+          (leave TLS/port 465 unchecked unless your provider requires it), SMTP username (the From
+          address), SMTP password, and From name (usually the salon name). For Gmail, create an
+          <a className="text-primary underline" href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer"> App Password</a>
+          — do not paste your dashboard password or normal mailbox password.
+        </li>
+        <li>
+          <strong>WhatsApp:</strong> Twilio Account SID, Auth Token, and WhatsApp From
+          (for example <code>whatsapp:+14155238886</code>). The From value must be a Twilio-approved
+          WhatsApp sender; Meta will not deliver from an arbitrary personal number. Optional SMS From
+          is only needed if you enable SMS OTP for booking management.
+        </li>
+        <li>
+          Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),
+          then Save All.
+        </li>
+        <li>
+          Open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link>,
+          confirm Channel Readiness is green, and send a test. The test email goes to the owner email
+          from your SMTP username; the test WhatsApp goes to the owner WhatsApp number from your
+          Twilio sender.
+        </li>
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">
-        Email is sent by the configured SMTP account with the owner email as Reply-To. WhatsApp cannot
-        technically be sent from an arbitrary owner number; Twilio/Meta requires an approved sender.
-        The owner WhatsApp is included as the customer contact. WhatsApp messages outside Meta's
-        customer-service window may require an approved content template.
+        Emails are sent from your SMTP username, with owner email as Reply-To. WhatsApp is sent from
+        your approved Twilio sender; the owner WhatsApp number is included as the customer contact.
+        Messages outside Meta's customer-service window may require an approved content template.
       </p>
     </GuideSection>
 

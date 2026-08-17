@@ -202,6 +202,8 @@ test('B4-3. public config exposes location but never secrets', async () => {
   assert.ok(!('ownerPassword' in res.json.business));
   assert.ok(!JSON.stringify(res.json).includes('razorpayKeySecret'), 'no razorpay secret serialized');
   assert.ok(!JSON.stringify(res.json).includes('ownerPassword'), 'no owner password serialized');
+  assert.ok(!JSON.stringify(res.json).includes('smtpPassEnc'));
+  assert.ok(!JSON.stringify(res.json).includes('twilioAuthTokenEnc'));
 });
 
 test('B4-4. unpaid + paid confirmation notifications include location, directions, manageUrl, replyTo', async () => {
@@ -297,4 +299,16 @@ test('B4-6. enabling customer email/WhatsApp without platform prerequisites is r
     body: { notifyCustomerEmail: false, notifyCustomerWhatsapp: false },
   });
   assert.strictEqual(off.status, 200);
+});
+
+test('B4-6b. enabling customer email succeeds when SMTP is saved on the business', async () => {
+  business = await makeBusiness();
+  const token = ownerToken(business);
+  const email = await req('PUT', '/owner/config', {
+    headers: { Authorization: `Bearer ${token}` },
+    body: { notifyCustomerEmail: true, smtpUser: 'owner@example.com', smtpPass: 'app-password' },
+  });
+  assert.strictEqual(email.status, 200, email.json?.error);
+  assert.strictEqual(email.json.notifyCustomerEmail, true);
+  assert.strictEqual(email.json.smtpConfigured, true);
 });

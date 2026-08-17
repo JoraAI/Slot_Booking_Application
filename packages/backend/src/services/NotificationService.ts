@@ -1,10 +1,17 @@
 import nodemailer from 'nodemailer';
 import prisma from '../lib/prisma';
 import { locationInfo } from './LocationService';
+import {
+  resolveSmtp,
+  resolveTwilioSms,
+  resolveTwilioWhatsapp,
+  smtpConfigured,
+  twilioWhatsappConfigured,
+} from './notificationCredentials';
+
+type SendOpts = { replyTo?: string; throwOnError?: boolean; business?: any };
 
 class NotificationService {
-  private transporter: nodemailer.Transporter | null = null;
-
   /** HTML-escape user-controlled values interpolated into email templates. */
   private esc(value: unknown): string {
     return String(value ?? '').replace(/[&<>"']/g, (c) => (
@@ -12,12 +19,12 @@ class NotificationService {
     ));
   }
 
-  smtpConfigured(): boolean {
-    return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  smtpConfigured(business?: any): boolean {
+    return smtpConfigured(business);
   }
 
-  twilioWhatsappConfigured(): boolean {
-    return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM);
+  twilioWhatsappConfigured(business?: any): boolean {
+    return twilioWhatsappConfigured(business);
   }
 
   /** Location block for email templates (empty when the salon has no location). */
@@ -43,39 +50,27 @@ class NotificationService {
     };
   }
 
-  private getTransporter() {
-    if (!this.transporter) {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT) || 587,
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-        // Hosts commonly filter outbound SMTP; without these a send can hang
-        // for minutes and stall the request that triggered it.
-        connectionTimeout: 10_000,
-        greetingTimeout: 10_000,
-        socketTimeout: 15_000,
-      });
-    }
-    return this.transporter;
-  }
-
-  private async sendEmail(to: string, subject: string, html: string, opts: { replyTo?: string; throwOnError?: boolean } = {}): Promise<void> {
-    // Skip before any network I/O when SMTP is unset, matching WhatsApp/SMS.
-    if (!this.smtpConfigured()) {
-      const err = new Error('Email: SMTP is not configured (SMTP_USER / SMTP_PASS)');
+  private async sendEmail(to: string, subject: string, html: string, opts: SendOpts = {}): Promise<void> {
+    const smtp = resolveSmtp(opts.business);
+    if (!smtp) {
+      const err = new Error('Email: SMTP is not configured. Add your SMTP username and password in Settings.');
       console.log(err.message);
       if (opts.throwOnError) throw err;
       return;
     }
 
     try {
-      const transporter = this.getTransporter();
+      const transporter = nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
+        auth: { user: smtp.user, pass: smtp.pass },
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
+      });
       await transporter.sendMail({
-        from: `"${process.env.SMTP_FROM_NAME || 'Reservly'}" <${process.env.SMTP_USER}>`,
+        from: `"${smtp.fromName}" <${smtp.user}>`,
         to,
         subject,
         html,
@@ -84,34 +79,29 @@ class NotificationService {
       console.log(`Email sent to ${to}: ${subject}`);
     } catch (error) {
       console.error('Email sending failed:', error);
-      // Readiness / test-send paths need to surface real failures.
       if (opts.throwOnError) throw error;
     }
   }
 
-  private async sendWhatsApp(to: string, message: string, opts: { throwOnError?: boolean } = {}): Promise<void> {
-    // Twilio WhatsApp API integration stub
+  private async sendWhatsApp(to: string, message: string, opts: SendOpts = {}): Promise<void> {
     try {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      const from = process.env.TWILIO_WHATSAPP_FROM;
-
-      if (!accountSid || !authToken || !from) {
-        const err = new Error('WhatsApp: Missing Twilio config (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM)');
+      const twilio = resolveTwilioWhatsapp(opts.business);
+      if (!twilio) {
+        const err = new Error('WhatsApp: Twilio is not configured. Add your Account SID, Auth Token, and WhatsApp From number in Settings.');
         console.log(err.message);
         if (opts.throwOnError) throw err;
         return;
       }
 
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilio.accountSid}/Messages.json`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+          'Authorization': 'Basic ' + Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          From: from,
+          From: twilio.from,
           To: `whatsapp:${to}`,
           Body: message,
         }),
@@ -130,26 +120,23 @@ class NotificationService {
     }
   }
 
-  /** Twilio SMS (plain SMS, not WhatsApp) using TWILIO_SMS_FROM. */
-  private async sendSms(to: string, message: string): Promise<void> {
+  /** Twilio SMS (plain SMS, not WhatsApp) using the owner's SMS From number. */
+  private async sendSms(to: string, message: string, business?: any): Promise<void> {
     try {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      const from = process.env.TWILIO_SMS_FROM;
-
-      if (!accountSid || !authToken || !from) {
-        throw new Error('SMS: Missing Twilio SMS configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_SMS_FROM)');
+      const twilio = resolveTwilioSms(business);
+      if (!twilio) {
+        throw new Error('SMS: Twilio SMS is not configured. Add Account SID, Auth Token, and SMS From number in Settings.');
       }
 
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilio.accountSid}/Messages.json`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+          'Authorization': 'Basic ' + Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64'),
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          From: from,
+          From: twilio.from,
           To: to,
           Body: message,
         }),
@@ -169,18 +156,19 @@ class NotificationService {
   }
 
   /** Send a booking-management OTP by email. Throws on delivery failure. */
-  async sendOtpEmail(to: string, code: string, businessName: string): Promise<void> {
+  async sendOtpEmail(to: string, code: string, businessName: string, business?: any): Promise<void> {
     await this.sendEmail(to, `Your verification code - ${businessName}`,
       `<h2>Verify your booking</h2>
       <p>Your one-time verification code for <strong>${businessName}</strong> is:</p>
       <p style="font-size:24px; font-weight:700; letter-spacing:4px;">${code}</p>
-      <p style="color:#6B7280; font-size:13px;">This code expires in 10 minutes. Never share it.</p>`
+      <p style="color:#6B7280; font-size:13px;">This code expires in 10 minutes. Never share it.</p>`,
+      { throwOnError: true, business }
     );
   }
 
   /** Send a booking-management OTP by SMS. Throws on delivery failure. */
-  async sendOtpSms(to: string, code: string, businessName: string): Promise<void> {
-    await this.sendSms(to, `Your ${businessName} booking verification code is: ${code}. It expires in 10 minutes.`);
+  async sendOtpSms(to: string, code: string, businessName: string, business?: any): Promise<void> {
+    await this.sendSms(to, `Your ${businessName} booking verification code is: ${code}. It expires in 10 minutes.`, business);
   }
 
   async sendBookingConfirmation(booking: any, business: any): Promise<void> {
@@ -216,23 +204,23 @@ class NotificationService {
       </div>
     `;
 
-    // Notify customer (platform SMTP From; salon ownerEmail as replyTo).
+    // Notify customer from the owner's SMTP / Twilio sender.
     if (business.notifyCustomerEmail && booking.customerEmail) {
       await this.sendEmail(
         booking.customerEmail,
         `Booking Confirmed - ${this.esc(business.name)}`,
         html,
-        { replyTo: business.ownerEmail || undefined }
+        { replyTo: business.ownerEmail || undefined, business }
       );
     }
     if (business.notifyCustomerWhatsapp && booking.customerPhone) {
       const { address, directions, contact } = this.locationText(business);
       await this.sendWhatsApp(booking.customerPhone,
-        `✅ Booking Confirmed!\n\n${this.esc(business.name)}\n💇 ${serviceName}${durationMin ? ` (${durationMin})` : ''}\n📅 ${dateStr}\n🕐 ${booking.startTime} - ${booking.endTime}\n${booking.staff ? `👤 ${this.esc(booking.staff.name)}\n` : ''}${booking.finalPrice != null ? `💰 ₹${booking.finalPrice}\n` : ''}${address}${directions}${contact}${booking.managementUrl ? `\nManage booking: ${booking.managementUrl}` : ''}\nBooking Reference: ${this.esc(booking.id)}`
+        `✅ Booking Confirmed!\n\n${this.esc(business.name)}\n💇 ${serviceName}${durationMin ? ` (${durationMin})` : ''}\n📅 ${dateStr}\n🕐 ${booking.startTime} - ${booking.endTime}\n${booking.staff ? `👤 ${this.esc(booking.staff.name)}\n` : ''}${booking.finalPrice != null ? `💰 ₹${booking.finalPrice}\n` : ''}${address}${directions}${contact}${booking.managementUrl ? `\nManage booking: ${booking.managementUrl}` : ''}\nBooking Reference: ${this.esc(booking.id)}`,
+        { business }
       );
     }
 
-    // Notify owner (platform sender; never the salon number as Twilio From).
     if (business.notifyOwnerEmail) {
       await this.sendEmail(business.ownerEmail, `New Booking - ${this.esc(booking.customerName)}`,
         `<h2>New Booking at ${this.esc(business.name)}</h2>
@@ -240,12 +228,14 @@ class NotificationService {
         <p><strong>Phone:</strong> ${this.esc(booking.customerPhone)}</p>
         <p><strong>Date:</strong> ${dateStr}</p>
         <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>
-        ${booking.staff ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}`
+        ${booking.staff ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}`,
+        { business }
       );
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
-        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`
+        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
+        { business }
       );
     }
   }
@@ -272,7 +262,8 @@ class NotificationService {
         <p>Hi ${booking.customerName},</p>
         <p>Your appointment at <strong>${business.name}</strong> on ${dateStr} at ${booking.startTime} has been cancelled.</p>
         ${customerRefundCopy}
-        <p style="color: #6B7280; font-size: 13px;">Booking ID: ${booking.id}</p>`
+        <p style="color: #6B7280; font-size: 13px;">Booking ID: ${booking.id}</p>`,
+        { business }
       );
     }
 
@@ -290,12 +281,14 @@ class NotificationService {
         <p>${booking.customerName}'s booking on ${dateStr} at ${booking.startTime} has been cancelled.</p>
         ${booking.paymentAmount ? `<p><strong>Paid amount:</strong> ₹${booking.paymentAmount}</p>` : ''}
         ${refundLine}
-        ${manualAction}`
+        ${manualAction}`,
+        { business }
       );
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
-        `❌ Booking cancelled\n\n${booking.customerName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`
+        `❌ Booking cancelled\n\n${booking.customerName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`,
+        { business }
       );
     }
   }
@@ -311,7 +304,8 @@ class NotificationService {
         <p>Hi ${booking.customerName},</p>
         <p>Your booking at <strong>${business.name}</strong> has been updated.</p>
         <p><strong>Date:</strong> ${dateStr}</p>
-        <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`
+        <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`,
+        { business }
       );
     }
   }
@@ -322,7 +316,8 @@ class NotificationService {
         `<h2>You're on the Waitlist!</h2>
         <p>Hi ${entry.customerName},</p>
         <p>You've been added to the waitlist for ${business.name}.</p>
-        <p>We'll notify you if a slot opens up.</p>`
+        <p>We'll notify you if a slot opens up.</p>`,
+        { business }
       );
     }
   }
@@ -338,12 +333,14 @@ class NotificationService {
         <p>Hi ${entry.customerName},</p>
         <p>A slot is now available at <strong>${business.name}</strong> on ${dateStr} at ${entry.startTime}.</p>
         <p>You have <strong>30 minutes</strong> to book this slot.</p>
-        <a href="${bookingLink}" style="background: #7C3AED; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Book Now</a>`
+        <a href="${bookingLink}" style="background: #7C3AED; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Book Now</a>`,
+        { business }
       );
     }
     if (entry.customerPhone) {
       await this.sendWhatsApp(entry.customerPhone,
-        `🎉 A slot just opened!\n\n${business.name}\n📅 ${dateStr}\n🕐 ${entry.startTime}\n\nBook within 30 minutes:\n${bookingLink}`
+        `🎉 A slot just opened!\n\n${business.name}\n📅 ${dateStr}\n🕐 ${entry.startTime}\n\nBook within 30 minutes:\n${bookingLink}`,
+        { business }
       );
     }
   }
@@ -352,7 +349,8 @@ class NotificationService {
     if (entry.customerEmail) {
       await this.sendEmail(entry.customerEmail, `Waitlist Expired - ${business.name}`,
         `<h2>Waitlist Slot Expired</h2>
-        <p>The slot that opened up at ${business.name} has expired. You've been removed from the waitlist.</p>`
+        <p>The slot that opened up at ${business.name} has expired. You've been removed from the waitlist.</p>`,
+        { business }
       );
     }
   }
@@ -368,7 +366,8 @@ class NotificationService {
         <p>Hi ${first.customerName},</p>
         <p>Your recurring booking at <strong>${business.name}</strong> has been confirmed for ${bookings.length} sessions.</p>
         <p><strong>Dates:</strong> ${dates}</p>
-        <p><strong>Time:</strong> ${first.startTime} - ${first.endTime}</p>`
+        <p><strong>Time:</strong> ${first.startTime} - ${first.endTime}</p>`,
+        { business }
       );
     }
   }
@@ -381,7 +380,8 @@ class NotificationService {
       await this.sendEmail(first.customerEmail, `Recurring Booking Cancelled - ${business.name}`,
         `<h2>Recurring Booking Cancelled</h2>
         <p>Hi ${first.customerName},</p>
-        <p>Your recurring booking series at <strong>${business.name}</strong> (${bookings.length} sessions) has been cancelled.</p>`
+        <p>Your recurring booking series at <strong>${business.name}</strong> (${bookings.length} sessions) has been cancelled.</p>`,
+        { business }
       );
     }
   }
@@ -397,7 +397,8 @@ class NotificationService {
         <p>Hi ${booking.customerName},</p>
         <p>This is a reminder for your appointment at <strong>${business.name}</strong> tomorrow.</p>
         <p><strong>Date:</strong> ${dateStr}</p>
-        <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`
+        <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`,
+        { business }
       );
     }
   }
@@ -417,7 +418,8 @@ class NotificationService {
           <p><strong>Date:</strong> ${dateStr}</p>
           <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>
           <p><strong>Transaction ID:</strong> ${booking.razorpayPaymentId}</p>
-        </div>`
+        </div>`,
+        { business }
       );
     }
   }
@@ -448,7 +450,7 @@ class NotificationService {
         <p>Hi ${booking.customerName},</p>
         <p>A refund of ₹${amount} for your booking at <strong>${business.name}</strong> has been initiated to your original payment method.</p>
         <p>It may be instant; otherwise allow 5\u20137 working days.</p>`;
-      await this.sendEmail(booking.customerEmail, subject, body);
+      await this.sendEmail(booking.customerEmail, subject, body, { business });
     }
 
     if (business.notifyOwnerEmail) {
@@ -459,14 +461,16 @@ class NotificationService {
         <p><strong>Amount:</strong> ₹${amount}</p>
         ${refund?.razorpayRefundId ? `<p><strong>Razorpay refund:</strong> ${refund.razorpayRefundId}</p>` : ''}
         ${failed && refund?.failureReason ? `<p><strong>Reason:</strong> ${refund.failureReason}</p>` : ''}
-        ${failed ? '<p>Please initiate the refund manually from your Razorpay dashboard.</p>' : ''}`
+        ${failed ? '<p>Please initiate the refund manually from your Razorpay dashboard.</p>' : ''}`,
+        { business }
       );
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
         failed
           ? `⚠️ Refund failed for booking ${booking.id} (${booking.customerName}, ₹${amount}). Manual action needed: ${refund?.failureReason || 'Unknown reason'}`
-          : `↩️ Refund initiated for booking ${booking.id} (${booking.customerName}, ₹${amount}).`
+          : `↩️ Refund initiated for booking ${booking.id} (${booking.customerName}, ₹${amount}).`,
+        { business }
       );
     }
   }
@@ -497,20 +501,21 @@ class NotificationService {
             ${booking.finalPrice != null ? `<p><strong>Amount:</strong> ₹${booking.finalPrice}</p>` : ''}
           </div>
           ${locHtml}
-          <p style="color: #6B7280; font-size: 14px;">Booking Reference: ${this.esc(booking.id)}</p>`
+          <p style="color: #6B7280; font-size: 14px;">Booking Reference: ${this.esc(booking.id)}</p>`,
+          { business }
         );
       }
     } else if (channel === 'whatsapp' && booking.customerPhone) {
       await this.sendWhatsApp(booking.customerPhone,
-        `🔔 Reminder for your ${serviceName}\n\n${this.esc(business.name)}\n📅 ${booking.dateDisplay}\n🕐 ${line}${booking.staff?.name ? `\n👤 ${this.esc(booking.staff.name)}` : ''}${booking.finalPrice != null ? `\n💰 ₹${booking.finalPrice}` : ''}\n${address}${directions}\n\nBooking Ref: ${this.esc(booking.id)}`
+        `🔔 Reminder for your ${serviceName}\n\n${this.esc(business.name)}\n📅 ${booking.dateDisplay}\n🕐 ${line}${booking.staff?.name ? `\n👤 ${this.esc(booking.staff.name)}` : ''}${booking.finalPrice != null ? `\n💰 ₹${booking.finalPrice}` : ''}\n${address}${directions}\n\nBooking Ref: ${this.esc(booking.id)}`,
+        { business }
       );
     }
   }
 
   /**
-   * Owner-authored message to one phonebook contact. Delivery still uses the
-   * platform SMTP/Twilio provider: email replies go to the owner's email and
-   * WhatsApp copy includes the owner's configured contact number.
+   * Owner-authored message to one phonebook contact. Delivery uses the owner's
+   * SMTP/Twilio credentials stored on the business.
    */
   async sendCustomCustomerNotification(
     businessId: string,
@@ -538,7 +543,7 @@ class NotificationService {
             customer.email,
             subject,
             `<h2>${this.esc(business.name)}</h2><p>${safeMessage}</p>`,
-            { replyTo: business.ownerEmail, throwOnError: true }
+            { replyTo: business.ownerEmail, throwOnError: true, business }
           );
         } else {
           if (!customer.phone) throw new Error('Customer does not have a phone number');
@@ -548,7 +553,7 @@ class NotificationService {
           await this.sendWhatsApp(
             customer.phone,
             `${business.name}\n\n${message}${ownerContact}`,
-            { throwOnError: true }
+            { throwOnError: true, business }
           );
         }
         ok = true;
@@ -578,7 +583,7 @@ class NotificationService {
 
   /**
    * Readiness-oriented test send. Reports REAL per-channel success/failure with
-   * a clear reason (platform SMTP/Twilio config, owner destination presence).
+   * a clear reason (owner SMTP/Twilio config, owner destination presence).
    */
   async sendTestNotification(businessId: string): Promise<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } }> {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
@@ -587,15 +592,15 @@ class NotificationService {
     const email = { ok: false, error: undefined as string | undefined };
     const whatsapp = { ok: false, error: undefined as string | undefined };
 
-    if (!this.smtpConfigured()) {
-      email.error = 'SMTP is not configured (SMTP_USER / SMTP_PASS)';
+    if (!this.smtpConfigured(business)) {
+      email.error = 'SMTP is not configured. Add your email username and password in Settings.';
     } else {
       try {
         await this.sendEmail(
           business.ownerEmail,
           `Test Notification - ${this.esc(business.name)}`,
           `<h2>Test Notification ✅</h2><p>Your notification system is working correctly!</p>`,
-          { throwOnError: true }
+          { throwOnError: true, business }
         );
         email.ok = true;
       } catch (e: any) {
@@ -603,8 +608,8 @@ class NotificationService {
       }
     }
 
-    if (!this.twilioWhatsappConfigured()) {
-      whatsapp.error = 'Twilio WhatsApp is not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM)';
+    if (!this.twilioWhatsappConfigured(business)) {
+      whatsapp.error = 'Twilio WhatsApp is not configured. Add Account SID, Auth Token, and WhatsApp From in Settings.';
     } else if (!business.ownerWhatsapp) {
       whatsapp.error = 'Owner WhatsApp number is not set';
     } else {
@@ -612,7 +617,7 @@ class NotificationService {
         await this.sendWhatsApp(
           business.ownerWhatsapp,
           `✅ Test notification from ${business.name}. Your notification system is working!`,
-          { throwOnError: true }
+          { throwOnError: true, business }
         );
         whatsapp.ok = true;
       } catch (e: any) {

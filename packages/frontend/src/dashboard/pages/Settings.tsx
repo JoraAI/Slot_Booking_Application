@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import { MediaUploadButton } from '../components/MediaUploadButton'
@@ -53,6 +54,18 @@ export const Settings: React.FC = () => {
     notifyCustomerWhatsapp: config?.notifyCustomerWhatsapp ?? false,
     ownerEmail: config?.ownerEmail || '',
     ownerWhatsapp: config?.ownerWhatsapp || '',
+    smtpHost: config?.smtpHost || '',
+    smtpPort: config?.smtpPort ?? null,
+    smtpSecure: config?.smtpSecure ?? false,
+    smtpUser: config?.smtpUser || '',
+    smtpFromName: config?.smtpFromName || '',
+    smtpPass: '',
+    clearSmtpPass: false,
+    twilioAccountSid: config?.twilioAccountSid || '',
+    twilioWhatsappFrom: config?.twilioWhatsappFrom || '',
+    twilioSmsFrom: config?.twilioSmsFrom || '',
+    twilioAuthToken: '',
+    clearTwilioAuthToken: false,
     enableWaitlist: config?.enableWaitlist || false,
     enableRecurring: config?.enableRecurring || false,
     enableMultiStaff: config?.enableMultiStaff || false,
@@ -95,6 +108,18 @@ export const Settings: React.FC = () => {
         notifyCustomerWhatsapp: config.notifyCustomerWhatsapp ?? false,
         ownerEmail: config.ownerEmail || '',
         ownerWhatsapp: config.ownerWhatsapp || '',
+        smtpHost: config.smtpHost || '',
+        smtpPort: config.smtpPort ?? null,
+        smtpSecure: config.smtpSecure ?? false,
+        smtpUser: config.smtpUser || '',
+        smtpFromName: config.smtpFromName || '',
+        smtpPass: '',
+        clearSmtpPass: false,
+        twilioAccountSid: config.twilioAccountSid || '',
+        twilioWhatsappFrom: config.twilioWhatsappFrom || '',
+        twilioSmsFrom: config.twilioSmsFrom || '',
+        twilioAuthToken: '',
+        clearTwilioAuthToken: false,
         enableWaitlist: config.enableWaitlist || false,
         enableRecurring: config.enableRecurring || false,
         enableMultiStaff: config.enableMultiStaff || false,
@@ -164,8 +189,18 @@ export const Settings: React.FC = () => {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.updateConfig(form)
-      if (config) setConfig({ ...config, ...form })
+      const updated = await api.updateConfig(form)
+      setConfig({ ...(config as any), ...updated })
+      setForm(p => ({
+        ...p,
+        smtpPass: '',
+        twilioAuthToken: '',
+        razorpayKeySecret: '',
+        clearSmtpPass: false,
+        clearTwilioAuthToken: false,
+        clearRazorpayKeySecret: false,
+      }))
+      api.getOwnerSettingsStatus().then(setProviderStatus).catch(() => {})
       toast.success('Settings saved')
     } catch (err: any) {
       toast.error(err.message || 'Failed')
@@ -188,8 +223,9 @@ export const Settings: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold">Owner Contact</h2>
           <p className="text-sm text-gray-500">
-            Owner alerts are delivered here. Customer emails use this address as Reply-To,
-            and customer WhatsApp messages include this WhatsApp number as the contact.
+            Owner alerts are delivered here. Customer emails are sent from your SMTP
+            username below, with this address as Reply-To. WhatsApp messages are sent
+            from your Twilio sender and include this number as the customer contact.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -206,6 +242,122 @@ export const Settings: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">Use international format, including country code.</p>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
+            <p className="text-sm text-gray-500">
+              Notifications are sent from <strong>your</strong> mailbox and Twilio WhatsApp sender.
+              Passwords and auth tokens are stored encrypted and are never shown again after you save.
+            </p>
+          </div>
+          <Link to="/dashboard/setup-guide#notifications" className="text-sm text-primary hover:underline shrink-0">
+            Setup guide →
+          </Link>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">SMTP host</label>
+            <input value={form.smtpHost} onChange={(e) => setForm(p => ({ ...p, smtpHost: e.target.value }))}
+              placeholder="smtp.gmail.com" autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">SMTP port</label>
+            <input type="number" value={form.smtpPort ?? ''} onChange={(e) => setForm(p => ({ ...p, smtpPort: e.target.value === '' ? null : parseInt(e.target.value, 10) }))}
+              placeholder="587"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">SMTP username (From email)</label>
+            <input type="email" value={form.smtpUser} onChange={(e) => setForm(p => ({ ...p, smtpUser: e.target.value }))}
+              placeholder="you@yourdomain.com" autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">SMTP password</label>
+            <input type="password" value={form.smtpPass} onChange={(e) => setForm(p => ({ ...p, smtpPass: e.target.value, clearSmtpPass: false }))}
+              placeholder={config?.smtpPassConfigured ? '•••••••• (leave blank to keep)' : 'App password, not your login password'}
+              autoComplete="new-password"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">
+              {config?.smtpPassConfigured ? '✓ Password saved (write-only — never shown). ' : 'Not saved yet. '}
+              For Gmail, use an App Password.
+              {config?.smtpPassConfigured && (
+                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, smtpPass: '', clearSmtpPass: true }))}>
+                  Remove saved password
+                </button>
+              )}
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">From name</label>
+            <input value={form.smtpFromName} onChange={(e) => setForm(p => ({ ...p, smtpFromName: e.target.value }))}
+              placeholder={config?.name || 'Your salon'}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <label className="flex items-center gap-2 text-sm mt-6">
+            <input type="checkbox" checked={form.smtpSecure} onChange={(e) => setForm(p => ({ ...p, smtpSecure: e.target.checked }))}
+              className="rounded border-gray-300" />
+            Use TLS (SMTP secure / port 465)
+          </label>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <div>
+            <label className="block text-sm font-medium mb-1">Twilio Account SID</label>
+            <input value={form.twilioAccountSid} onChange={(e) => setForm(p => ({ ...p, twilioAccountSid: e.target.value }))}
+              placeholder="ACxxxxxxxx" autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Twilio Auth Token</label>
+            <input type="password" value={form.twilioAuthToken} onChange={(e) => setForm(p => ({ ...p, twilioAuthToken: e.target.value, clearTwilioAuthToken: false }))}
+              placeholder={config?.twilioAuthTokenConfigured ? '•••••••• (leave blank to keep)' : 'Auth token'}
+              autoComplete="new-password"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">
+              {config?.twilioAuthTokenConfigured ? '✓ Token saved (write-only — never shown). ' : 'Not saved yet. '}
+              {config?.twilioAuthTokenConfigured && (
+                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, twilioAuthToken: '', clearTwilioAuthToken: true }))}>
+                  Remove saved token
+                </button>
+              )}
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">WhatsApp From</label>
+            <input value={form.twilioWhatsappFrom} onChange={(e) => setForm(p => ({ ...p, twilioWhatsappFrom: e.target.value }))}
+              placeholder="whatsapp:+14155238886"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Must be a Twilio-approved WhatsApp sender.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">SMS From (OTP)</label>
+            <input value={form.twilioSmsFrom} onChange={(e) => setForm(p => ({ ...p, twilioSmsFrom: e.target.value }))}
+              placeholder="+14155552671"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3 pt-2">
+          {[
+            { key: 'notifyCustomerEmail', label: 'Email customers' },
+            { key: 'notifyOwnerEmail', label: 'Email me on bookings' },
+            { key: 'notifyCustomerWhatsapp', label: 'WhatsApp customers' },
+            { key: 'notifyOwnerWhatsapp', label: 'WhatsApp me on bookings' },
+          ].map((row) => (
+            <label key={row.key} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={Boolean((form as any)[row.key])}
+                onChange={(e) => setForm(p => ({ ...p, [row.key]: e.target.checked }))}
+                className="rounded border-gray-300" />
+              {row.label}
+            </label>
+          ))}
         </div>
       </div>
 
@@ -514,12 +666,12 @@ export const Settings: React.FC = () => {
             </div>
             {!providerStatus?.smtpConfigured && form.bookingManagementOtpChannel === 'EMAIL' && (
               <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-                Enable Email OTP only after adding SMTP credentials (SMTP_USER / SMTP_PASS).
+                Enable Email OTP only after saving SMTP username and password above.
               </p>
             )}
             {!providerStatus?.twilioSmsConfigured && form.bookingManagementOtpChannel === 'SMS' && (
               <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-                Enable SMS OTP only after adding Twilio SMS credentials (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_SMS_FROM).
+                Enable SMS OTP only after saving Twilio Account SID, Auth Token, and SMS From above.
               </p>
             )}
           </div>

@@ -14,6 +14,13 @@ import { analyticsService } from '../services/AnalyticsService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
 import { timeService } from '../services/TimeService';
 import { validateLocation } from '../services/LocationService';
+import { encryptSecret } from '../services/secretCrypto';
+import { toOwnerConfig } from '../services/ownerDto';
+import {
+  smtpConfigured,
+  twilioSmsConfigured,
+  twilioWhatsappConfigured,
+} from '../services/notificationCredentials';
 import {
   customerIdentityKey,
   normalizeCustomerEmail,
@@ -146,11 +153,7 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    const { ownerPassword, razorpayKeySecret, ...safeData } = business;
-    res.json({
-      ...safeData,
-      razorpayKeySecretConfigured: !!razorpayKeySecret,
-    });
+    res.json(toOwnerConfig(business));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -573,6 +576,8 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
+      'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
+      'twilioAccountSid', 'twilioWhatsappFrom', 'twilioSmsFrom',
     ];
 
     const updateData: any = {};
@@ -599,6 +604,40 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.ownerWhatsapp = normalizeCustomerPhone(updateData.ownerWhatsapp);
     }
 
+    for (const field of ['smtpHost', 'smtpUser', 'smtpFromName', 'twilioAccountSid', 'twilioWhatsappFrom', 'twilioSmsFrom'] as const) {
+      if (updateData[field] !== undefined) {
+        const value = String(updateData[field] ?? '').trim();
+        if (value.length > 255) return res.status(400).json({ error: `${field} is too long` });
+        updateData[field] = value === '' ? null : value;
+      }
+    }
+    if (updateData.smtpPort !== undefined) {
+      if (updateData.smtpPort === null || updateData.smtpPort === '') {
+        updateData.smtpPort = null;
+      } else {
+        const port = Number(updateData.smtpPort);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          return res.status(400).json({ error: 'SMTP port must be between 1 and 65535' });
+        }
+        updateData.smtpPort = port;
+      }
+    }
+    if (updateData.smtpSecure !== undefined) {
+      updateData.smtpSecure = updateData.smtpSecure === true;
+    }
+
+    // Write-only secrets: never read back. Blank keeps the existing value.
+    if (typeof req.body.smtpPass === 'string' && req.body.smtpPass.trim() !== '') {
+      updateData.smtpPassEnc = encryptSecret(req.body.smtpPass.trim());
+    } else if (req.body.clearSmtpPass === true) {
+      updateData.smtpPassEnc = null;
+    }
+    if (typeof req.body.twilioAuthToken === 'string' && req.body.twilioAuthToken.trim() !== '') {
+      updateData.twilioAuthTokenEnc = encryptSecret(req.body.twilioAuthToken.trim());
+    } else if (req.body.clearTwilioAuthToken === true) {
+      updateData.twilioAuthTokenEnc = null;
+    }
+
     // Razorpay secret is WRITE-ONLY: never read back, never echoed.
     // - a non-empty value replaces the stored secret
     // - blank/null is ignored (keeps the existing secret)
@@ -619,16 +658,17 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       if (!['EMAIL', 'SMS', 'EITHER'].includes(channel)) {
         return res.status(400).json({ error: 'Invalid OTP channel' });
       }
-      const smtp = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
-      const sms = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM);
+      const merged = { ...existing, ...updateData };
+      const smtp = smtpConfigured(merged);
+      const sms = twilioSmsConfigured(merged);
       if (channel === 'EMAIL' && !smtp) {
-        return res.status(400).json({ error: 'Email OTP requires SMTP configuration (SMTP_USER / SMTP_PASS)' });
+        return res.status(400).json({ error: 'Email OTP requires SMTP credentials in Settings (username and password).' });
       }
       if (channel === 'SMS' && !sms) {
-        return res.status(400).json({ error: 'SMS OTP requires Twilio SMS configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_SMS_FROM)' });
+        return res.status(400).json({ error: 'SMS OTP requires Twilio credentials in Settings (Account SID, Auth Token, and SMS From number).' });
       }
       if (channel === 'EITHER' && !smtp && !sms) {
-        return res.status(400).json({ error: 'OTP (EITHER) requires at least one configured channel (SMTP or Twilio SMS)' });
+        return res.status(400).json({ error: 'OTP (EITHER) requires SMTP or Twilio SMS credentials in Settings.' });
       }
     }
 
@@ -692,15 +732,16 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     // platform prerequisites fail (same pattern as the OTP channel guards).
     // A flag already true in the DB (legacy default) is left alone so unrelated
     // settings saves are not blocked; the readiness UI warns about it.
-    const smtp = notificationService.smtpConfigured();
-    const twilioWhatsapp = notificationService.twilioWhatsappConfigured();
+    const merged = { ...existing, ...updateData };
+    const smtp = smtpConfigured(merged);
+    const twilioWhatsapp = twilioWhatsappConfigured(merged);
     const enabling = (field: string) => updateData[field] === true && (existing as any)[field] !== true;
     if (enabling('notifyCustomerEmail') && !smtp) {
-      return res.status(400).json({ error: 'Customer email notifications require SMTP configuration (SMTP_USER / SMTP_PASS). Configure SMTP or keep customer email notifications off.' });
+      return res.status(400).json({ error: 'Customer email notifications require SMTP credentials in Settings.' });
     }
     if (enabling('notifyCustomerWhatsapp')) {
       if (!twilioWhatsapp) {
-        return res.status(400).json({ error: 'Customer WhatsApp notifications require Twilio WhatsApp configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM).' });
+        return res.status(400).json({ error: 'Customer WhatsApp notifications require Twilio WhatsApp credentials in Settings.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Customer WhatsApp notifications require the salon owner WhatsApp number (used as the customer contact).' });
@@ -708,7 +749,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
     if (enabling('notifyOwnerWhatsapp')) {
       if (!twilioWhatsapp) {
-        return res.status(400).json({ error: 'Owner WhatsApp notifications require Twilio WhatsApp configuration (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM).' });
+        return res.status(400).json({ error: 'Owner WhatsApp notifications require Twilio WhatsApp credentials in Settings.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Owner WhatsApp notifications require an owner WhatsApp number.' });
@@ -720,11 +761,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       data: updateData,
     });
 
-    const { ownerPassword, razorpayKeySecret, ...safeData } = business;
-    res.json({
-      ...safeData,
-      razorpayKeySecretConfigured: !!razorpayKeySecret,
-    });
+    res.json(toOwnerConfig(business));
   } catch (error: any) {
     if (error.code === 'P2025') {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
@@ -1132,9 +1169,11 @@ ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
   const frontendUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').trim();
   const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
   res.json({
-    smtpConfigured: notificationService.smtpConfigured(),
-    twilioSmsConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM),
-    twilioWhatsappConfigured: notificationService.twilioWhatsappConfigured(),
+    smtpConfigured: smtpConfigured(business),
+    twilioSmsConfigured: twilioSmsConfigured(business),
+    twilioWhatsappConfigured: twilioWhatsappConfigured(business),
+    smtpPassConfigured: !!business?.smtpPassEnc,
+    twilioAuthTokenConfigured: !!business?.twilioAuthTokenEnc,
     frontendUrlConfigured: isHttpsAbsolute,
     locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),
     ownerEmailPresent: !!business?.ownerEmail,
@@ -2051,20 +2090,6 @@ ownerRouter.post('/media/signature', async (req: AuthRequest, res: Response) => 
       folder,
       maxFileSizeBytes: 5 * 1024 * 1024,
       allowedFormats: ['jpg', 'png', 'webp'],
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ---------- Settings provider status (for OTP UI) ----------
-
-ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
-  try {
-    void req.owner;
-    res.json({
-      smtpConfigured: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
-      twilioSmsConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_SMS_FROM),
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

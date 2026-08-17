@@ -211,7 +211,7 @@ export const CustomersPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
             <p className="text-xs text-gray-500">
-              Email replies go to the owner email. WhatsApp messages use the configured Twilio sender and include the owner WhatsApp contact.
+              Email is sent from your SMTP mailbox, with replies going to the owner email. WhatsApp is sent from your Twilio-approved sender and includes the owner WhatsApp number as the contact.
             </p>
             <button onClick={sendNotification} disabled={saving} className="w-full py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
               {saving ? 'Sending…' : 'Send Notification'}

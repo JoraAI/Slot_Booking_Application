@@ -136,6 +136,58 @@ test('2. razorpay secret is write-only and never returned', async () => {
   assert.strictEqual(afterClear.razorpayKeySecret, null);
 });
 
+test('2b. SMTP password and Twilio token are encrypted, write-only, and never returned', async () => {
+  const token = jwt.sign({ businessId: business.id, email: business.ownerEmail }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '1h' } as any);
+
+  const write = await req('PUT', '/owner/config', {
+    headers: { Authorization: `Bearer ${token}` },
+    body: {
+      smtpUser: 'salon@example.com',
+      smtpPass: 'smtp-secret-value',
+      twilioAccountSid: 'ACtestsid',
+      twilioAuthToken: 'twilio-secret-value',
+      twilioWhatsappFrom: 'whatsapp:+14155238886',
+    },
+  });
+  assert.strictEqual(write.status, 200, write.json?.error);
+  assert.ok(!('smtpPass' in write.json));
+  assert.ok(!('smtpPassEnc' in write.json));
+  assert.ok(!('twilioAuthToken' in write.json));
+  assert.ok(!('twilioAuthTokenEnc' in write.json));
+  assert.ok(!JSON.stringify(write.json).includes('smtp-secret-value'));
+  assert.ok(!JSON.stringify(write.json).includes('twilio-secret-value'));
+  assert.strictEqual(write.json.smtpUser, 'salon@example.com');
+  assert.strictEqual(write.json.smtpPassConfigured, true);
+  assert.strictEqual(write.json.twilioAuthTokenConfigured, true);
+  assert.strictEqual(write.json.smtpConfigured, true);
+  assert.strictEqual(write.json.twilioWhatsappConfigured, true);
+
+  const row = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
+  assert.ok(row.smtpPassEnc && row.smtpPassEnc.startsWith('enc:v1:'));
+  assert.ok(!row.smtpPassEnc.includes('smtp-secret-value'));
+  assert.ok(row.twilioAuthTokenEnc && row.twilioAuthTokenEnc.startsWith('enc:v1:'));
+
+  const me = await req('GET', '/owner/me', { headers: { Authorization: `Bearer ${token}` } });
+  assert.ok(!('smtpPassEnc' in me.json));
+  assert.ok(!JSON.stringify(me.json).includes('smtp-secret-value'));
+
+  const blank = await req('PUT', '/owner/config', {
+    headers: { Authorization: `Bearer ${token}` },
+    body: { smtpPass: '', twilioAuthToken: '' },
+  });
+  assert.strictEqual(blank.json.smtpPassConfigured, true);
+  const afterBlank = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
+  assert.ok(afterBlank.smtpPassEnc && afterBlank.smtpPassEnc.startsWith('enc:v1:'));
+
+  const clear = await req('PUT', '/owner/config', {
+    headers: { Authorization: `Bearer ${token}` },
+    body: { clearSmtpPass: true, clearTwilioAuthToken: true },
+  });
+  assert.strictEqual(clear.status, 200);
+  assert.strictEqual(clear.json.smtpPassConfigured, false);
+  assert.strictEqual(clear.json.twilioAuthTokenConfigured, false);
+});
+
 test('3. waitlist delete returns a clean 404 for missing entries (public + owner)', async () => {
   await prisma.business.update({ where: { id: business.id }, data: { enableWaitlist: true } });
 

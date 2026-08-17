@@ -96,6 +96,18 @@ model Business {
   ownerWhatsapp           String?
   ownerPassword           String
 
+  // Per-owner delivery credentials (secrets encrypted at rest)
+  smtpHost                String?
+  smtpPort                Int?
+  smtpSecure              Boolean   @default(false)
+  smtpUser                String?
+  smtpPassEnc             String?
+  smtpFromName            String?
+  twilioAccountSid        String?
+  twilioAuthTokenEnc      String?
+  twilioWhatsappFrom      String?
+  twilioSmsFrom           String?
+
   // Feature flags
   enableWaitlist          Boolean   @default(false)
   enableRecurring         Boolean   @default(false)
