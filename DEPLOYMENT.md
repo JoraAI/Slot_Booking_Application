@@ -37,6 +37,36 @@ Push this repo to **GitHub** if it is not already there (Render + Vercel deploy 
 
 That string is `DATABASE_URL`. Never commit it.
 
+### Use the direct (non-pooled) host
+
+Neon offers a pooled host (`...-pooler...`) and a direct host (same name without
+`-pooler`). Use the **direct** host for `DATABASE_URL`.
+
+The container runs `prisma migrate deploy` on boot, and Prisma guards migrations
+with a session-level advisory lock. PgBouncer (the pooler) can keep that session
+open after the migration finishes, so the lock is never released and later
+deploys fail with:
+
+```text
+Error: P1002 ... Timed out trying to acquire a postgres advisory lock
+(SELECT pg_advisory_lock(72707369))
+```
+
+If that happens, release the stale lock once, then switch to the direct host:
+
+```sql
+-- Neon SQL editor. Confirm the holder first:
+select l.pid, l.objid, a.application_name, a.backend_start
+from pg_locks l
+left join pg_stat_activity a on a.pid = l.pid
+where l.locktype = 'advisory';
+
+-- Then terminate that backend (releases the migrate lock):
+select pg_terminate_backend(<pid>);
+```
+
+Restarting the Neon compute from the console clears it too.
+
 ---
 
 ## Step 2 — Create the Render Web Service

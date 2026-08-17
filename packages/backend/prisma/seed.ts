@@ -8,6 +8,10 @@ function generatePublicCode(): string {
   return crypto.randomBytes(16).toString('base64url');
 }
 
+function durationMinutesToBuffer(durationMinutes: number): number {
+  return durationMinutes >= 60 ? 15 : 0;
+}
+
 async function main() {
   const hashedPassword = await bcrypt.hash('admin123', 10);
 
@@ -114,9 +118,161 @@ async function main() {
     ] });
   }
 
+  const eclat = await prisma.business.upsert({
+    where: { slug: 'eclat-unisex-salon' },
+    update: {
+      name: 'Eclat Unisex Salon',
+      timezone: 'Asia/Kolkata',
+      description: 'Professional unisex hair, grooming, beauty, and bridal services in Kandivali West.',
+      logoUrl: '/eclat-logo.jpeg',
+      address: 'Shop No. 1, Vardhaman Kutir Building, Shankar Lane, opposite Jain Temple, Kandivali West, Mumbai, Maharashtra 400067',
+      primaryColor: '#D72F68',
+      secondaryColor: '#202020',
+      accentColor: '#F2F2F2',
+      enableMultiStaff: true,
+      slotGranularityMinutes: 15,
+    },
+    create: {
+      name: 'Eclat Unisex Salon',
+      slug: 'eclat-unisex-salon',
+      publicCode: generatePublicCode(),
+      timezone: 'Asia/Kolkata',
+      description: 'Professional unisex hair, grooming, beauty, and bridal services in Kandivali West.',
+      logoUrl: '/eclat-logo.jpeg',
+      address: 'Shop No. 1, Vardhaman Kutir Building, Shankar Lane, opposite Jain Temple, Kandivali West, Mumbai, Maharashtra 400067',
+      primaryColor: '#D72F68',
+      secondaryColor: '#202020',
+      accentColor: '#F2F2F2',
+      ownerEmail: 'owner@eclatunisexsalon.in',
+      ownerPassword: hashedPassword,
+      bookingWindowDays: 30,
+      slotGranularityMinutes: 15,
+      showAvailableCount: false,
+      notifyOwnerEmail: false,
+      notifyCustomerEmail: true,
+      enableWaitlist: false,
+      enableRecurring: false,
+      enablePayments: false,
+      enableMultiStaff: true,
+      paymentMode: 'none',
+      refundPolicy: 'Please cancel or reschedule at least 24 hours before your appointment.',
+      workingHours: {
+        create: Array.from({ length: 7 }, (_, dayOfWeek) => ({
+          dayOfWeek,
+          openTime: '10:00',
+          closeTime: '21:00',
+          isOpen: true,
+        })),
+      },
+      formFields: {
+        create: [
+          { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
+          { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
+          { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
+          { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Hair length, preferred look, or special requests' },
+        ],
+      },
+      staff: {
+        create: [
+          { name: 'Riya Shah', role: 'Senior Hair Stylist', color: '#D72F68', isActive: true },
+          { name: 'Arjun Mehta', role: 'Hair & Grooming Specialist', color: '#2563EB', isActive: true },
+          { name: 'Neha Kapoor', role: 'Beauty & Bridal Artist', color: '#9333EA', isActive: true },
+        ],
+      },
+    },
+  });
+
+  const existingEclatCategories = await prisma.serviceCategory.count({ where: { businessId: eclat.id } });
+  if (existingEclatCategories === 0) {
+    const categoryDefinitions = [
+      { name: 'Cuts & Styling', description: 'Cuts, styling, washing, and everyday grooming', displayOrder: 0 },
+      { name: 'Color & Extensions', description: 'Professional color, highlights, gloss, and extensions', displayOrder: 1 },
+      { name: 'Hair Treatments', description: 'Repair, hydration, texture, and smoothing treatments', displayOrder: 2 },
+      { name: 'Beauty & Bridal', description: 'Threading, massage, and bridal-ready services', displayOrder: 3 },
+    ];
+    const createdCategories = await Promise.all(categoryDefinitions.map(category =>
+      prisma.serviceCategory.create({ data: { businessId: eclat.id, ...category } })
+    ));
+    const categoryIds = Object.fromEntries(createdCategories.map(category => [category.name, category.id]));
+
+    // Service names come from the salon's Google business listing. Prices are
+    // realistic starting prices for this market; final quotes can vary by hair length.
+    const serviceDefinitions = [
+      { category: 'Cuts & Styling', name: 'Haircut', description: 'Consultation, precision cut, and finish', durationMinutes: 45, price: 500 },
+      { category: 'Cuts & Styling', name: "Kids' Cut", description: 'Haircut for children aged 12 and under', durationMinutes: 30, price: 350 },
+      { category: 'Cuts & Styling', name: 'Bang Trim', description: 'Fringe shaping and tidy-up', durationMinutes: 15, price: 200 },
+      { category: 'Cuts & Styling', name: 'Hairstyling', description: 'Professional styling for your chosen look', durationMinutes: 60, price: 800 },
+      { category: 'Cuts & Styling', name: 'Curly Hair Styling', description: 'Curl-focused shaping, definition, and finish', durationMinutes: 75, price: 1000 },
+      { category: 'Cuts & Styling', name: 'Blowdry', description: 'Wash and professional blow-dry finish', durationMinutes: 45, price: 600 },
+      { category: 'Cuts & Styling', name: 'Shampoo & Conditioning', description: 'Cleansing wash with conditioning care', durationMinutes: 30, price: 400 },
+      { category: 'Cuts & Styling', name: 'Beard Trim', description: 'Beard shaping and clean finish', durationMinutes: 30, price: 300 },
+      { category: 'Cuts & Styling', name: 'Shaving', description: 'Classic clean shave and finishing care', durationMinutes: 30, price: 250 },
+      { category: 'Color & Extensions', name: 'Hair Coloring', description: 'Single-process professional hair color; starting price', durationMinutes: 120, price: 2500 },
+      { category: 'Color & Extensions', name: 'Balayage', description: 'Hand-painted, natural-looking dimensional color; starting price', durationMinutes: 180, price: 4500 },
+      { category: 'Color & Extensions', name: 'Ombre Hair Color', description: 'Graduated two-tone color application; starting price', durationMinutes: 180, price: 4500 },
+      { category: 'Color & Extensions', name: 'Hair Highlighting', description: 'Dimensional highlights; starting price', durationMinutes: 150, price: 3000 },
+      { category: 'Color & Extensions', name: 'Gloss or Glaze', description: 'Shine-enhancing translucent color finish', durationMinutes: 60, price: 1500 },
+      { category: 'Color & Extensions', name: 'Hair Glazing', description: 'Semi-permanent glaze for tone and shine', durationMinutes: 60, price: 1500 },
+      { category: 'Color & Extensions', name: 'Hair Glossing', description: 'Gloss treatment to refresh color and boost shine', durationMinutes: 60, price: 1500 },
+      { category: 'Color & Extensions', name: 'Hair Extensions', description: 'Extension fitting consultation and installation; starting price', durationMinutes: 180, price: 5000 },
+      { category: 'Hair Treatments', name: 'Hair Hydration Treatment', description: 'Deep hydration for dry or stressed hair', durationMinutes: 60, price: 1200 },
+      { category: 'Hair Treatments', name: 'Hair Straightening', description: 'Long-lasting straightening treatment; starting price', durationMinutes: 180, price: 3500 },
+      { category: 'Hair Treatments', name: 'Brazilian Hair Straightening', description: 'Brazilian smoothing and frizz-control treatment; starting price', durationMinutes: 240, price: 5500 },
+      { category: 'Hair Treatments', name: 'Hair Treatment', description: 'Personalized repair treatment based on hair condition', durationMinutes: 75, price: 1500 },
+      { category: 'Hair Treatments', name: 'Keratin Treatment', description: 'Keratin smoothing treatment; starting price', durationMinutes: 180, price: 4500 },
+      { category: 'Hair Treatments', name: 'Perm', description: 'Professional texture and curl service; starting price', durationMinutes: 180, price: 3500 },
+      { category: 'Beauty & Bridal', name: 'Eyebrow Threading', description: 'Precise eyebrow shaping with thread', durationMinutes: 15, price: 150 },
+      { category: 'Beauty & Bridal', name: 'Massage', description: 'Relaxing head, neck, and shoulder massage', durationMinutes: 60, price: 1000 },
+      { category: 'Beauty & Bridal', name: 'Bridal Services', description: 'Bridal hair and makeup package with consultation; starting price', durationMinutes: 180, price: 7500 },
+    ];
+
+    const createdServices = await Promise.all(serviceDefinitions.map((service, displayOrder) => {
+      const { category, ...data } = service;
+      return prisma.service.create({
+        data: {
+          businessId: eclat.id,
+          categoryId: categoryIds[category],
+          ...data,
+          bufferMinutes: durationMinutesToBuffer(data.durationMinutes),
+          resourceMode: 'STAFF_BASED',
+          capacity: 1,
+          displayOrder,
+        },
+      });
+    }));
+
+    const eclatStaff = await prisma.staff.findMany({ where: { businessId: eclat.id } });
+    const staffByName = Object.fromEntries(eclatStaff.map(member => [member.name, member.id]));
+    const beautyServices = new Set(['Eyebrow Threading', 'Massage', 'Bridal Services']);
+    await prisma.staffService.createMany({
+      data: createdServices.flatMap(service => {
+        const staffNames = beautyServices.has(service.name)
+          ? ['Neha Kapoor']
+          : service.name === 'Beard Trim' || service.name === 'Shaving'
+            ? ['Arjun Mehta']
+            : ['Riya Shah', 'Arjun Mehta'];
+        return staffNames.map(name => ({ businessId: eclat.id, serviceId: service.id, staffId: staffByName[name] }));
+      }),
+    });
+  }
+
+  const existingEclatSections = await prisma.pageSection.count({ where: { businessId: eclat.id } });
+  if (existingEclatSections === 0) {
+    await prisma.pageSection.createMany({ data: [
+      { businessId: eclat.id, type: 'HERO', title: 'Style, care, and confidence—made for you', configuration: { subtitle: 'Book your next salon appointment online', ctaLabel: 'Book Now' }, displayOrder: 0, isVisible: true },
+      { businessId: eclat.id, type: 'SERVICES', title: 'Our Services', configuration: {}, displayOrder: 1, isVisible: true },
+      { businessId: eclat.id, type: 'BUSINESS_HOURS', title: 'Opening Hours', configuration: {}, displayOrder: 2, isVisible: true },
+      { businessId: eclat.id, type: 'ABOUT', title: 'About Eclat', content: 'A modern unisex salon for precision cuts, color, smoothing treatments, grooming, and bridal styling.', configuration: {}, displayOrder: 3, isVisible: true },
+      { businessId: eclat.id, type: 'CONTACT', title: 'Visit Us', configuration: {}, displayOrder: 4, isVisible: true },
+    ] });
+  }
+
   console.log(`Seeded business: ${business.name} (${business.slug})`);
   console.log(`Public code: ${business.publicCode}`);
   console.log('Login: owner@demosalon.com / admin123');
+  console.log(`Seeded business: ${eclat.name} (${eclat.slug})`);
+  console.log(`Public code: ${eclat.publicCode}`);
+  console.log('Login: owner@eclatunisexsalon.in / admin123');
 }
 
 main()
