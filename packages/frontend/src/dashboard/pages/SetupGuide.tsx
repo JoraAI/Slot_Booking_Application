@@ -62,7 +62,9 @@ export const SetupGuide: React.FC = () => (
         <li>
           To message a customer, use <strong>Send a custom message</strong> on that same page: pick a
           saved customer or type the collected email / WhatsApp number, write the message, and send.
-          History appears below the form.
+          Use <strong>Send to all customers</strong> to email everyone with a valid address and WhatsApp
+          everyone with a valid number. Anyone who cannot be reached is listed on the page and emailed
+          to you. History appears below the form.
         </li>
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">

@@ -8,6 +8,10 @@ import {
   smtpConfigured,
   twilioWhatsappConfigured,
 } from './notificationCredentials';
+import {
+  isValidNotifyEmail,
+  isValidWhatsappNumber,
+} from './CustomerService';
 
 type SendOpts = { replyTo?: string; throwOnError?: boolean; business?: any };
 
@@ -579,6 +583,139 @@ class NotificationService {
       results.push({ channel, ok, ...(error ? { error } : {}) });
     }
     return results;
+  }
+
+  async sendBroadcast(
+    businessId: string,
+    subject: string,
+    message: string
+  ): Promise<{
+    total: number;
+    emailed: number;
+    whatsapped: number;
+    reached: number;
+    unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }>;
+    ownerNotified: boolean;
+  }> {
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) throw new Error('Business not found');
+
+    const customers = await prisma.customerContact.findMany({
+      where: { businessId },
+      orderBy: { name: 'asc' },
+      take: 300,
+    });
+    if (customers.length === 0) throw new Error('There are no customers in the phonebook yet');
+
+    const smtpReady = this.smtpConfigured(business);
+    const whatsappReady = this.twilioWhatsappConfigured(business);
+    const unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }> = [];
+    let emailed = 0;
+    let whatsapped = 0;
+    let reached = 0;
+
+    const queue = [...customers];
+    const workers = Array.from({ length: Math.min(3, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const customer = queue.shift();
+        if (!customer) return;
+        const canEmail = isValidNotifyEmail(customer.email);
+        const canWhatsapp = isValidWhatsappNumber(customer.phone);
+        const reasons: string[] = [];
+        const channels: Array<'email' | 'whatsapp'> = [];
+
+        if (canEmail) {
+          if (smtpReady) channels.push('email');
+          else reasons.push('email not sent — SMTP is not configured');
+        } else if (customer.email) {
+          reasons.push(`email not sent — invalid address (${customer.email})`);
+        } else {
+          reasons.push('email not sent — no email saved');
+        }
+
+        if (canWhatsapp) {
+          if (whatsappReady) channels.push('whatsapp');
+          else reasons.push('WhatsApp not sent — Twilio is not configured');
+        } else if (customer.phone) {
+          reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
+        } else {
+          reasons.push('WhatsApp not sent — no number saved');
+        }
+
+        if (channels.length === 0) {
+          unsent.push({
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            reason: reasons.join('; '),
+          });
+          continue;
+        }
+
+        const results = await this.sendCustomCustomerNotification(
+          businessId,
+          customer.id,
+          channels,
+          subject,
+          message
+        );
+        const gotEmail = results.some((r) => r.channel === 'email' && r.ok);
+        const gotWhatsapp = results.some((r) => r.channel === 'whatsapp' && r.ok);
+        if (gotEmail) emailed += 1;
+        if (gotWhatsapp) whatsapped += 1;
+        if (gotEmail || gotWhatsapp) reached += 1;
+        else {
+          const failed = results.filter((r) => !r.ok).map((r) => `${r.channel} failed — ${r.error || 'delivery failed'}`);
+          unsent.push({
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            reason: [...reasons, ...failed].join('; '),
+          });
+        }
+      }
+    });
+    await Promise.all(workers);
+
+    let ownerNotified = false;
+    if (unsent.length > 0 && business.ownerEmail && smtpReady) {
+      const rows = unsent.map((person) =>
+        `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.name)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.email || '—')}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.phone || '—')}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.reason)}</td>
+        </tr>`
+      ).join('');
+      try {
+        await this.sendEmail(
+          business.ownerEmail,
+          `Broadcast incomplete — ${unsent.length} customer${unsent.length === 1 ? '' : 's'} were not sent`,
+          `<h2>These customers were not sent your message</h2>
+          <p>Your broadcast from <strong>${this.esc(business.name)}</strong> reached ${reached} of ${customers.length} customers.</p>
+          <p>The people below had no valid email/WhatsApp number, or delivery failed:</p>
+          <table style="border-collapse:collapse;font-size:14px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:6px 10px;">Name</th>
+                <th style="text-align:left;padding:6px 10px;">Email</th>
+                <th style="text-align:left;padding:6px 10px;">WhatsApp</th>
+                <th style="text-align:left;padding:6px 10px;">Reason</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`,
+          { throwOnError: true, business }
+        );
+        ownerNotified = true;
+      } catch (e: any) {
+        console.error('Broadcast owner digest failed:', e?.message || e);
+      }
+    }
+
+    return { total: customers.length, emailed, whatsapped, reached, unsent, ownerNotified };
   }
 
   /**

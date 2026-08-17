@@ -1080,6 +1080,26 @@ ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) 
   }
 });
 
+ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = z.object({
+      subject: z.string().trim().min(1).max(160).default('Message from your salon'),
+      message: z.string().trim().min(1).max(3000),
+    }).parse(req.body);
+    const report = await notificationService.sendBroadcast(
+      req.owner!.businessId,
+      input.subject,
+      input.message
+    );
+    res.json(report);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid notification' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
 ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response) => {
   try {
     const input = z.object({

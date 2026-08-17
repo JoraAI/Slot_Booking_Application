@@ -13,6 +13,19 @@ export function normalizeCustomerEmail(value?: string | null): string | null {
   return email || null;
 }
 
+export function isValidNotifyEmail(value?: string | null): boolean {
+  const email = normalizeCustomerEmail(value);
+  if (!email) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function isValidWhatsappNumber(value?: string | null): boolean {
+  const phone = normalizeCustomerPhone(value);
+  if (!phone) return false;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 15;
+}
+
 export function customerIdentityKey(phone?: string | null, email?: string | null): string {
   const normalizedPhone = normalizeCustomerPhone(phone);
   if (normalizedPhone) return `phone:${normalizedPhone}`;

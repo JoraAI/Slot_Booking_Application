@@ -308,6 +308,20 @@ class ApiClient {
     })
   }
 
+  sendBroadcastNotification(data: { subject: string; message: string }) {
+    return this.request<{
+      total: number
+      emailed: number
+      whatsapped: number
+      reached: number
+      unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }>
+      ownerNotified: boolean
+    }>('/owner/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   getCustomerNotifications(limit = 25) {
     return this.request<CustomerNotification[]>(`/owner/customer-notifications?limit=${limit}`)
   }

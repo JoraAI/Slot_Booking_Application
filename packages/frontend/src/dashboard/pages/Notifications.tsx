@@ -24,6 +24,15 @@ export const Notifications: React.FC = () => {
   const [subject, setSubject] = useState('Message from your salon')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [broadcasting, setBroadcasting] = useState(false)
+  const [broadcastReport, setBroadcastReport] = useState<{
+    total: number
+    emailed: number
+    whatsapped: number
+    reached: number
+    unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }>
+    ownerNotified: boolean
+  } | null>(null)
 
   useEffect(() => {
     Promise.all([api.getOwnerSettingsStatus(), api.getCustomerNotifications(), api.getCustomers({ limit: '200' })])
@@ -113,6 +122,38 @@ export const Notifications: React.FC = () => {
     }
   }
 
+  const sendToAll = async () => {
+    if (!message.trim()) {
+      toast.error('Enter a message to send to all customers')
+      return
+    }
+    const count = customers.length
+    if (!count) {
+      toast.error('There are no customers in the phonebook yet')
+      return
+    }
+    if (!window.confirm(`Send this message to all ${count} customer${count === 1 ? '' : 's'}? Valid emails get email, valid WhatsApp numbers get WhatsApp. Anyone who cannot be reached will be listed for you.`)) {
+      return
+    }
+    setBroadcasting(true)
+    setBroadcastReport(null)
+    try {
+      const report = await api.sendBroadcastNotification({
+        subject: subject.trim() || 'Message from your salon',
+        message: message.trim(),
+      })
+      setBroadcastReport(report)
+      if (report.reached) toast.success(`Reached ${report.reached} of ${report.total} customers`)
+      if (report.unsent.length) toast.error(`${report.unsent.length} customer${report.unsent.length === 1 ? '' : 's'} were not sent`)
+      const notifications = await api.getCustomerNotifications()
+      setHistory(notifications)
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send to all customers')
+    } finally {
+      setBroadcasting(false)
+    }
+  }
+
   const Row = ({ ok, label, error }: { ok?: boolean; label: string; error?: string }) => (
     <p className={`text-xs ${ok ? 'text-green-600' : 'text-amber-600'}`}>
       {ok ? '✓' : '⚠'} {label}
@@ -166,8 +207,9 @@ export const Notifications: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-lg">
         <h2 className="text-lg font-semibold">Send a custom message</h2>
         <p className="text-sm text-gray-500">
-          Send to a saved customer or type an email / WhatsApp number collected from a booking.
-          Delivery uses your SMTP mailbox and Twilio WhatsApp sender from Settings.
+          Send to a saved customer, type an email / WhatsApp number, or send the same message to
+          everyone in the phonebook. Valid emails get email; valid WhatsApp numbers get WhatsApp.
+          Anyone who cannot be reached is listed below and emailed to you.
         </p>
         <div>
           <label className="block text-sm font-medium mb-1">Saved customer (optional)</label>
@@ -225,10 +267,43 @@ export const Notifications: React.FC = () => {
             placeholder="Write the message customers should receive"
             className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
         </div>
-        <button onClick={sendCustom} disabled={sending}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
-          {sending ? 'Sending...' : 'Send message'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={sendCustom} disabled={sending || broadcasting}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
+            {sending ? 'Sending...' : 'Send message'}
+          </button>
+          <button onClick={sendToAll} disabled={sending || broadcasting}
+            className="px-4 py-2 border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/5 disabled:opacity-50">
+            {broadcasting ? 'Sending to all...' : `Send to all ${customers.length} customers`}
+          </button>
+        </div>
+        {broadcastReport && (
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2 text-sm">
+            <p>
+              Reached {broadcastReport.reached} of {broadcastReport.total}
+              {' '}({broadcastReport.emailed} email, {broadcastReport.whatsapped} WhatsApp).
+            </p>
+            {broadcastReport.unsent.length === 0 ? (
+              <p className="text-green-600">Everyone with a valid email or WhatsApp number was sent the message.</p>
+            ) : (
+              <>
+                <p className="text-amber-700 dark:text-amber-300">
+                  Not sent to {broadcastReport.unsent.length} customer{broadcastReport.unsent.length === 1 ? '' : 's'}
+                  {broadcastReport.ownerNotified ? ' — the same list was emailed to you.' : '.'}
+                </p>
+                <div className="max-h-48 overflow-auto space-y-2">
+                  {broadcastReport.unsent.map((person) => (
+                    <div key={person.id} className="text-xs bg-amber-50 dark:bg-amber-900/20 rounded-md p-2">
+                      <p className="font-medium">{person.name}</p>
+                      <p className="text-gray-500">{person.email || 'No email'} · {person.phone || 'No number'}</p>
+                      <p className="text-amber-800 dark:text-amber-200 mt-1">{person.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
