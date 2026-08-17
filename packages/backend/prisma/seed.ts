@@ -12,6 +12,36 @@ function durationMinutesToBuffer(durationMinutes: number): number {
   return durationMinutes >= 60 ? 15 : 0;
 }
 
+type FormFieldSeed = {
+  label: string;
+  fieldType: string;
+  required: boolean;
+  visible: boolean;
+  placeholder?: string;
+  options?: string[];
+};
+
+/**
+ * A business with no intake form cannot take bookings, so re-seeding restores
+ * the defaults for businesses whose fields are missing.
+ */
+async function ensureFormFields(businessId: string, fields: FormFieldSeed[]): Promise<void> {
+  const existing = await prisma.formField.count({ where: { businessId } });
+  if (existing > 0) return;
+  await prisma.formField.createMany({
+    data: fields.map((field, order) => ({
+      businessId,
+      label: field.label,
+      fieldType: field.fieldType,
+      required: field.required,
+      visible: field.visible,
+      placeholder: field.placeholder ?? null,
+      options: field.options ?? [],
+      order,
+    })),
+  });
+}
+
 async function main() {
   const hashedPassword = await bcrypt.hash('admin123', 10);
 
@@ -60,16 +90,6 @@ async function main() {
           { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
         ],
       },
-      formFields: {
-        create: [
-          { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-          { label: 'Age', fieldType: 'number', required: false, order: 2, visible: true, placeholder: 'Enter your age' },
-          { label: 'Gender', fieldType: 'select', required: false, order: 3, visible: true, options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
-          { label: 'Phone Number', fieldType: 'tel', required: true, order: 4, visible: true, placeholder: 'Enter your phone number' },
-          { label: 'Email Address', fieldType: 'email', required: false, order: 5, visible: true, placeholder: 'Enter your email address' },
-          { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 6, visible: true, placeholder: 'Any special requests?' },
-        ],
-      },
       staff: {
         create: [
           { name: 'Priya Sharma', role: 'Senior Stylist', phone: '+919876543210', email: 'priya@demosalon.com', color: '#7C3AED', isActive: true },
@@ -79,6 +99,15 @@ async function main() {
       },
     },
   });
+
+  await ensureFormFields(business.id, [
+    { label: 'Full Name', fieldType: 'text', required: true, visible: true, placeholder: 'Enter your full name' },
+    { label: 'Age', fieldType: 'number', required: false, visible: true, placeholder: 'Enter your age' },
+    { label: 'Gender', fieldType: 'select', required: false, visible: true, options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
+    { label: 'Phone Number', fieldType: 'tel', required: true, visible: true, placeholder: 'Enter your phone number' },
+    { label: 'Email Address', fieldType: 'email', required: false, visible: true, placeholder: 'Enter your email address' },
+    { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, visible: true, placeholder: 'Any special requests?' },
+  ]);
 
   const existingCategories = await prisma.serviceCategory.count({ where: { businessId: business.id } });
   if (existingCategories === 0) {
@@ -164,14 +193,6 @@ async function main() {
           isOpen: true,
         })),
       },
-      formFields: {
-        create: [
-          { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-          { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
-          { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
-          { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Hair length, preferred look, or special requests' },
-        ],
-      },
       staff: {
         create: [
           { name: 'Riya Shah', role: 'Senior Hair Stylist', color: '#D72F68', isActive: true },
@@ -181,6 +202,13 @@ async function main() {
       },
     },
   });
+
+  await ensureFormFields(eclat.id, [
+    { label: 'Full Name', fieldType: 'text', required: true, visible: true, placeholder: 'Enter your full name' },
+    { label: 'Phone Number', fieldType: 'tel', required: true, visible: true, placeholder: 'Enter your phone number' },
+    { label: 'Email Address', fieldType: 'email', required: false, visible: true, placeholder: 'Enter your email address' },
+    { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, visible: true, placeholder: 'Hair length, preferred look, or special requests' },
+  ]);
 
   const existingEclatCategories = await prisma.serviceCategory.count({ where: { businessId: eclat.id } });
   if (existingEclatCategories === 0) {

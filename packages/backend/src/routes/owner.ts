@@ -785,13 +785,13 @@ ownerRouter.put('/working-hours', async (req: AuthRequest, res: Response) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [fields]
+ *             required: [formFields]
  *             properties:
- *               fields:
+ *               formFields:
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [label, fieldType, required, order, visible]
+ *                   required: [label, fieldType]
  *                   properties:
  *                     label: { type: string }
  *                     fieldType: { type: string, enum: [text, number, select, checkbox, tel, email, textarea] }
@@ -808,25 +808,57 @@ ownerRouter.put('/working-hours', async (req: AuthRequest, res: Response) => {
  */
 ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
   try {
-    const { fields } = req.body;
+    const fieldSchema = z.object({
+      label: z.string().trim().min(1).max(120),
+      fieldType: z.enum(['text', 'number', 'select', 'checkbox', 'tel', 'email', 'textarea']),
+      required: z.boolean().default(false),
+      options: z.array(z.string().trim().min(1)).default([]),
+      placeholder: z.string().trim().max(200).optional().nullable(),
+      order: z.number().int().min(0).optional(),
+      visible: z.boolean().default(true),
+    });
+    // `formFields` is the key the dashboard sends; `fields` is accepted for
+    // older API clients.
+    const schema = z.object({
+      formFields: z.array(fieldSchema).max(50).optional(),
+      fields: z.array(fieldSchema).max(50).optional(),
+    }).refine((body) => body.formFields !== undefined || body.fields !== undefined, {
+      message: 'formFields is required',
+    });
+    const parsed = schema.parse(req.body);
+    const incoming = parsed.formFields ?? parsed.fields ?? [];
+
+    const invalidSelect = incoming.find((f) => f.fieldType === 'select' && f.options.length === 0);
+    if (invalidSelect) {
+      return res.status(400).json({ error: `Select field "${invalidSelect.label}" needs at least one option` });
+    }
+
     const businessId = req.owner!.businessId;
 
-    await prisma.formField.deleteMany({ where: { businessId } });
-    const created = await prisma.formField.createMany({
-      data: fields.map((f: any) => ({
-        businessId,
-        label: f.label,
-        fieldType: f.fieldType,
-        required: f.required,
-        options: f.options || [],
-        placeholder: f.placeholder || null,
-        order: f.order,
-        visible: f.visible,
-      })),
+    // Replace atomically: a failure must never leave the business with no
+    // intake form, which would block every booking.
+    const fields = await prisma.$transaction(async (tx) => {
+      await tx.formField.deleteMany({ where: { businessId } });
+      await tx.formField.createMany({
+        data: incoming.map((f, index) => ({
+          businessId,
+          label: f.label,
+          fieldType: f.fieldType,
+          required: f.required,
+          options: f.fieldType === 'select' ? f.options : [],
+          placeholder: f.placeholder || null,
+          order: f.order ?? index,
+          visible: f.visible,
+        })),
+      });
+      return tx.formField.findMany({ where: { businessId }, orderBy: { order: 'asc' } });
     });
 
-    res.json({ count: created.count });
+    res.json({ count: fields.length, formFields: fields });
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid form fields', issues: error.issues });
+    }
     res.status(400).json({ error: error.message });
   }
 });

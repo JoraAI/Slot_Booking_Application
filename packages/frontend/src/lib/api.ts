@@ -1,4 +1,4 @@
-import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult } from '../types'
+import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField } from '../types'
 
 // Split-host friendly API base:
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
@@ -224,7 +224,7 @@ class ApiClient {
   }
 
   updateFormFields(fields: Record<string, unknown>[]) {
-    return this.request<void>('/owner/form-fields', {
+    return this.request<{ count: number; formFields: FormField[] }>('/owner/form-fields', {
       method: 'PUT',
       body: JSON.stringify({ formFields: fields }),
     })
