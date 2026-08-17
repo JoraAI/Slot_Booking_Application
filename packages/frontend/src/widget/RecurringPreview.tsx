@@ -1,5 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
+import { localDateStr, parseLocalDate } from '../lib/localDate'
 
 interface RecurringPreviewProps {
   frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'
@@ -37,7 +38,7 @@ export const RecurringPreview: React.FC<RecurringPreviewProps> = ({
               }`}
             >
               <span>
-                {new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                {parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
               </span>
               <button
                 type="button"
@@ -60,13 +61,13 @@ export const RecurringPreview: React.FC<RecurringPreviewProps> = ({
 
 function generateRecurringDates(startDate: string, frequency: string, count: number): string[] {
   const dates: string[] = []
-  const start = new Date(startDate)
+  const start = parseLocalDate(startDate)
   const interval = frequency === 'WEEKLY' ? 7 : frequency === 'BIWEEKLY' ? 14 : 30
 
   for (let i = 0; i < count; i++) {
     const d = new Date(start)
     d.setDate(d.getDate() + interval * i)
-    dates.push(d.toISOString().split('T')[0])
+    dates.push(localDateStr(d))
   }
   return dates
 }

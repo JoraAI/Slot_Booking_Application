@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
+import { localDateStr } from '../lib/localDate'
 
 interface CalendarPickerProps {
   bookingWindowDays: number
@@ -53,7 +54,7 @@ export const CalendarPicker: React.FC<CalendarPickerProps> = ({
     return openDays.has(date.getDay())
   }
 
-  const dateStr = (date: Date) => date.toISOString().split('T')[0]
+  const dateStr = (date: Date) => localDateStr(date)
 
   const prevMonth = () => {
     setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))

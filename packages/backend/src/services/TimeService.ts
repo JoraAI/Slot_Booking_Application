@@ -92,16 +92,20 @@ export class TimeService {
     return `${get('year')}-${get('month')}-${get('day')}`;
   }
 
-  /** Format an absolute Date in the business timezone as "HH:mm". */
+  /** Format an absolute Date in the business timezone as "HH:mm" (00-23, never 24). */
   toTimeStr(date: Date, tz: string): string {
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
     }).formatToParts(date);
     const get = (t: string) => parts.find((p) => p.type === t)?.value || '';
-    return `${get('hour')}:${get('minute')}`;
+    let hour = get('hour');
+    const minute = get('minute').padStart(2, '0');
+    hour = hour.padStart(2, '0');
+    if (hour === '24') hour = '00';
+    return `${hour}:${minute}`;
   }
 
   /**

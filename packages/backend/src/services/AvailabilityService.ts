@@ -72,8 +72,10 @@ export interface AvailabilityResult {
 }
 
 const MINUTES = (hhmm: string) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+  const [hRaw, mRaw] = hhmm.split(':').map(Number);
+  const h = hRaw === 24 ? 0 : hRaw;
+  const m = mRaw || 0;
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
 };
 const HHMM = (min: number) => {
   const h = Math.floor(min / 60);
