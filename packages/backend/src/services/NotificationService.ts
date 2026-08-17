@@ -508,6 +508,75 @@ class NotificationService {
   }
 
   /**
+   * Owner-authored message to one phonebook contact. Delivery still uses the
+   * platform SMTP/Twilio provider: email replies go to the owner's email and
+   * WhatsApp copy includes the owner's configured contact number.
+   */
+  async sendCustomCustomerNotification(
+    businessId: string,
+    customerId: string,
+    channels: Array<'email' | 'whatsapp'>,
+    subject: string,
+    message: string
+  ): Promise<Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }>> {
+    const [business, customer] = await Promise.all([
+      prisma.business.findUnique({ where: { id: businessId } }),
+      prisma.customerContact.findFirst({ where: { id: customerId, businessId } }),
+    ]);
+    if (!business) throw new Error('Business not found');
+    if (!customer) throw new Error('Customer not found');
+
+    const results: Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }> = [];
+    for (const channel of channels) {
+      let ok = false;
+      let error: string | undefined;
+      try {
+        if (channel === 'email') {
+          if (!customer.email) throw new Error('Customer does not have an email address');
+          const safeMessage = this.esc(message).replace(/\n/g, '<br>');
+          await this.sendEmail(
+            customer.email,
+            subject,
+            `<h2>${this.esc(business.name)}</h2><p>${safeMessage}</p>`,
+            { replyTo: business.ownerEmail, throwOnError: true }
+          );
+        } else {
+          if (!customer.phone) throw new Error('Customer does not have a phone number');
+          const ownerContact = business.ownerWhatsapp
+            ? `\n\nReply/contact: https://wa.me/${String(business.ownerWhatsapp).replace(/\D/g, '')}`
+            : '';
+          await this.sendWhatsApp(
+            customer.phone,
+            `${business.name}\n\n${message}${ownerContact}`,
+            { throwOnError: true }
+          );
+        }
+        ok = true;
+      } catch (e: any) {
+        error = e?.message || `${channel} delivery failed`;
+      }
+
+      await prisma.customerNotification.create({
+        data: {
+          businessId,
+          customerId: customer.id,
+          channel,
+          subject: channel === 'email' ? subject : null,
+          message,
+          recipientName: customer.name,
+          recipientEmail: customer.email,
+          recipientPhone: customer.phone,
+          status: ok ? 'SENT' : 'FAILED',
+          error,
+          sentAt: ok ? new Date() : null,
+        },
+      });
+      results.push({ channel, ok, ...(error ? { error } : {}) });
+    }
+    return results;
+  }
+
+  /**
    * Readiness-oriented test send. Reports REAL per-channel success/failure with
    * a clear reason (platform SMTP/Twilio config, owner destination presence).
    */

@@ -125,6 +125,8 @@ model Business {
   paymentAttempts         PaymentAttempt[]
   paymentRefunds          PaymentRefund[]
   managementOtps          BookingManagementOtp[]
+  customerContacts        CustomerContact[]
+  customerNotifications   CustomerNotification[]
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }
@@ -154,6 +156,48 @@ model FormField {
   visible     Boolean  @default(true)
 
   @@index([businessId, order])
+}
+
+model CustomerContact {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  identityKey   String
+  name          String
+  phone         String?
+  email         String?
+  notes         String?
+  bookingCount  Int      @default(0)
+  lastBookedAt  DateTime?
+  notifications CustomerNotification[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, identityKey])
+  @@index([businessId, name])
+  @@index([businessId, updatedAt])
+}
+
+model CustomerNotification {
+  id             String           @id @default(cuid())
+  businessId     String
+  business       Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customerId     String?
+  customer       CustomerContact? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  channel        String
+  subject        String?
+  message        String
+  recipientName  String
+  recipientEmail String?
+  recipientPhone String?
+  status         String
+  error          String?
+  sentAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([businessId, status])
+  @@index([customerId])
 }
 
 model Staff {

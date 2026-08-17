@@ -4,6 +4,7 @@ import { pricingService } from './PricingService';
 import { timeService } from './TimeService';
 import { businessResolver } from './BusinessResolver';
 import { bookingManagementService } from './BookingManagementService';
+import { customerService } from './CustomerService';
 
 const BOOKING_SOURCES = ['QR', 'EMBED', 'WIDGET', 'DIRECT'] as const;
 type BookingSourceValue = typeof BOOKING_SOURCES[number];
@@ -179,6 +180,14 @@ class BookingService {
       },
       include: { staff: true, business: true, service: true },
     });
+
+    // Keep the owner's phonebook current in the same transaction as the
+    // booking. A failed contact sync therefore cannot leave partial state.
+    await customerService.syncFromBooking(business.id, {
+      name: booking.customerName,
+      phone: booking.customerPhone,
+      email: booking.customerEmail,
+    }, db);
 
     // Return the plaintext management token exactly once (creation only).
     return {

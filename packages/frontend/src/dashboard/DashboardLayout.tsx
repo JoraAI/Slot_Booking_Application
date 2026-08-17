@@ -7,6 +7,7 @@ import { FeatureGate } from '../widget/FeatureGate'
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', end: true },
   { path: '/dashboard/bookings', label: 'Bookings', icon: '📋' },
+  { path: '/dashboard/customers', label: 'Customers', icon: '📒' },
   { path: '/dashboard/calendar', label: 'Calendar', icon: '📅' },
   { path: '/dashboard/services', label: 'Services', icon: '💇' },
   { path: '/dashboard/blocks', label: 'Block Slots', icon: '🚫' },
@@ -19,6 +20,7 @@ const navItems = [
   { path: '/dashboard/qr-code', label: 'QR Code', icon: '🔳' },
   { path: '/dashboard/notifications', label: 'Notifications', icon: '🔔' },
   { path: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
+  { path: '/dashboard/setup-guide', label: 'Setup Guide', icon: '❓' },
 ]
 
 export const DashboardLayout: React.FC = () => {

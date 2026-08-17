@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
+import { Link } from 'react-router-dom'
+import type { CustomerNotification } from '../../types'
 
 export const Notifications: React.FC = () => {
   const [loading, setLoading] = useState(false)
@@ -12,10 +14,14 @@ export const Notifications: React.FC = () => {
     ownerWhatsappPresent: boolean
   } | null>(null)
   const [result, setResult] = useState<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } } | null>(null)
+  const [history, setHistory] = useState<CustomerNotification[]>([])
 
   useEffect(() => {
-    api.getOwnerSettingsStatus()
-      .then(setStatus)
+    Promise.all([api.getOwnerSettingsStatus(), api.getCustomerNotifications()])
+      .then(([readiness, notifications]) => {
+        setStatus(readiness)
+        setHistory(notifications)
+      })
       .catch(() => setStatus(null))
   }, [])
 
@@ -42,7 +48,12 @@ export const Notifications: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Notifications</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Notifications</h1>
+        <Link to="/dashboard/setup-guide#notifications" className="text-sm text-primary hover:underline">
+          Setup guide →
+        </Link>
+      </div>
 
       {/* Readiness — platform prerequisites for email/WhatsApp channels */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
@@ -79,7 +90,26 @@ export const Notifications: React.FC = () => {
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
         <h2 className="text-lg font-semibold mb-4">Notification History</h2>
-        <p className="text-gray-500 text-sm">Recent notifications will appear here.</p>
+        {history.length === 0 ? (
+          <p className="text-gray-500 text-sm">Custom customer notifications will appear here.</p>
+        ) : (
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            {history.map((item) => (
+              <div key={item.id} className="py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{item.recipientName}</p>
+                  <p className="text-xs text-gray-500 truncate">{item.message}</p>
+                  {item.error && <p className="text-xs text-red-500 mt-1">{item.error}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs capitalize">{item.channel}</p>
+                  <p className={`text-xs ${item.status === 'SENT' ? 'text-green-600' : 'text-red-500'}`}>{item.status}</p>
+                  <p className="text-[10px] text-gray-400">{new Date(item.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../../lib/api'
 import type { Booking } from '../../types'
+import { Link } from 'react-router-dom'
 
 const STATUS_COLORS: Record<string, string> = {
   paid: 'bg-green-100 text-green-700',
@@ -58,6 +59,18 @@ export const PaymentsPage: React.FC = () => {
           <p className="text-sm text-gray-500 mt-1">Collected: ₹{collected.toLocaleString('en-IN')}</p>
         </div>
         <button onClick={load} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50">Refresh</button>
+      </div>
+
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-sm">
+        <p className="font-medium">Where does the money go?</p>
+        <p className="text-gray-600 dark:text-gray-300 mt-1">
+          Live payments use the owner's Razorpay API keys and settle to the verified bank account
+          linked to that Razorpay account. A UPI ID entered in Reservly cannot redirect Razorpay settlements.
+        </p>
+        <div className="flex gap-4 mt-2">
+          <Link to="/dashboard/settings" className="text-primary underline">Payment settings</Link>
+          <Link to="/dashboard/setup-guide#payments" className="text-primary underline">Setup steps</Link>
+        </div>
       </div>
 
       {loading && <div className="skeleton h-40" />}

@@ -96,6 +96,34 @@ export interface PublicConfig {
   }
 }
 
+export interface CustomerContact {
+  id: string
+  businessId: string
+  name: string
+  phone: string | null
+  email: string | null
+  notes: string | null
+  bookingCount: number
+  lastBookedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CustomerNotification {
+  id: string
+  customerId: string | null
+  channel: 'email' | 'whatsapp'
+  subject: string | null
+  message: string
+  recipientName: string
+  recipientEmail: string | null
+  recipientPhone: string | null
+  status: 'SENT' | 'FAILED'
+  error: string | null
+  sentAt: string | null
+  createdAt: string
+}
+
 export type ResourceMode = 'STAFF_BASED' | 'POOLED'
 export type DiscountType = 'PERCENTAGE' | 'FLAT'
 export type BookingSource = 'DIRECT' | 'QR' | 'EMBED' | 'WIDGET'

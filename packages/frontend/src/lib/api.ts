@@ -1,4 +1,4 @@
-import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField } from '../types'
+import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField, CustomerContact, CustomerNotification } from '../types'
 
 // Split-host friendly API base:
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
@@ -233,6 +233,40 @@ class ApiClient {
   getAnalytics(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<AnalyticsData>(`/owner/analytics${qs}`)
+  }
+
+  getCustomers(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return this.request<{ customers: CustomerContact[]; total: number; page: number; totalPages: number }>(`/owner/customers${qs}`)
+  }
+
+  createCustomer(data: { name: string; phone?: string | null; email?: string | null; notes?: string | null }) {
+    return this.request<CustomerContact>('/owner/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  updateCustomer(id: string, data: { name: string; phone?: string | null; email?: string | null; notes?: string | null }) {
+    return this.request<CustomerContact>(`/owner/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deleteCustomer(id: string) {
+    return this.request<void>(`/owner/customers/${id}`, { method: 'DELETE' })
+  }
+
+  notifyCustomer(id: string, data: { channels: ('email' | 'whatsapp')[]; subject: string; message: string }) {
+    return this.request<{ results: { channel: 'email' | 'whatsapp'; ok: boolean; error?: string }[] }>(`/owner/customers/${id}/notify`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  getCustomerNotifications(limit = 25) {
+    return this.request<CustomerNotification[]>(`/owner/customer-notifications?limit=${limit}`)
   }
 
   sendTestNotification() {

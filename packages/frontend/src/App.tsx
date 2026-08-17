@@ -18,6 +18,8 @@ import { LoginPage } from './dashboard/pages/LoginPage'
 import { ServicesPage } from './dashboard/pages/ServicesPage'
 import { PageBuilder } from './dashboard/pages/PageBuilder'
 import { QRCodePage } from './dashboard/pages/QRCodePage'
+import { CustomersPage } from './dashboard/pages/Customers'
+import { SetupGuide } from './dashboard/pages/SetupGuide'
 import { useStore } from './store'
 import { useEmbedMode } from './hooks'
 import { PageSections } from './widget/PageSections'
@@ -45,6 +47,7 @@ export default function App() {
       }>
         <Route index element={<DashboardHome />} />
         <Route path="bookings" element={<Bookings />} />
+        <Route path="customers" element={<CustomersPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="blocks" element={<BlockSlots />} />
         <Route path="waitlist" element={<WaitlistPage />} />
@@ -57,6 +60,7 @@ export default function App() {
         <Route path="qr-code" element={<QRCodePage />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="setup-guide" element={<SetupGuide />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/login" />} />

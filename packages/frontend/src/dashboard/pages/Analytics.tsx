@@ -1,37 +1,59 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { api } from '../../lib/api'
+import { useStore } from '../../store'
 import type { AnalyticsData } from '../../types'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-function rangeDays(range: string): { dateFrom: string; dateTo: string } {
-  const to = new Date()
-  const from = new Date(to)
+const RANGES = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'past-upcoming', label: 'Last 30 Days + Upcoming' },
+]
+
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+// Metrics are keyed on the appointment date, so any range ending today excludes
+// bookings that have not happened yet. `upcomingDays` matches the bookable horizon.
+function rangeDays(range: string, upcomingDays: number): { dateFrom: string; dateTo: string } {
+  const today = new Date()
+  const from = new Date(today)
+  const to = new Date(today)
+
   if (range === '7d') from.setDate(from.getDate() - 7)
   else if (range === '30d') from.setDate(from.getDate() - 30)
-  else from.setDate(from.getDate() - 1) // today
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  else if (range === 'upcoming') to.setDate(to.getDate() + upcomingDays)
+  else if (range === 'past-upcoming') {
+    from.setDate(from.getDate() - 30)
+    to.setDate(to.getDate() + upcomingDays)
+  }
+
   return { dateFrom: iso(from), dateTo: iso(to) }
 }
 
 export const Analytics: React.FC = () => {
-  const [range, setRange] = useState('30d')
+  const { config } = useStore()
+  const upcomingDays = config?.bookingWindowDays || 30
+  const [range, setRange] = useState('past-upcoming')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const { dateFrom, dateTo } = rangeDays(range, upcomingDays)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const r = rangeDays(range)
-      setData(await api.getAnalytics({ ...r, ...(range === 'today' ? {} : {}) }))
+      setData(await api.getAnalytics({ dateFrom, dateTo }))
     } catch (e: any) {
       setError(e.message || 'Failed to load analytics')
     } finally {
       setLoading(false)
     }
-  }, [range])
+  }, [dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
 
@@ -40,14 +62,22 @@ export const Analytics: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <select value={range} onChange={(e) => setRange(e.target.value)}
-          className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
-          <option value="today">Today</option>
-          <option value="7d">Last 7 Days</option>
-          <option value="30d">Last 30 Days</option>
-        </select>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            By appointment date · {dateFrom} to {dateTo}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={range} onChange={(e) => setRange(e.target.value)}
+            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
+            {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </select>
+          <button onClick={load} disabled={loading} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">
+            Refresh
+          </button>
+        </div>
       </div>
 
       {loading && <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-24" />)}</div>}
@@ -110,7 +140,7 @@ export const Analytics: React.FC = () => {
           {/* Trend sparkline + status */}
           <div className="grid lg:grid-cols-2 gap-4">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
-              <h2 className="text-lg font-semibold mb-4">Bookings (last 7 days)</h2>
+              <h2 className="text-lg font-semibold mb-4">Bookings (7 days ending {dateTo})</h2>
               <div className="flex items-end gap-1 h-28">
                 {(data.sparkline || []).map((v, i) => (
                   <div key={i} className="flex-1 bg-primary/70 rounded-t" style={{ height: `${Math.max(4, (v / maxTrend) * 100)}%` }} title={String(v)} />

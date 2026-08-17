@@ -14,6 +14,11 @@ import { analyticsService } from '../services/AnalyticsService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
 import { timeService } from '../services/TimeService';
 import { validateLocation } from '../services/LocationService';
+import {
+  customerIdentityKey,
+  normalizeCustomerEmail,
+  normalizeCustomerPhone,
+} from '../services/CustomerService';
 
 export const ownerRouter = Router();
 
@@ -65,7 +70,7 @@ ownerRouter.post('/login', async (req, res: Response) => {
     }
 
     const business = await prisma.business.findFirst({
-      where: { ownerEmail: email },
+      where: { ownerEmail: { equals: String(email).trim(), mode: 'insensitive' } },
     });
 
     if (!business) {
@@ -562,7 +567,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'bookingManagementOtpEnabled', 'bookingManagementOtpChannel',
       'bookingWindowDays',
       'showAvailableCount', 'notifyOwnerEmail', 'notifyOwnerWhatsapp',
-      'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerWhatsapp',
+      'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerEmail', 'ownerWhatsapp',
       'enableWaitlist', 'enableRecurring', 'enablePayments', 'enableMultiStaff',
       'paymentMode', 'depositAmount', 'depositPercentage',
       'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
@@ -575,6 +580,23 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       if (req.body[field] !== undefined) {
         updateData[field] = req.body[field];
       }
+    }
+
+    if (updateData.ownerEmail !== undefined) {
+      const parsedEmail = z.string().trim().email().max(254).safeParse(updateData.ownerEmail);
+      if (!parsedEmail.success) return res.status(400).json({ error: 'Enter a valid owner email address' });
+      updateData.ownerEmail = parsedEmail.data.toLowerCase();
+      const duplicate = await prisma.business.findFirst({
+        where: {
+          id: { not: existing.id },
+          ownerEmail: { equals: updateData.ownerEmail, mode: 'insensitive' },
+        },
+        select: { id: true },
+      });
+      if (duplicate) return res.status(409).json({ error: 'That owner email is already used by another business' });
+    }
+    if (updateData.ownerWhatsapp !== undefined) {
+      updateData.ownerWhatsapp = normalizeCustomerPhone(updateData.ownerWhatsapp);
     }
 
     // Razorpay secret is WRITE-ONLY: never read back, never echoed.
@@ -863,6 +885,154 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ---------- Customer phonebook ----------
+
+const customerInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  phone: z.string().trim().max(30).optional().nullable(),
+  email: z.string().trim().email().max(254).optional().nullable().or(z.literal('')),
+  notes: z.string().trim().max(2000).optional().nullable(),
+}).refine((value) => !!(value.phone || value.email), {
+  message: 'Add at least a phone number or email address',
+});
+
+ownerRouter.get('/customers', async (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const query = String(req.query.q || '').trim();
+    const businessId = req.owner!.businessId;
+    const where: any = {
+      businessId,
+      ...(query ? {
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { phone: { contains: query } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+      } : {}),
+    };
+    const [customers, total] = await Promise.all([
+      prisma.customerContact.findMany({
+        where,
+        orderBy: [{ lastBookedAt: 'desc' }, { updatedAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.customerContact.count({ where }),
+    ]);
+    res.json({ customers, total, page, totalPages: Math.ceil(total / limit) });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/customers', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = customerInputSchema.parse(req.body);
+    const phone = normalizeCustomerPhone(input.phone);
+    const email = normalizeCustomerEmail(input.email);
+    const customer = await prisma.customerContact.create({
+      data: {
+        businessId: req.owner!.businessId,
+        identityKey: customerIdentityKey(phone, email),
+        name: input.name,
+        phone,
+        email,
+        notes: input.notes || null,
+      },
+    });
+    res.status(201).json(customer);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid customer' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'A customer with this phone number already exists' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.put('/customers/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const existing = await prisma.customerContact.findFirst({
+      where: { id: req.params.id, businessId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Customer not found' });
+
+    const input = customerInputSchema.parse({
+      name: req.body.name ?? existing.name,
+      phone: req.body.phone !== undefined ? req.body.phone : existing.phone,
+      email: req.body.email !== undefined ? req.body.email : existing.email,
+      notes: req.body.notes !== undefined ? req.body.notes : existing.notes,
+    });
+    const phone = normalizeCustomerPhone(input.phone);
+    const email = normalizeCustomerEmail(input.email);
+    const customer = await prisma.customerContact.update({
+      where: { id: existing.id },
+      data: {
+        identityKey: customerIdentityKey(phone, email),
+        name: input.name,
+        phone,
+        email,
+        notes: input.notes || null,
+      },
+    });
+    res.json(customer);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid customer' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'A customer with this phone number already exists' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.delete('/customers/:id', async (req: AuthRequest, res: Response) => {
+  const result = await prisma.customerContact.deleteMany({
+    where: { id: req.params.id, businessId: req.owner!.businessId },
+  });
+  if (result.count === 0) return res.status(404).json({ error: 'Customer not found' });
+  res.status(204).send();
+});
+
+ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = z.object({
+      channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2),
+      subject: z.string().trim().min(1).max(160).default('Message from your salon'),
+      message: z.string().trim().min(1).max(3000),
+    }).parse(req.body);
+    const results = await notificationService.sendCustomCustomerNotification(
+      req.owner!.businessId,
+      req.params.id,
+      [...new Set(input.channels)],
+      input.subject,
+      input.message
+    );
+    res.json({ results });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid notification' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.get('/customer-notifications', async (req: AuthRequest, res: Response) => {
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+  const notifications = await prisma.customerNotification.findMany({
+    where: { businessId: req.owner!.businessId },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+  res.json(notifications);
+});
+
 /**
  * @openapi
  * /owner/analytics:
@@ -879,7 +1049,7 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
  *       - in: query
  *         name: dateTo
  *         schema: { type: string, format: date }
- *         description: End date (defaults to today)
+ *         description: End date (defaults to today + bookingWindowDays, so upcoming appointments are included)
  *       - in: query
  *         name: staffId
  *         schema: { type: string }
@@ -896,8 +1066,17 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
 ownerRouter.get('/analytics', async (req: AuthRequest, res: Response) => {
   try {
     const { dateFrom, dateTo, staffId } = req.query as any;
-    const from = dateFrom || timeService.toDateStr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'UTC');
-    const to = dateTo || timeService.toDateStr(new Date(), 'UTC');
+    // Analytics are keyed on the appointment date, and most bookings are for
+    // future dates. Defaulting `to` to today would hide every upcoming booking,
+    // so the default window also spans the bookable horizon.
+    const business = await prisma.business.findUnique({
+      where: { id: req.owner!.businessId },
+      select: { bookingWindowDays: true },
+    });
+    const dayMs = 24 * 60 * 60 * 1000;
+    const upcomingDays = business?.bookingWindowDays ?? 7;
+    const from = dateFrom || timeService.toDateStr(new Date(Date.now() - 30 * dayMs), 'UTC');
+    const to = dateTo || timeService.toDateStr(new Date(Date.now() + upcomingDays * dayMs), 'UTC');
 
     const analytics = await analyticsService.getAnalytics(
       req.owner!.businessId,

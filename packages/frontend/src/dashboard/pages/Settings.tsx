@@ -51,6 +51,8 @@ export const Settings: React.FC = () => {
     notifyOwnerWhatsapp: config?.notifyOwnerWhatsapp ?? false,
     notifyCustomerEmail: config?.notifyCustomerEmail ?? true,
     notifyCustomerWhatsapp: config?.notifyCustomerWhatsapp ?? false,
+    ownerEmail: config?.ownerEmail || '',
+    ownerWhatsapp: config?.ownerWhatsapp || '',
     enableWaitlist: config?.enableWaitlist || false,
     enableRecurring: config?.enableRecurring || false,
     enableMultiStaff: config?.enableMultiStaff || false,
@@ -91,6 +93,8 @@ export const Settings: React.FC = () => {
         notifyOwnerWhatsapp: config.notifyOwnerWhatsapp ?? false,
         notifyCustomerEmail: config.notifyCustomerEmail ?? true,
         notifyCustomerWhatsapp: config.notifyCustomerWhatsapp ?? false,
+        ownerEmail: config.ownerEmail || '',
+        ownerWhatsapp: config.ownerWhatsapp || '',
         enableWaitlist: config.enableWaitlist || false,
         enableRecurring: config.enableRecurring || false,
         enableMultiStaff: config.enableMultiStaff || false,
@@ -178,6 +182,31 @@ export const Settings: React.FC = () => {
           className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
           {saving ? 'Saving...' : 'Save All'}
         </button>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Owner Contact</h2>
+          <p className="text-sm text-gray-500">
+            Owner alerts are delivered here. Customer emails use this address as Reply-To,
+            and customer WhatsApp messages include this WhatsApp number as the contact.
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Owner Email</label>
+            <input type="email" value={form.ownerEmail} onChange={(e) => setForm(p => ({ ...p, ownerEmail: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-amber-600 mt-1">Changing this also changes the dashboard login email.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Owner WhatsApp</label>
+            <input value={form.ownerWhatsapp} onChange={(e) => setForm(p => ({ ...p, ownerWhatsapp: e.target.value }))}
+              placeholder="+919876543210"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Use international format, including country code.</p>
+          </div>
+        </div>
       </div>
 
       {/* Feature Toggles */}
