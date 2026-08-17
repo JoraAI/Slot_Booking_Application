@@ -22,6 +22,7 @@ import {
   twilioWhatsappConfigured,
 } from '../services/notificationCredentials';
 import {
+  customerService,
   customerIdentityKey,
   normalizeCustomerEmail,
   normalizeCustomerPhone,
@@ -1035,6 +1036,48 @@ ownerRouter.delete('/customers/:id', async (req: AuthRequest, res: Response) => 
   });
   if (result.count === 0) return res.status(404).json({ error: 'Customer not found' });
   res.status(204).send();
+});
+
+ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = z.object({
+      customerId: z.string().trim().min(1).optional().nullable(),
+      name: z.string().trim().max(120).optional().nullable(),
+      phone: z.string().trim().max(30).optional().nullable(),
+      email: z.string().trim().email().max(254).optional().nullable().or(z.literal('')),
+      channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2),
+      subject: z.string().trim().min(1).max(160).default('Message from your salon'),
+      message: z.string().trim().min(1).max(3000),
+    }).parse(req.body);
+
+    const channels = [...new Set(input.channels)];
+    if (channels.includes('email') && !String(input.email || '').trim()) {
+      return res.status(400).json({ error: 'Enter the customer email address to send email' });
+    }
+    if (channels.includes('whatsapp') && !String(input.phone || '').trim()) {
+      return res.status(400).json({ error: 'Enter the customer phone number to send WhatsApp' });
+    }
+
+    const customer = await customerService.findOrCreateForMessage(req.owner!.businessId, {
+      id: input.customerId,
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+    });
+    const results = await notificationService.sendCustomCustomerNotification(
+      req.owner!.businessId,
+      customer.id,
+      channels,
+      input.subject,
+      input.message
+    );
+    res.json({ customer, results });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid notification' });
+    }
+    res.status(400).json({ error: error.message });
+  }
 });
 
 ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response) => {

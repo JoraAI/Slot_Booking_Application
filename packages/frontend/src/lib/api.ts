@@ -290,6 +290,24 @@ class ApiClient {
     })
   }
 
+  sendCustomNotification(data: {
+    customerId?: string | null
+    name?: string
+    phone?: string | null
+    email?: string | null
+    channels: ('email' | 'whatsapp')[]
+    subject: string
+    message: string
+  }) {
+    return this.request<{
+      customer: CustomerContact
+      results: { channel: 'email' | 'whatsapp'; ok: boolean; error?: string }[]
+    }>('/owner/notifications/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   getCustomerNotifications(limit = 25) {
     return this.request<CustomerNotification[]>(`/owner/customer-notifications?limit=${limit}`)
   }

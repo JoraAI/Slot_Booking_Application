@@ -17,8 +17,9 @@ export const SetupGuide: React.FC = () => (
         <li>Existing booking customers are added automatically and new bookings update the matching phone-number contact.</li>
         <li>Use Add, Edit, or Delete to maintain manual contacts. Deleting a contact never deletes bookings.</li>
         <li>
-          Select Notify to compose an email, WhatsApp message, or both. Delivery uses the SMTP and
-          Twilio credentials you save under <a href="#notifications" className="text-primary underline">Email and WhatsApp notifications</a>.
+          Select Notify on a customer, or open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link> and use
+          <strong> Send a custom message</strong>. Enter the collected email and/or WhatsApp number, write the
+          message, and send.
         </li>
       </ol>
     </GuideSection>
@@ -57,6 +58,11 @@ export const SetupGuide: React.FC = () => (
           confirm Channel Readiness is green, and send a test. The test email goes to the owner email
           from your SMTP username; the test WhatsApp goes to the owner WhatsApp number from your
           Twilio sender.
+        </li>
+        <li>
+          To message a customer, use <strong>Send a custom message</strong> on that same page: pick a
+          saved customer or type the collected email / WhatsApp number, write the message, and send.
+          History appears below the form.
         </li>
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">

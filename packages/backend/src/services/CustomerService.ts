@@ -52,6 +52,50 @@ class CustomerService {
       },
     });
   }
+
+  async findOrCreateForMessage(
+    businessId: string,
+    customer: { id?: string | null; name?: string | null; phone?: string | null; email?: string | null }
+  ) {
+    if (customer.id) {
+      const existing = await prisma.customerContact.findFirst({
+        where: { id: customer.id, businessId },
+      });
+      if (!existing) throw new Error('Customer not found');
+      const phone = normalizeCustomerPhone(customer.phone) ?? existing.phone;
+      const email = normalizeCustomerEmail(customer.email) ?? existing.email;
+      const name = String(customer.name || existing.name).trim() || existing.name;
+      return prisma.customerContact.update({
+        where: { id: existing.id },
+        data: {
+          name,
+          phone,
+          email,
+        },
+      });
+    }
+
+    const phone = normalizeCustomerPhone(customer.phone);
+    const email = normalizeCustomerEmail(customer.email);
+    const name = String(customer.name || email || phone || 'Customer').trim();
+    const identityKey = customerIdentityKey(phone, email);
+
+    return prisma.customerContact.upsert({
+      where: { businessId_identityKey: { businessId, identityKey } },
+      create: {
+        businessId,
+        identityKey,
+        name,
+        phone,
+        email,
+      },
+      update: {
+        name,
+        ...(phone ? { phone } : {}),
+        ...(email ? { email } : {}),
+      },
+    });
+  }
 }
 
 export const customerService = new CustomerService();

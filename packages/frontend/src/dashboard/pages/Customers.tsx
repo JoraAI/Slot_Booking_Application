@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import type { CustomerContact } from '../../types'
 
@@ -122,7 +123,10 @@ export const CustomersPage: React.FC = () => {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Customers</h1>
-          <p className="text-sm text-gray-500">Your phonebook updates automatically when customers book.</p>
+          <p className="text-sm text-gray-500">
+            Your phonebook updates automatically when customers book. Use Notify on a row, or send from{' '}
+            <Link to="/dashboard/notifications" className="text-primary underline">Notifications</Link> with the collected email or number.
+          </p>
         </div>
         <button onClick={() => openEdit('new')} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
           + Add Customer
@@ -195,11 +199,11 @@ export const CustomersPage: React.FC = () => {
             <div className="flex gap-4 text-sm">
               <label className={`flex items-center gap-2 ${!notifying.email ? 'opacity-40' : ''}`}>
                 <input type="checkbox" checked={channels.includes('email')} disabled={!notifying.email} onChange={() => toggleChannel('email')} />
-                Email
+                Email{notifying.email ? ` (${notifying.email})` : ' — no email saved'}
               </label>
               <label className={`flex items-center gap-2 ${!notifying.phone ? 'opacity-40' : ''}`}>
                 <input type="checkbox" checked={channels.includes('whatsapp')} disabled={!notifying.phone} onChange={() => toggleChannel('whatsapp')} />
-                WhatsApp
+                WhatsApp{notifying.phone ? ` (${notifying.phone})` : ' — no number saved'}
               </label>
             </div>
             {channels.includes('email') && (
