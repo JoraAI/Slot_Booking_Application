@@ -6,6 +6,9 @@ export const SetupGuide: React.FC = () => (
     <div>
       <h1 className="text-2xl font-bold">Setup Guide</h1>
       <p className="text-sm text-gray-500">Configure customer contacts, notifications, and payment settlement safely.</p>
+      <p className="text-sm mt-2">
+        Need help? Contact <a className="text-primary underline" href="mailto:admin@staffingpros.tech">admin@staffingpros.tech</a>.
+      </p>
     </div>
 
     <GuideSection id="customers" title="Customer phonebook">
@@ -51,6 +54,12 @@ export const SetupGuide: React.FC = () => (
         There is no destination UPI-ID field by design. Razorpay checkout payments belong to the
         account identified by the API keys and settle to that account's verified bank account.
         Entering an arbitrary UPI ID here would not control settlement and would be misleading.
+      </p>
+      <p className="mt-3">
+        On a mobile browser, Razorpay UPI Intent automatically detects and presents installed apps
+        such as Google Pay, PhonePe, Paytm, and BHIM first. The customer must tap their preferred
+        app before the operating system opens it; browsers cannot safely launch an arbitrary
+        payment app without that user choice.
       </p>
     </GuideSection>
   </div>

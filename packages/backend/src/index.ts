@@ -233,6 +233,14 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/owner', ownerRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api', publicRouter);
+// Never let an unknown API route fall through to Express's HTML 404 page.
+// API clients can then reliably show a useful JSON error after a partial or
+// out-of-order deployment.
+app.use('/api', (_req, res) => {
+  res.status(404).json({
+    error: 'API endpoint not found. The backend may need to be redeployed.',
+  });
+});
 
 // Serve frontend static files in production (single-service deployment)
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');

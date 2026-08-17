@@ -60,7 +60,8 @@ export const Notifications: React.FC = () => {
         <h2 className="text-lg font-semibold">Channel Readiness</h2>
         <p className="text-sm text-gray-500">
           Customer email/WhatsApp notifications are sent through the platform SMTP / Twilio
-          senders. Channels whose prerequisites fail cannot be enabled.
+          senders. Channels whose prerequisites fail cannot be enabled. For setup assistance,
+          contact <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
         <Row ok={status?.smtpConfigured} label="SMTP configured (customer + owner emails)" error="SMTP_USER / SMTP_PASS" />
         <Row ok={status?.ownerEmailPresent} label="Owner email present (replyTo / owner alerts)" />

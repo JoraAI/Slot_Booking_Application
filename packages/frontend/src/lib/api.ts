@@ -34,9 +34,22 @@ class ApiClient {
     if (this.getToken()) headers['Authorization'] = `Bearer ${this.getToken()}`
 
     const res = await fetch(`${API_BASE}${url}`, { ...options, headers })
-    const data = await res.json()
+    if (res.status === 204) return undefined as T
+
+    const body = await res.text()
+    let data: any = null
+    try {
+      data = body ? JSON.parse(body) : {}
+    } catch {
+      const returnedHtml = /^\s*</.test(body)
+      const message = returnedHtml
+        ? 'The API returned a web page instead of data. Redeploy the backend and verify VITE_API_BASE_URL points to the backend host. Contact admin@staffingpros.tech if you need help.'
+        : 'The API returned an invalid response. Please try again or contact admin@staffingpros.tech.'
+      throw new ApiError(res.status, message, { contentType: res.headers.get('content-type') })
+    }
+
     if (!res.ok) throw new ApiError(res.status, data.error || 'Request failed', data)
-    return data
+    return data as T
   }
 
   // ---------- Public endpoints ----------
