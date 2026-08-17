@@ -20,6 +20,7 @@ interface BusinessLike {
   timezone: string;
   slotGranularityMinutes: number;
   bookingWindowDays: number;
+  minBookingNoticeHours?: number | null;
 }
 
 interface OccupancyEntry {
@@ -204,12 +205,10 @@ class AvailabilityService {
     }
 
     const candidates = this.generateCandidates(periods, granularity, duration, buffer);
-    const nowMin = this.nowMinutesInTz(tz);
 
     const slots: AvailabilitySlot[] = [];
     for (const candidate of candidates) {
-      // Do not offer slots that have already started today
-      if (daysOut === 0 && candidate <= nowMin) continue;
+      if (this.isTooSoon(business, tz, dateStr, candidate)) continue;
 
       const occupiedEnd = candidate + duration + buffer;
       if (service.resourceMode === 'STAFF_BASED') {
@@ -418,8 +417,14 @@ class AvailabilityService {
     return result;
   }
 
-  private nowMinutesInTz(tz: string): number {
-    return MINUTES(timeService.toTimeStr(new Date(), tz));
+  /** Slots at or before now + minBookingNoticeHours are not offered. */
+  private isTooSoon(business: BusinessLike, tz: string, dateStr: string, startMin: number): boolean {
+    const hours = Math.max(0, Number(business.minBookingNoticeHours) || 0);
+    const earliest = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const earliestDate = timeService.toDateStr(earliest, tz);
+    if (dateStr < earliestDate) return true;
+    if (dateStr > earliestDate) return false;
+    return startMin <= MINUTES(timeService.toTimeStr(earliest, tz));
   }
 
   /**
@@ -454,7 +459,9 @@ class AvailabilityService {
       duration,
       duration,
       0
-    ).map((c) => ({ time: HHMM(c), endTime: HHMM(c + duration) }));
+    )
+      .filter((c) => !this.isTooSoon(business, tz, dateStr, c))
+      .map((c) => ({ time: HHMM(c), endTime: HHMM(c + duration) }));
 
     const { gte: startOfDay, lte: endOfDay } = timeService.dayRangeUtc(dateStr);
     const [bookings, blockedSlots] = await Promise.all([

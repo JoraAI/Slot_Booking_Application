@@ -295,6 +295,7 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
         timezone: business.timezone,
         description: business.description,
         bookingWindowDays: business.bookingWindowDays,
+        minBookingNoticeHours: business.minBookingNoticeHours ?? 0,
         showAvailableCount: business.showAvailableCount,
         branding: {
           logoUrl: business.logoUrl,

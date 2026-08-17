@@ -569,7 +569,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'logoUrl', 'logoPublicId', 'coverImageUrl', 'coverImagePublicId',
       'slotGranularityMinutes', 'remindersEnabled', 'reminderOffsetsMinutes',
       'bookingManagementOtpEnabled', 'bookingManagementOtpChannel',
-      'bookingWindowDays',
+      'bookingWindowDays', 'minBookingNoticeHours',
       'showAvailableCount', 'notifyOwnerEmail', 'notifyOwnerWhatsapp',
       'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerEmail', 'ownerWhatsapp',
       'enableWaitlist', 'enableRecurring', 'enablePayments', 'enableMultiStaff',
@@ -603,6 +603,20 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
     if (updateData.ownerWhatsapp !== undefined) {
       updateData.ownerWhatsapp = normalizeCustomerPhone(updateData.ownerWhatsapp);
+    }
+    if (updateData.bookingWindowDays !== undefined) {
+      const days = Number(updateData.bookingWindowDays);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        return res.status(400).json({ error: 'Booking window must be between 1 and 365 days' });
+      }
+      updateData.bookingWindowDays = days;
+    }
+    if (updateData.minBookingNoticeHours !== undefined) {
+      const hours = Number(updateData.minBookingNoticeHours);
+      if (!Number.isInteger(hours) || hours < 0 || hours > 168) {
+        return res.status(400).json({ error: 'Earliest booking notice must be between 0 and 168 hours' });
+      }
+      updateData.minBookingNoticeHours = hours;
     }
 
     for (const field of ['smtpHost', 'smtpUser', 'smtpFromName', 'twilioAccountSid', 'twilioWhatsappFrom', 'twilioSmsFrom'] as const) {

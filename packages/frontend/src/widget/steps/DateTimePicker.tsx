@@ -61,6 +61,11 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
           </p>
         )}
         {staffName && <p className="text-sm text-gray-500">Availability for {staffName}</p>}
+        {(config.business.minBookingNoticeHours || 0) > 0 && (
+          <p className="text-xs text-gray-500 mt-1">
+            Slots can be booked from {config.business.minBookingNoticeHours} hour{config.business.minBookingNoticeHours === 1 ? '' : 's'} ahead.
+          </p>
+        )}
       </div>
 
       <CalendarPicker

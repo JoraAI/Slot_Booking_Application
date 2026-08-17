@@ -24,6 +24,23 @@ export const SetupGuide: React.FC = () => (
       </ol>
     </GuideSection>
 
+    <GuideSection id="booking-window" title="When customers can book">
+      <ol className="list-decimal pl-5 space-y-2">
+        <li>
+          Open <Link className="text-primary underline" to="/dashboard/settings">Settings → Business Configuration</Link>.
+        </li>
+        <li>
+          <strong>Booking window (days)</strong> is how far ahead customers can book (for example 7 or 30 days).
+        </li>
+        <li>
+          <strong>Earliest booking (hours from now)</strong> is the minimum notice. If you set 4, a customer
+          cannot take a slot in the next 4 hours — they start seeing slots after that. 0 lets them book
+          any remaining slot today.
+        </li>
+        <li>Save All. The public booking page hides too-soon slots automatically.</li>
+      </ol>
+    </GuideSection>
+
     <GuideSection id="notifications" title="Email and WhatsApp notifications">
       <ol className="list-decimal pl-5 space-y-2">
         <li>

@@ -25,6 +25,7 @@ export interface BusinessConfig {
   bookingManagementOtpEnabled: boolean
   bookingManagementOtpChannel: string | null
   bookingWindowDays: number
+  minBookingNoticeHours: number
   showAvailableCount: boolean
   notifyOwnerEmail: boolean
   notifyOwnerWhatsapp: boolean
@@ -78,6 +79,7 @@ export interface PublicConfig {
     timezone: string
     description: string | null
     bookingWindowDays: number
+    minBookingNoticeHours: number
     showAvailableCount: boolean
     branding: {
       logoUrl: string | null

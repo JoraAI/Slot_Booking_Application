@@ -80,6 +80,7 @@ model Business {
   reminderOffsetsMinutes  Int[]     @default([1440, 120])
   remindersEnabled        Boolean   @default(true)
   bookingWindowDays       Int       @default(7)
+  minBookingNoticeHours   Int       @default(0)
   showAvailableCount      Boolean   @default(false)
   bookingManagementOtpEnabled Boolean @default(false)
   bookingManagementOtpChannel String? // 'EMAIL' | 'SMS' | 'EITHER'

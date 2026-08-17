@@ -47,6 +47,7 @@ export const Settings: React.FC = () => {
     bookingManagementOtpEnabled: config?.bookingManagementOtpEnabled ?? false,
     bookingManagementOtpChannel: config?.bookingManagementOtpChannel || 'EMAIL',
     bookingWindowDays: config?.bookingWindowDays || 7,
+    minBookingNoticeHours: config?.minBookingNoticeHours ?? 0,
     showAvailableCount: config?.showAvailableCount || false,
     notifyOwnerEmail: config?.notifyOwnerEmail ?? true,
     notifyOwnerWhatsapp: config?.notifyOwnerWhatsapp ?? false,
@@ -101,6 +102,7 @@ export const Settings: React.FC = () => {
         bookingManagementOtpEnabled: config.bookingManagementOtpEnabled ?? false,
         bookingManagementOtpChannel: config.bookingManagementOtpChannel || 'EMAIL',
         bookingWindowDays: config.bookingWindowDays || 7,
+        minBookingNoticeHours: config.minBookingNoticeHours ?? 0,
         showAvailableCount: config.showAvailableCount || false,
         notifyOwnerEmail: config.notifyOwnerEmail ?? true,
         notifyOwnerWhatsapp: config.notifyOwnerWhatsapp ?? false,
@@ -483,21 +485,28 @@ export const Settings: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Booking Window (days)</label>
-            <input type="number" value={form.bookingWindowDays} onChange={(e) => setForm(p => ({ ...p, bookingWindowDays: parseInt(e.target.value) || 7 }))}
+            <label className="block text-sm font-medium mb-1">Booking window (days)</label>
+            <input type="number" min={1} max={365} value={form.bookingWindowDays} onChange={(e) => setForm(p => ({ ...p, bookingWindowDays: parseInt(e.target.value) || 7 }))}
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">How far ahead customers can book.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Slot Grid Granularity (minutes)</label>
-            <select value={form.slotGranularityMinutes} onChange={(e) => setForm(p => ({ ...p, slotGranularityMinutes: parseInt(e.target.value) || 15 }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
-              <option value={5}>5 minutes</option>
-              <option value={10}>10 minutes</option>
-              <option value={15}>15 minutes</option>
-              <option value={30}>30 minutes</option>
-            </select>
-            <p className="text-xs text-gray-500 mt-1">Duration and parallel capacity are set per service in Services.</p>
+            <label className="block text-sm font-medium mb-1">Earliest booking (hours from now)</label>
+            <input type="number" min={0} max={168} value={form.minBookingNoticeHours} onChange={(e) => setForm(p => ({ ...p, minBookingNoticeHours: Math.max(0, parseInt(e.target.value) || 0) }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Customers can only book slots at least this many hours ahead. 0 allows any remaining slot today.</p>
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Slot Grid Granularity (minutes)</label>
+          <select value={form.slotGranularityMinutes} onChange={(e) => setForm(p => ({ ...p, slotGranularityMinutes: parseInt(e.target.value) || 15 }))}
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
+            <option value={5}>5 minutes</option>
+            <option value={10}>10 minutes</option>
+            <option value={15}>15 minutes</option>
+            <option value={30}>30 minutes</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">Duration and parallel capacity are set per service in Services.</p>
         </div>
         <div className="flex items-center gap-2">
           <input type="checkbox" id="showCount" checked={form.showAvailableCount} onChange={(e) => setForm(p => ({ ...p, showAvailableCount: e.target.checked }))}
