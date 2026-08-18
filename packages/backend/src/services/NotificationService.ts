@@ -2,11 +2,11 @@ import nodemailer from 'nodemailer';
 import prisma from '../lib/prisma';
 import { locationInfo } from './LocationService';
 import {
+  metaWhatsappConfigured,
+  resolveMetaWhatsapp,
   resolveSmtp,
   resolveTwilioSms,
-  resolveTwilioWhatsapp,
   smtpConfigured,
-  twilioWhatsappConfigured,
 } from './notificationCredentials';
 import {
   isValidNotifyEmail,
@@ -27,8 +27,8 @@ class NotificationService {
     return smtpConfigured(business);
   }
 
-  twilioWhatsappConfigured(business?: any): boolean {
-    return twilioWhatsappConfigured(business);
+  metaWhatsappConfigured(business?: any): boolean {
+    return metaWhatsappConfigured(business);
   }
 
   /** Location block for email templates (empty when the salon has no location). */
@@ -87,32 +87,79 @@ class NotificationService {
     }
   }
 
+  private normalizeMetaDestination(value: string): string {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  private async sendMetaWhatsappText(meta: { phoneNumberId: string; accessToken: string }, toDigits: string, message: string): Promise<Response> {
+    const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${meta.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: toDigits,
+        type: 'text',
+        text: { preview_url: false, body: message },
+      }),
+    });
+  }
+
+  private async sendMetaWhatsappTemplate(meta: { phoneNumberId: string; accessToken: string; utilityTemplate: string }, toDigits: string, message: string): Promise<Response> {
+    const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${meta.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: toDigits,
+        type: 'template',
+        template: {
+          name: meta.utilityTemplate,
+          language: { code: 'en' },
+          components: [
+            {
+              type: 'body',
+              parameters: [{ type: 'text', text: message.slice(0, 1024) }],
+            },
+          ],
+        },
+      }),
+    });
+  }
+
   private async sendWhatsApp(to: string, message: string, opts: SendOpts = {}): Promise<void> {
     try {
-      const twilio = resolveTwilioWhatsapp(opts.business);
-      if (!twilio) {
-        const err = new Error('WhatsApp: Twilio is not configured. Add your Account SID, Auth Token, and WhatsApp From number in Settings.');
+      const meta = resolveMetaWhatsapp(opts.business);
+      if (!meta) {
+        const err = new Error('WhatsApp: Meta Cloud API is not configured. Add Phone Number ID and Access Token in Settings.');
         console.log(err.message);
         if (opts.throwOnError) throw err;
         return;
       }
-
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilio.accountSid}/Messages.json`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          From: twilio.from,
-          To: `whatsapp:${to}`,
-          Body: message,
-        }),
-      });
+      const toDigits = this.normalizeMetaDestination(to);
+      if (!toDigits) {
+        throw new Error('WhatsApp destination number is invalid');
+      }
+      let response = await this.sendMetaWhatsappText(meta, toDigits, message);
+      let bodyText = response.ok ? '' : await response.text();
+      // Business-initiated messages outside the customer-service window are rejected
+      // as free-form text. If the owner configured a utility template, retry once.
+      if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
+        response = await this.sendMetaWhatsappTemplate({ ...meta, utilityTemplate: meta.utilityTemplate }, toDigits, message);
+        bodyText = response.ok ? '' : await response.text();
+      }
 
       if (!response.ok) {
-        const err = new Error(`WhatsApp sending failed: ${await response.text()}`);
+        const err = new Error(`WhatsApp sending failed: ${bodyText}`);
         console.error(err.message);
         if (opts.throwOnError) throw err;
       } else {
@@ -608,7 +655,7 @@ class NotificationService {
     if (customers.length === 0) throw new Error('There are no customers in the phonebook yet');
 
     const smtpReady = this.smtpConfigured(business);
-    const whatsappReady = this.twilioWhatsappConfigured(business);
+      const whatsappReady = this.metaWhatsappConfigured(business);
     const unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }> = [];
     let emailed = 0;
     let whatsapped = 0;
@@ -635,7 +682,7 @@ class NotificationService {
 
         if (canWhatsapp) {
           if (whatsappReady) channels.push('whatsapp');
-          else reasons.push('WhatsApp not sent — Twilio is not configured');
+          else reasons.push('WhatsApp not sent — Meta Cloud API is not configured');
         } else if (customer.phone) {
           reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
         } else {
@@ -720,7 +767,7 @@ class NotificationService {
 
   /**
    * Readiness-oriented test send. Reports REAL per-channel success/failure with
-   * a clear reason (owner SMTP/Twilio config, owner destination presence).
+   * a clear reason (owner SMTP/Meta config, owner destination presence).
    */
   async sendTestNotification(businessId: string): Promise<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } }> {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
@@ -745,8 +792,8 @@ class NotificationService {
       }
     }
 
-    if (!this.twilioWhatsappConfigured(business)) {
-      whatsapp.error = 'Twilio WhatsApp is not configured. Add Account SID, Auth Token, and WhatsApp From in Settings.';
+    if (!this.metaWhatsappConfigured(business)) {
+      whatsapp.error = 'Meta Cloud API WhatsApp is not configured. Add Phone Number ID and Access Token in Settings.';
     } else if (!business.ownerWhatsapp) {
       whatsapp.error = 'Owner WhatsApp number is not set';
     } else {

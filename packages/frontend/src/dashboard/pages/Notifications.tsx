@@ -8,7 +8,7 @@ export const Notifications: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<{
     smtpConfigured: boolean
-    twilioWhatsappConfigured: boolean
+    metaWhatsappConfigured: boolean
     frontendUrlConfigured: boolean
     ownerEmailPresent: boolean
     ownerWhatsappPresent: boolean
@@ -174,13 +174,13 @@ export const Notifications: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
         <h2 className="text-lg font-semibold">Channel Readiness</h2>
         <p className="text-sm text-gray-500">
-          Customer email and WhatsApp are sent from the SMTP and Twilio credentials you save in
+          Customer email and WhatsApp are sent from the SMTP and Meta Cloud API credentials you save in
           Settings. Channels whose credentials are missing cannot be enabled.
           Need help? Contact <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
         <Row ok={status?.smtpConfigured} label="SMTP ready (emails send from your mailbox)" error="add SMTP username and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email present (alerts and Reply-To)" />
-        <Row ok={status?.twilioWhatsappConfigured} label="Twilio WhatsApp ready (messages send from your approved sender)" error="add Account SID, Auth Token, and WhatsApp From in Settings" />
+        <Row ok={status?.metaWhatsappConfigured} label="Meta WhatsApp ready (messages send from your Cloud API number)" error="add Phone Number ID and Access Token in Settings" />
         <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />
         <Row ok={status?.frontendUrlConfigured} label="HTTPS frontend URL configured (manage link)" error="FRONTEND_PUBLIC_URL" />
       </div>

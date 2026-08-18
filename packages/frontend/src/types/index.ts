@@ -40,12 +40,19 @@ export interface BusinessConfig {
   smtpFromName: string | null
   smtpPassConfigured?: boolean
   smtpConfigured?: boolean
+  metaWhatsappPhoneNumberId: string | null
+  metaWhatsappBusinessAccountId: string | null
+  metaWhatsappTemplateUtility: string | null
+  metaWhatsappTemplateMarketing: string | null
+  metaWhatsappAccessTokenConfigured?: boolean
+  metaWhatsappConfigured?: boolean
   twilioAccountSid: string | null
-  twilioWhatsappFrom: string | null
   twilioSmsFrom: string | null
   twilioAuthTokenConfigured?: boolean
-  twilioWhatsappConfigured?: boolean
   twilioSmsConfigured?: boolean
+  subscriptionPlan: 'COMMISSION' | 'MONTHLY_799'
+  subscriptionCommissionPercent: number | null
+  subscriptionMonthlyInr: number
   enableWaitlist: boolean
   enableRecurring: boolean
   enablePayments: boolean

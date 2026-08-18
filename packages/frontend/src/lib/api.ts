@@ -334,7 +334,7 @@ class ApiClient {
     return this.request<{
       smtpConfigured: boolean
       twilioSmsConfigured: boolean
-      twilioWhatsappConfigured: boolean
+      metaWhatsappConfigured: boolean
       frontendUrlConfigured: boolean
       locationComplete: boolean
       ownerEmailPresent: boolean

@@ -15,6 +15,13 @@ export type TwilioConfig = {
   from: string;
 };
 
+export type MetaWhatsappConfig = {
+  phoneNumberId: string;
+  accessToken: string;
+  utilityTemplate?: string;
+  marketingTemplate?: string;
+};
+
 type DeliveryBusiness = {
   name?: string | null;
   smtpHost?: string | null;
@@ -27,6 +34,10 @@ type DeliveryBusiness = {
   twilioAuthTokenEnc?: string | null;
   twilioWhatsappFrom?: string | null;
   twilioSmsFrom?: string | null;
+  metaWhatsappPhoneNumberId?: string | null;
+  metaWhatsappAccessTokenEnc?: string | null;
+  metaWhatsappTemplateUtility?: string | null;
+  metaWhatsappTemplateMarketing?: string | null;
 } | null | undefined;
 
 export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
@@ -65,6 +76,28 @@ export function resolveTwilioSms(business?: DeliveryBusiness): TwilioConfig | nu
   return { accountSid, authToken, from };
 }
 
+export function resolveMetaWhatsapp(business?: DeliveryBusiness): MetaWhatsappConfig | null {
+  const phoneNumberId = String(
+    business?.metaWhatsappPhoneNumberId || process.env.META_WHATSAPP_PHONE_NUMBER_ID || ''
+  ).trim();
+  const accessToken = String(
+    decryptSecret(business?.metaWhatsappAccessTokenEnc) || process.env.META_WHATSAPP_ACCESS_TOKEN || ''
+  ).trim();
+  const utilityTemplate = String(
+    business?.metaWhatsappTemplateUtility || process.env.META_WHATSAPP_TEMPLATE_UTILITY || ''
+  ).trim();
+  const marketingTemplate = String(
+    business?.metaWhatsappTemplateMarketing || process.env.META_WHATSAPP_TEMPLATE_MARKETING || ''
+  ).trim();
+  if (!phoneNumberId || !accessToken) return null;
+  return {
+    phoneNumberId,
+    accessToken,
+    ...(utilityTemplate ? { utilityTemplate } : {}),
+    ...(marketingTemplate ? { marketingTemplate } : {}),
+  };
+}
+
 export function smtpConfigured(business?: DeliveryBusiness): boolean {
   return !!resolveSmtp(business);
 }
@@ -75,4 +108,8 @@ export function twilioWhatsappConfigured(business?: DeliveryBusiness): boolean {
 
 export function twilioSmsConfigured(business?: DeliveryBusiness): boolean {
   return !!resolveTwilioSms(business);
+}
+
+export function metaWhatsappConfigured(business?: DeliveryBusiness): boolean {
+  return !!resolveMetaWhatsapp(business);
 }

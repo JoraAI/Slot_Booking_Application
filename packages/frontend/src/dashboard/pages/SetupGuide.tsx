@@ -50,7 +50,7 @@ export const SetupGuide: React.FC = () => (
         </li>
         <li>
           On the same page, open <strong>Email &amp; WhatsApp delivery</strong>. These are <em>your</em>
-          mailbox and Twilio account — they are stored in the database, encrypted, and never shown
+          mailbox and Meta Cloud API account — they are stored in the database, encrypted, and never shown
           again after save. Leave a password/token field blank to keep the saved value.
         </li>
         <li>
@@ -61,10 +61,10 @@ export const SetupGuide: React.FC = () => (
           — do not paste your dashboard password or normal mailbox password.
         </li>
         <li>
-          <strong>WhatsApp:</strong> Twilio Account SID, Auth Token, and WhatsApp From
-          (for example <code>whatsapp:+14155238886</code>). The From value must be a Twilio-approved
-          WhatsApp sender; Meta will not deliver from an arbitrary personal number. Optional SMS From
-          is only needed if you enable SMS OTP for booking management.
+          <strong>WhatsApp:</strong> Meta Phone Number ID and Access Token. Optional template names can be
+          saved for utility/marketing campaigns. Meta requires approved templates for business-initiated
+          messages outside the 24-hour customer-service window. Optional SMS From is only needed if you
+          enable SMS OTP for booking management (Twilio SMS remains separate).
         </li>
         <li>
           Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),
@@ -74,7 +74,7 @@ export const SetupGuide: React.FC = () => (
           Open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link>,
           confirm Channel Readiness is green, and send a test. The test email goes to the owner email
           from your SMTP username; the test WhatsApp goes to the owner WhatsApp number from your
-          Twilio sender.
+          Meta Cloud API number.
         </li>
         <li>
           To message a customer, use <strong>Send a custom message</strong> on that same page: pick a
@@ -86,8 +86,24 @@ export const SetupGuide: React.FC = () => (
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">
         Emails are sent from your SMTP username, with owner email as Reply-To. WhatsApp is sent from
-        your approved Twilio sender; the owner WhatsApp number is included as the customer contact.
+        your Meta Cloud API number; the owner WhatsApp number is included as the customer contact.
         Messages outside Meta's customer-service window may require an approved content template.
+      </p>
+    </GuideSection>
+
+    <GuideSection id="subscription" title="Subscription model">
+      <ol className="list-decimal pl-5 space-y-2">
+        <li>Open <Link className="text-primary underline" to="/dashboard/subscription">Subscription</Link>.</li>
+        <li>Select either <strong>Commission based</strong> or <strong>Monthly ₹799</strong>.</li>
+        <li>If commission is selected, set the percentage you agreed with the salon owner.</li>
+        <li>Save changes. This stores your commercial model for reporting and future billing hooks.</li>
+      </ol>
+    </GuideSection>
+
+    <GuideSection id="owner-app" title="Owner app information">
+      <p>
+        Open <Link className="text-primary underline" to="/dashboard/app-info">Owner App</Link> for a summary
+        of the Reservly owner experience and the mobile-release feature roadmap.
       </p>
     </GuideSection>
 

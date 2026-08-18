@@ -285,13 +285,13 @@ test('B4-6. enabling customer email/WhatsApp without platform prerequisites is r
   assert.strictEqual(email.status, 400);
   assert.match(email.json.error, /SMTP/);
 
-  // Twilio WhatsApp unconfigured -> rejected.
+  // Meta WhatsApp unconfigured -> rejected.
   const wa = await req('PUT', '/owner/config', {
     headers: { Authorization: `Bearer ${token}` },
     body: { notifyCustomerWhatsapp: true, ownerWhatsapp: '+919999999999' },
   });
   assert.strictEqual(wa.status, 400);
-  assert.match(wa.json.error, /Twilio WhatsApp/);
+  assert.match(wa.json.error, /Meta Cloud API/);
 
   // Turning notifications OFF remains allowed without providers.
   const off = await req('PUT', '/owner/config', {

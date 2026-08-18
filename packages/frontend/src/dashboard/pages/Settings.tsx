@@ -21,7 +21,7 @@ export const Settings: React.FC = () => {
   const [providerStatus, setProviderStatus] = useState<{
     smtpConfigured: boolean
     twilioSmsConfigured: boolean
-    twilioWhatsappConfigured: boolean
+    metaWhatsappConfigured: boolean
     frontendUrlConfigured: boolean
     locationComplete: boolean
     ownerEmailPresent: boolean
@@ -62,11 +62,19 @@ export const Settings: React.FC = () => {
     smtpFromName: config?.smtpFromName || '',
     smtpPass: '',
     clearSmtpPass: false,
+    metaWhatsappPhoneNumberId: config?.metaWhatsappPhoneNumberId || '',
+    metaWhatsappBusinessAccountId: config?.metaWhatsappBusinessAccountId || '',
+    metaWhatsappTemplateUtility: config?.metaWhatsappTemplateUtility || '',
+    metaWhatsappTemplateMarketing: config?.metaWhatsappTemplateMarketing || '',
+    metaWhatsappAccessToken: '',
+    clearMetaWhatsappAccessToken: false,
     twilioAccountSid: config?.twilioAccountSid || '',
-    twilioWhatsappFrom: config?.twilioWhatsappFrom || '',
     twilioSmsFrom: config?.twilioSmsFrom || '',
     twilioAuthToken: '',
     clearTwilioAuthToken: false,
+    subscriptionPlan: config?.subscriptionPlan || 'COMMISSION',
+    subscriptionCommissionPercent: config?.subscriptionCommissionPercent ?? null,
+    subscriptionMonthlyInr: config?.subscriptionMonthlyInr ?? 799,
     enableWaitlist: config?.enableWaitlist || false,
     enableRecurring: config?.enableRecurring || false,
     enableMultiStaff: config?.enableMultiStaff || false,
@@ -117,11 +125,19 @@ export const Settings: React.FC = () => {
         smtpFromName: config.smtpFromName || '',
         smtpPass: '',
         clearSmtpPass: false,
+        metaWhatsappPhoneNumberId: config.metaWhatsappPhoneNumberId || '',
+        metaWhatsappBusinessAccountId: config.metaWhatsappBusinessAccountId || '',
+        metaWhatsappTemplateUtility: config.metaWhatsappTemplateUtility || '',
+        metaWhatsappTemplateMarketing: config.metaWhatsappTemplateMarketing || '',
+        metaWhatsappAccessToken: '',
+        clearMetaWhatsappAccessToken: false,
         twilioAccountSid: config.twilioAccountSid || '',
-        twilioWhatsappFrom: config.twilioWhatsappFrom || '',
         twilioSmsFrom: config.twilioSmsFrom || '',
         twilioAuthToken: '',
         clearTwilioAuthToken: false,
+        subscriptionPlan: config.subscriptionPlan || 'COMMISSION',
+        subscriptionCommissionPercent: config.subscriptionCommissionPercent ?? null,
+        subscriptionMonthlyInr: config.subscriptionMonthlyInr ?? 799,
         enableWaitlist: config.enableWaitlist || false,
         enableRecurring: config.enableRecurring || false,
         enableMultiStaff: config.enableMultiStaff || false,
@@ -196,9 +212,11 @@ export const Settings: React.FC = () => {
       setForm(p => ({
         ...p,
         smtpPass: '',
+        metaWhatsappAccessToken: '',
         twilioAuthToken: '',
         razorpayKeySecret: '',
         clearSmtpPass: false,
+        clearMetaWhatsappAccessToken: false,
         clearTwilioAuthToken: false,
         clearRazorpayKeySecret: false,
       }))
@@ -227,7 +245,7 @@ export const Settings: React.FC = () => {
           <p className="text-sm text-gray-500">
             Owner alerts are delivered here. Customer emails are sent from your SMTP
             username below, with this address as Reply-To. WhatsApp messages are sent
-            from your Twilio sender and include this number as the customer contact.
+            from your Meta WhatsApp number and include this number as the customer contact.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -252,7 +270,7 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
             <p className="text-sm text-gray-500">
-              Notifications are sent from <strong>your</strong> mailbox and Twilio WhatsApp sender.
+              Notifications are sent from <strong>your</strong> mailbox and Meta Cloud API WhatsApp number.
               Passwords and auth tokens are stored encrypted and are never shown again after you save.
             </p>
           </div>
@@ -311,38 +329,71 @@ export const Settings: React.FC = () => {
 
         <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
           <div>
-            <label className="block text-sm font-medium mb-1">Twilio Account SID</label>
-            <input value={form.twilioAccountSid} onChange={(e) => setForm(p => ({ ...p, twilioAccountSid: e.target.value }))}
-              placeholder="ACxxxxxxxx" autoComplete="off"
+            <label className="block text-sm font-medium mb-1">Meta Phone Number ID</label>
+            <input value={form.metaWhatsappPhoneNumberId} onChange={(e) => setForm(p => ({ ...p, metaWhatsappPhoneNumberId: e.target.value }))}
+              placeholder="e.g. 123456789012345" autoComplete="off"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Twilio Auth Token</label>
-            <input type="password" value={form.twilioAuthToken} onChange={(e) => setForm(p => ({ ...p, twilioAuthToken: e.target.value, clearTwilioAuthToken: false }))}
-              placeholder={config?.twilioAuthTokenConfigured ? '•••••••• (leave blank to keep)' : 'Auth token'}
+            <label className="block text-sm font-medium mb-1">Meta Access Token</label>
+            <input type="password" value={form.metaWhatsappAccessToken} onChange={(e) => setForm(p => ({ ...p, metaWhatsappAccessToken: e.target.value, clearMetaWhatsappAccessToken: false }))}
+              placeholder={config?.metaWhatsappAccessTokenConfigured ? '•••••••• (leave blank to keep)' : 'Permanent/system-user token'}
               autoComplete="new-password"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">
-              {config?.twilioAuthTokenConfigured ? '✓ Token saved (write-only — never shown). ' : 'Not saved yet. '}
-              {config?.twilioAuthTokenConfigured && (
-                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, twilioAuthToken: '', clearTwilioAuthToken: true }))}>
+              {config?.metaWhatsappAccessTokenConfigured ? '✓ Token saved (write-only — never shown). ' : 'Not saved yet. '}
+              {config?.metaWhatsappAccessTokenConfigured && (
+                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, metaWhatsappAccessToken: '', clearMetaWhatsappAccessToken: true }))}>
                   Remove saved token
                 </button>
               )}
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">WhatsApp From</label>
-            <input value={form.twilioWhatsappFrom} onChange={(e) => setForm(p => ({ ...p, twilioWhatsappFrom: e.target.value }))}
-              placeholder="whatsapp:+14155238886"
+            <label className="block text-sm font-medium mb-1">Meta Business Account ID (optional)</label>
+            <input value={form.metaWhatsappBusinessAccountId} onChange={(e) => setForm(p => ({ ...p, metaWhatsappBusinessAccountId: e.target.value }))}
+              placeholder="e.g. 112233445566778"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            <p className="text-xs text-gray-400 mt-1">Must be a Twilio-approved WhatsApp sender.</p>
+            <p className="text-xs text-gray-400 mt-1">Used for future Meta management APIs.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Utility template name (optional)</label>
+            <input value={form.metaWhatsappTemplateUtility} onChange={(e) => setForm(p => ({ ...p, metaWhatsappTemplateUtility: e.target.value }))}
+              placeholder="booking_update_v1"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">SMS From (OTP)</label>
             <input value={form.twilioSmsFrom} onChange={(e) => setForm(p => ({ ...p, twilioSmsFrom: e.target.value }))}
               placeholder="+14155552671"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Marketing template name (optional)</label>
+            <input value={form.metaWhatsappTemplateMarketing} onChange={(e) => setForm(p => ({ ...p, metaWhatsappTemplateMarketing: e.target.value }))}
+              placeholder="promo_broadcast_v1"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Twilio Account SID (SMS OTP only)</label>
+            <input value={form.twilioAccountSid} onChange={(e) => setForm(p => ({ ...p, twilioAccountSid: e.target.value }))}
+              placeholder="ACxxxxxxxx"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Twilio Auth Token (SMS OTP only)</label>
+            <input type="password" value={form.twilioAuthToken} onChange={(e) => setForm(p => ({ ...p, twilioAuthToken: e.target.value, clearTwilioAuthToken: false }))}
+              placeholder={config?.twilioAuthTokenConfigured ? '•••••••• (leave blank to keep)' : 'Auth token'}
+              autoComplete="new-password"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">
+              {config?.twilioAuthTokenConfigured ? '✓ Token saved for SMS OTP. ' : 'Not saved yet. '}
+              {config?.twilioAuthTokenConfigured && (
+                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, twilioAuthToken: '', clearTwilioAuthToken: true }))}>
+                  Remove saved token
+                </button>
+              )}
+            </p>
           </div>
         </div>
 

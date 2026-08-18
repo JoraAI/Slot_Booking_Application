@@ -17,9 +17,9 @@ import { validateLocation } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
 import { toOwnerConfig } from '../services/ownerDto';
 import {
+  metaWhatsappConfigured,
   smtpConfigured,
   twilioSmsConfigured,
-  twilioWhatsappConfigured,
 } from '../services/notificationCredentials';
 import {
   customerService,
@@ -574,11 +574,14 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerEmail', 'ownerWhatsapp',
       'enableWaitlist', 'enableRecurring', 'enablePayments', 'enableMultiStaff',
       'paymentMode', 'depositAmount', 'depositPercentage',
+      'subscriptionPlan', 'subscriptionCommissionPercent', 'subscriptionMonthlyInr',
       'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
       'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
-      'twilioAccountSid', 'twilioWhatsappFrom', 'twilioSmsFrom',
+      'twilioAccountSid', 'twilioSmsFrom',
+      'metaWhatsappPhoneNumberId', 'metaWhatsappBusinessAccountId',
+      'metaWhatsappTemplateUtility', 'metaWhatsappTemplateMarketing',
     ];
 
     const updateData: any = {};
@@ -618,8 +621,43 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       }
       updateData.minBookingNoticeHours = hours;
     }
+    if (updateData.subscriptionPlan !== undefined) {
+      const plan = String(updateData.subscriptionPlan || '').trim().toUpperCase();
+      if (!['COMMISSION', 'MONTHLY_799'].includes(plan)) {
+        return res.status(400).json({ error: 'Subscription plan must be COMMISSION or MONTHLY_799' });
+      }
+      updateData.subscriptionPlan = plan;
+    }
+    if (updateData.subscriptionCommissionPercent !== undefined) {
+      if (updateData.subscriptionCommissionPercent === null || updateData.subscriptionCommissionPercent === '') {
+        updateData.subscriptionCommissionPercent = null;
+      } else {
+        const pct = Number(updateData.subscriptionCommissionPercent);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
+          return res.status(400).json({ error: 'Commission percent must be between 0 and 30' });
+        }
+        updateData.subscriptionCommissionPercent = Math.round(pct * 100) / 100;
+      }
+    }
+    if (updateData.subscriptionMonthlyInr !== undefined) {
+      const monthly = Number(updateData.subscriptionMonthlyInr);
+      if (!Number.isInteger(monthly) || monthly < 0 || monthly > 50000) {
+        return res.status(400).json({ error: 'Monthly subscription must be between 0 and 50000 INR' });
+      }
+      updateData.subscriptionMonthlyInr = monthly;
+    }
 
-    for (const field of ['smtpHost', 'smtpUser', 'smtpFromName', 'twilioAccountSid', 'twilioWhatsappFrom', 'twilioSmsFrom'] as const) {
+    for (const field of [
+      'smtpHost',
+      'smtpUser',
+      'smtpFromName',
+      'twilioAccountSid',
+      'twilioSmsFrom',
+      'metaWhatsappPhoneNumberId',
+      'metaWhatsappBusinessAccountId',
+      'metaWhatsappTemplateUtility',
+      'metaWhatsappTemplateMarketing',
+    ] as const) {
       if (updateData[field] !== undefined) {
         const value = String(updateData[field] ?? '').trim();
         if (value.length > 255) return res.status(400).json({ error: `${field} is too long` });
@@ -651,6 +689,11 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.twilioAuthTokenEnc = encryptSecret(req.body.twilioAuthToken.trim());
     } else if (req.body.clearTwilioAuthToken === true) {
       updateData.twilioAuthTokenEnc = null;
+    }
+    if (typeof req.body.metaWhatsappAccessToken === 'string' && req.body.metaWhatsappAccessToken.trim() !== '') {
+      updateData.metaWhatsappAccessTokenEnc = encryptSecret(req.body.metaWhatsappAccessToken.trim());
+    } else if (req.body.clearMetaWhatsappAccessToken === true) {
+      updateData.metaWhatsappAccessTokenEnc = null;
     }
 
     // Razorpay secret is WRITE-ONLY: never read back, never echoed.
@@ -749,22 +792,22 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     // settings saves are not blocked; the readiness UI warns about it.
     const merged = { ...existing, ...updateData };
     const smtp = smtpConfigured(merged);
-    const twilioWhatsapp = twilioWhatsappConfigured(merged);
+    const metaWhatsapp = metaWhatsappConfigured(merged);
     const enabling = (field: string) => updateData[field] === true && (existing as any)[field] !== true;
     if (enabling('notifyCustomerEmail') && !smtp) {
       return res.status(400).json({ error: 'Customer email notifications require SMTP credentials in Settings.' });
     }
     if (enabling('notifyCustomerWhatsapp')) {
-      if (!twilioWhatsapp) {
-        return res.status(400).json({ error: 'Customer WhatsApp notifications require Twilio WhatsApp credentials in Settings.' });
+      if (!metaWhatsapp) {
+        return res.status(400).json({ error: 'Customer WhatsApp notifications require Meta Cloud API credentials in Settings.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Customer WhatsApp notifications require the salon owner WhatsApp number (used as the customer contact).' });
       }
     }
     if (enabling('notifyOwnerWhatsapp')) {
-      if (!twilioWhatsapp) {
-        return res.status(400).json({ error: 'Owner WhatsApp notifications require Twilio WhatsApp credentials in Settings.' });
+      if (!metaWhatsapp) {
+        return res.status(400).json({ error: 'Owner WhatsApp notifications require Meta Cloud API credentials in Settings.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Owner WhatsApp notifications require an owner WhatsApp number.' });
@@ -1248,9 +1291,10 @@ ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
   res.json({
     smtpConfigured: smtpConfigured(business),
     twilioSmsConfigured: twilioSmsConfigured(business),
-    twilioWhatsappConfigured: twilioWhatsappConfigured(business),
+    metaWhatsappConfigured: metaWhatsappConfigured(business),
     smtpPassConfigured: !!business?.smtpPassEnc,
     twilioAuthTokenConfigured: !!business?.twilioAuthTokenEnc,
+    metaWhatsappAccessTokenConfigured: !!business?.metaWhatsappAccessTokenEnc,
     frontendUrlConfigured: isHttpsAbsolute,
     locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),
     ownerEmailPresent: !!business?.ownerEmail,

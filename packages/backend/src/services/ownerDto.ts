@@ -1,7 +1,7 @@
 import {
+  metaWhatsappConfigured,
   smtpConfigured,
   twilioSmsConfigured,
-  twilioWhatsappConfigured,
 } from './notificationCredentials';
 
 const HIDDEN_FIELDS = [
@@ -9,6 +9,7 @@ const HIDDEN_FIELDS = [
   'razorpayKeySecret',
   'smtpPassEnc',
   'twilioAuthTokenEnc',
+  'metaWhatsappAccessTokenEnc',
 ] as const;
 
 export function toOwnerConfig(business: Record<string, any>) {
@@ -19,8 +20,9 @@ export function toOwnerConfig(business: Record<string, any>) {
     razorpayKeySecretConfigured: !!business.razorpayKeySecret,
     smtpPassConfigured: !!business.smtpPassEnc,
     twilioAuthTokenConfigured: !!business.twilioAuthTokenEnc,
+    metaWhatsappAccessTokenConfigured: !!business.metaWhatsappAccessTokenEnc,
     smtpConfigured: smtpConfigured(business),
-    twilioWhatsappConfigured: twilioWhatsappConfigured(business),
+    metaWhatsappConfigured: metaWhatsappConfigured(business),
     twilioSmsConfigured: twilioSmsConfigured(business),
   };
 }

@@ -136,7 +136,7 @@ test('2. razorpay secret is write-only and never returned', async () => {
   assert.strictEqual(afterClear.razorpayKeySecret, null);
 });
 
-test('2b. SMTP password and Twilio token are encrypted, write-only, and never returned', async () => {
+test('2b. SMTP password and provider tokens are encrypted, write-only, and never returned', async () => {
   const token = jwt.sign({ businessId: business.id, email: business.ownerEmail }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '1h' } as any);
 
   const write = await req('PUT', '/owner/config', {
@@ -146,7 +146,8 @@ test('2b. SMTP password and Twilio token are encrypted, write-only, and never re
       smtpPass: 'smtp-secret-value',
       twilioAccountSid: 'ACtestsid',
       twilioAuthToken: 'twilio-secret-value',
-      twilioWhatsappFrom: 'whatsapp:+14155238886',
+      metaWhatsappPhoneNumberId: '123456789012345',
+      metaWhatsappAccessToken: 'meta-secret-value',
     },
   });
   assert.strictEqual(write.status, 200, write.json?.error);
@@ -156,16 +157,19 @@ test('2b. SMTP password and Twilio token are encrypted, write-only, and never re
   assert.ok(!('twilioAuthTokenEnc' in write.json));
   assert.ok(!JSON.stringify(write.json).includes('smtp-secret-value'));
   assert.ok(!JSON.stringify(write.json).includes('twilio-secret-value'));
+  assert.ok(!JSON.stringify(write.json).includes('meta-secret-value'));
   assert.strictEqual(write.json.smtpUser, 'salon@example.com');
   assert.strictEqual(write.json.smtpPassConfigured, true);
   assert.strictEqual(write.json.twilioAuthTokenConfigured, true);
+  assert.strictEqual(write.json.metaWhatsappAccessTokenConfigured, true);
   assert.strictEqual(write.json.smtpConfigured, true);
-  assert.strictEqual(write.json.twilioWhatsappConfigured, true);
+  assert.strictEqual(write.json.metaWhatsappConfigured, true);
 
   const row = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
   assert.ok(row.smtpPassEnc && row.smtpPassEnc.startsWith('enc:v1:'));
   assert.ok(!row.smtpPassEnc.includes('smtp-secret-value'));
   assert.ok(row.twilioAuthTokenEnc && row.twilioAuthTokenEnc.startsWith('enc:v1:'));
+  assert.ok(row.metaWhatsappAccessTokenEnc && row.metaWhatsappAccessTokenEnc.startsWith('enc:v1:'));
 
   const me = await req('GET', '/owner/me', { headers: { Authorization: `Bearer ${token}` } });
   assert.ok(!('smtpPassEnc' in me.json));
@@ -181,11 +185,12 @@ test('2b. SMTP password and Twilio token are encrypted, write-only, and never re
 
   const clear = await req('PUT', '/owner/config', {
     headers: { Authorization: `Bearer ${token}` },
-    body: { clearSmtpPass: true, clearTwilioAuthToken: true },
+    body: { clearSmtpPass: true, clearTwilioAuthToken: true, clearMetaWhatsappAccessToken: true },
   });
   assert.strictEqual(clear.status, 200);
   assert.strictEqual(clear.json.smtpPassConfigured, false);
   assert.strictEqual(clear.json.twilioAuthTokenConfigured, false);
+  assert.strictEqual(clear.json.metaWhatsappAccessTokenConfigured, false);
 });
 
 test('3. waitlist delete returns a clean 404 for missing entries (public + owner)', async () => {

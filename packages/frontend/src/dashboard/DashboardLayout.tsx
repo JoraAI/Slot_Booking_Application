@@ -20,6 +20,8 @@ const navItems = [
   { path: '/dashboard/qr-code', label: 'QR Code', icon: '🔳' },
   { path: '/dashboard/notifications', label: 'Notifications', icon: '🔔' },
   { path: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
+  { path: '/dashboard/subscription', label: 'Subscription', icon: '🧾' },
+  { path: '/dashboard/app-info', label: 'Owner App', icon: '📱' },
   { path: '/dashboard/setup-guide', label: 'Setup Guide', icon: '❓' },
 ]
 

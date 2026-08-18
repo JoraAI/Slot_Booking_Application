@@ -20,6 +20,8 @@ import { PageBuilder } from './dashboard/pages/PageBuilder'
 import { QRCodePage } from './dashboard/pages/QRCodePage'
 import { CustomersPage } from './dashboard/pages/Customers'
 import { SetupGuide } from './dashboard/pages/SetupGuide'
+import { SubscriptionPage } from './dashboard/pages/SubscriptionPage'
+import { OwnerAppInfoPage } from './dashboard/pages/OwnerAppInfoPage'
 import { useStore } from './store'
 import { useEmbedMode } from './hooks'
 import { PageSections } from './widget/PageSections'
@@ -60,6 +62,8 @@ export default function App() {
         <Route path="qr-code" element={<QRCodePage />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="subscription" element={<SubscriptionPage />} />
+        <Route path="app-info" element={<OwnerAppInfoPage />} />
         <Route path="setup-guide" element={<SetupGuide />} />
       </Route>
 
