@@ -229,6 +229,13 @@ class ApiClient {
     return this.request<void>(`/owner/block/${id}`, { method: 'DELETE' })
   }
 
+  updateBlockedSlot(id: string, data: Record<string, unknown>) {
+    return this.request<BlockedSlot>(`/owner/block/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
   getBlockedSlots(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<BlockedSlot[]>(`/owner/blocks${qs}`)

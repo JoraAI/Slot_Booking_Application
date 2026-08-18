@@ -416,21 +416,115 @@ ownerRouter.delete('/bookings/:id', async (req: AuthRequest, res: Response) => {
  *       400:
  *         description: Invalid request
  */
+const hhmm = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Time must be HH:mm').transform((v) => v.slice(0, 5))
+
+const blockSlotSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  startTime: hhmm,
+  endTime: hhmm,
+  staffId: z.string().min(1).nullable().optional(),
+  reason: z.string().max(200).nullable().optional(),
+});
+
+async function resolveBlockStaffId(businessId: string, staffId: string | null | undefined): Promise<string | null> {
+  if (!staffId) return null;
+  const staff = await prisma.staff.findFirst({
+    where: { id: staffId, businessId, isActive: true },
+    select: { id: true },
+  });
+  if (!staff) throw new Error('Staff member not found');
+  return staff.id;
+}
+
 ownerRouter.post('/block', async (req: AuthRequest, res: Response) => {
   try {
-    const { date, startTime, endTime, staffId, reason } = req.body;
+    const parsed = blockSlotSchema.parse(req.body);
+    if (parsed.endTime <= parsed.startTime) {
+      return res.status(400).json({ error: 'End time must be after start time' });
+    }
+    const staffId = await resolveBlockStaffId(req.owner!.businessId, parsed.staffId);
     const block = await prisma.blockedSlot.create({
       data: {
         businessId: req.owner!.businessId,
-        date: timeService.dateToUtcMidnight(date),
-        startTime,
-        endTime,
-        staffId: staffId || null,
-        reason: reason || null,
+        date: timeService.dateToUtcMidnight(parsed.date),
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        staffId,
+        reason: parsed.reason?.trim() || null,
       },
+      include: { staff: true },
     });
     res.status(201).json(block);
   } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * @openapi
+ * /owner/block/{id}:
+ *   put:
+ *     tags: [Owner - Block Slots]
+ *     summary: Update a blocked slot
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, startTime, endTime]
+ *             properties:
+ *               date: { type: string, format: date }
+ *               startTime: { type: string }
+ *               endTime: { type: string }
+ *               staffId: { type: string, nullable: true }
+ *               reason: { type: string, nullable: true }
+ *     responses:
+ *       200:
+ *         description: Block updated
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: Block not found
+ */
+ownerRouter.put('/block/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = blockSlotSchema.parse(req.body);
+    if (parsed.endTime <= parsed.startTime) {
+      return res.status(400).json({ error: 'End time must be after start time' });
+    }
+    const existing = await prisma.blockedSlot.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Blocked slot not found' });
+
+    const staffId = await resolveBlockStaffId(req.owner!.businessId, parsed.staffId);
+    const block = await prisma.blockedSlot.update({
+      where: { id: existing.id },
+      data: {
+        date: timeService.dateToUtcMidnight(parsed.date),
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        staffId,
+        reason: parsed.reason?.trim() || null,
+      },
+      include: { staff: true },
+    });
+    res.json(block);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
     res.status(400).json({ error: error.message });
   }
 });
@@ -506,7 +600,7 @@ ownerRouter.get('/blocks', async (req: AuthRequest, res: Response) => {
     const blocks = await prisma.blockedSlot.findMany({
       where,
       include: { staff: true },
-      orderBy: { date: 'asc' },
+      orderBy: [{ date: 'desc' }, { startTime: 'asc' }],
     });
     res.json(blocks);
   } catch (error: any) {
