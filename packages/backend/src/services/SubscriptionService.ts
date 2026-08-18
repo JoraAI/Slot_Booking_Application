@@ -45,6 +45,7 @@ class SubscriptionService {
       select: {
         id: true,
         timezone: true,
+        createdAt: true,
         subscriptionPlan: true,
         subscriptionCommissionPercent: true,
         subscriptionMonthlyInr: true,
@@ -52,11 +53,28 @@ class SubscriptionService {
         subscriptionPaidUntil: true,
         subscriptionCommissionPaidForMonth: true,
         subscriptionCommissionPaidInr: true,
+        subscriptionLastPaidAt: true,
       },
     });
 
     const tz = business.timezone || 'Asia/Kolkata';
     const plan = (business.subscriptionPlan || 'COMMISSION') as SubscriptionPlan;
+
+    // Trial handling:
+    // There is no explicit "trial" column in the DB schema. For now, interpret
+    // "trial" as: account is still in ACTIVE state but has never been paid yet,
+    // and it is within an initial grace period.
+    //
+    // This ensures trial businesses are not paused (availability/booking remain usable).
+    const trialDays = Math.max(0, Number(process.env.SUBSCRIPTION_TRIAL_DAYS ?? 14));
+    const withinTrialWindow =
+      !!business.createdAt &&
+      now.getTime() <= business.createdAt.getTime() + trialDays * 24 * 60 * 60 * 1000;
+    const neverPaidYet =
+      !business.subscriptionPaidUntil &&
+      !business.subscriptionCommissionPaidForMonth &&
+      !business.subscriptionLastPaidAt;
+    const isTrial = business.subscriptionStatus === 'ACTIVE' && withinTrialWindow && neverPaidYet;
 
     if (plan === 'COMMISSION') {
       const monthKey = currentMonthKey(tz, now);
@@ -84,6 +102,18 @@ class SubscriptionService {
       // If there is any due for the month and it isn't paid, mark overdue.
       const status: 'ACTIVE' | 'PAST_DUE' = isActive ? 'ACTIVE' : 'PAST_DUE';
 
+      if (isTrial) {
+        return {
+          plan,
+          status: 'ACTIVE',
+          isActive: true,
+          dueInr,
+          paidInr,
+          currentMonthKey: dueInr > 0 ? monthKey : null,
+          currentCycleEndsAt: dueInr > 0 ? lte.toISOString() : null,
+        };
+      }
+
       return {
         plan,
         status,
@@ -103,6 +133,18 @@ class SubscriptionService {
     const paidUntil = business.subscriptionPaidUntil ? new Date(business.subscriptionPaidUntil) : null;
     const isActive = !!paidUntil && paidUntil.getTime() > now.getTime();
     const status: 'ACTIVE' | 'PAST_DUE' = isActive ? 'ACTIVE' : 'PAST_DUE';
+
+    if (isTrial) {
+      return {
+        plan,
+        status: 'ACTIVE',
+        isActive: true,
+        dueInr,
+        paidInr,
+        currentMonthKey: null,
+        currentCycleEndsAt: isActive ? paidUntil?.toISOString() ?? null : null,
+      };
+    }
 
     return {
       plan,
