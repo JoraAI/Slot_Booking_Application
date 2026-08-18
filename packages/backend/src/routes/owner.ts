@@ -1304,8 +1304,86 @@ ownerRouter.post('/subscription/select', async (req: AuthRequest, res: Response)
   }
 });
 
-// For now this endpoint “activates” the plan by marking the current due as paid.
-// In production, wire this to Razorpay webhook/verification.
+ownerRouter.post('/subscription/pay', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const view = await subscriptionService.getSubscriptionView(businessId);
+    if (view.dueInr <= 0) {
+      return res.json({ alreadyPaid: true });
+    }
+
+    const keyId = process.env.RAZORPAY_KEY_ID || '';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    if (!keyId || !keySecret) {
+      return res.status(500).json({ error: 'Platform payment gateway not configured' });
+    }
+
+    const receipt = `sub_${businessId.slice(0, 8)}_${Date.now()}`;
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: Math.round(view.dueInr * 100),
+        currency: 'INR',
+        receipt,
+        payment_capture: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const err: any = await response.json().catch(() => ({}));
+      return res.status(502).json({ error: err?.error?.description || 'Failed to create payment order' });
+    }
+
+    const order: any = await response.json();
+    res.json({
+      orderId: order.id,
+      amountInr: view.dueInr,
+      amountPaise: order.amount,
+      currency: order.currency,
+      keyId,
+      plan: view.plan,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/subscription/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      razorpay_order_id: z.string(),
+      razorpay_payment_id: z.string(),
+      razorpay_signature: z.string(),
+    });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = schema.parse(req.body);
+
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    if (!keySecret) {
+      return res.status(500).json({ error: 'Platform payment gateway not configured' });
+    }
+
+    const crypto = await import('crypto');
+    const expectedSig = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSig !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed' });
+    }
+
+    const businessId = req.owner!.businessId;
+    const r = await subscriptionService.markPaid(businessId);
+    res.json({ ok: true, ...r });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 ownerRouter.post('/subscription/mark-paid', async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;

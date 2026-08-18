@@ -361,6 +361,25 @@ class ApiClient {
     })
   }
 
+  createSubscriptionPayment() {
+    return this.request<{
+      alreadyPaid?: boolean
+      orderId?: string
+      amountInr?: number
+      amountPaise?: number
+      currency?: string
+      keyId?: string
+      plan?: string
+    }>('/owner/subscription/pay', { method: 'POST', body: JSON.stringify({}) })
+  }
+
+  verifySubscriptionPayment(data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+    return this.request<{ ok: boolean; dueInr: number; plan: string }>('/owner/subscription/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   markSubscriptionPaid() {
     return this.request<{ ok: boolean; dueInr: number; plan: string }>('/owner/subscription/mark-paid', {
       method: 'POST',
