@@ -66,7 +66,13 @@ async function downloadImage(url: string): Promise<Buffer> {
 async function storeUniqueImage(businessId: string, sourceUrl: string): Promise<string> {
   const bytes = await downloadImage(sourceUrl);
   const asset = await createMediaAsset(businessId, bytes);
-  return `/api/media/${asset.id}`;
+  const row = await prisma.mediaAsset.findUniqueOrThrow({
+    where: { id: asset.id },
+    select: { mimeType: true, data: true },
+  });
+  // Inline data URL so the public/dashboard UI can render even if /api/media
+  // is not on the currently deployed API process. Bytes remain in MediaAsset.
+  return `data:${row.mimeType};base64,${Buffer.from(row.data).toString('base64')}`;
 }
 
 /**

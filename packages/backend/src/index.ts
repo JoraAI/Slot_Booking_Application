@@ -226,7 +226,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', media: true, timestamp: new Date().toISOString() });
 });
 
 // Routes. Owner + internal namespaces are mounted BEFORE the public router so

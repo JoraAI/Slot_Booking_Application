@@ -140,9 +140,10 @@ export async function serveMediaAsset(req: Request, res: Response) {
   if (!asset) return res.status(404).json({ error: 'Image not found' });
 
   res.setHeader('Content-Type', asset.mimeType);
-  res.setHeader('Content-Length', String(asset.byteSize));
+  res.setHeader('Content-Length', String(Buffer.from(asset.data).length));
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('ETag', `"${id}"`);
   if (req.headers['if-none-match'] === `"${id}"`) return res.status(304).end();
-  return res.status(200).end(Buffer.from(asset.data));
+  return res.status(200).send(Buffer.from(asset.data));
 }

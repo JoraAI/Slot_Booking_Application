@@ -19,8 +19,13 @@ import { businessResolver } from '../services/BusinessResolver';
 import { locationInfo } from '../services/LocationService';
 import { bookingManagementService } from '../services/BookingManagementService';
 import { subscriptionService } from '../services/SubscriptionService';
+import { serveMediaAsset } from '../services/MediaService';
 
 export const publicRouter = Router();
+
+publicRouter.get('/media/:id', (req, res) => {
+  void serveMediaAsset(req, res);
+});
 
 /**
  * Embed-origin enforcement. Only applies when the embedding allowlist is
@@ -36,7 +41,7 @@ async function embedOriginGuard(req: Request, res: Response, next: NextFunction)
     // `router.use` middleware sees no `:identifier` param yet; parse it from the path.
     const segments = req.path.split('/').filter(Boolean);
     const identifier = segments[0];
-    if (!identifier || identifier === 'signup' || identifier.startsWith('owner') || identifier.startsWith('internal')) {
+    if (!identifier || identifier === 'signup' || identifier === 'media' || identifier.startsWith('owner') || identifier.startsWith('internal')) {
       return next();
     }
     const business = await businessResolver.resolve(identifier);
