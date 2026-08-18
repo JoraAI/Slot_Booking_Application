@@ -359,11 +359,19 @@ export const ServicesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
-                  <button onClick={() => toggleServiceActive(svc)} className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                    <span className={`relative w-9 h-5 rounded-full transition ${svc.isActive ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'}`}>
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${svc.isActive ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  <button
+                    type="button"
+                    onClick={() => toggleServiceActive(svc)}
+                    className="inline-flex items-center gap-2 h-8 text-xs font-medium text-gray-600 dark:text-gray-300"
+                  >
+                    <span
+                      className={`relative inline-block w-9 h-5 shrink-0 rounded-full transition-colors ${svc.isActive ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 block w-4 h-4 bg-white rounded-full shadow transition-transform ${svc.isActive ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
                     </span>
-                    {svc.isActive ? 'Live' : 'Hidden'}
+                    <span className="leading-none">{svc.isActive ? 'Live' : 'Hidden'}</span>
                   </button>
                   <div className="flex items-center gap-1">
                     <button onClick={() => setHoursEditor({ serviceId: svc.id, name: svc.name })} className="px-2.5 py-1.5 text-xs rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">Hours</button>
