@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { ensureServiceImages } from './serviceImages';
 
 const prisma = new PrismaClient();
 
@@ -295,12 +296,34 @@ async function main() {
     ] });
   }
 
+  const eclatServices = await prisma.service.findMany({
+    where: { businessId: eclat.id },
+    select: { id: true, name: true, imageUrl: true },
+  });
+  const demoServices = await prisma.service.findMany({
+    where: { businessId: business.id },
+    select: { id: true, name: true, imageUrl: true },
+  });
+  const demoImages = await ensureServiceImages({
+    businessId: business.id,
+    services: demoServices,
+    coverImageUrl: business.coverImageUrl,
+    setCover: true,
+  });
+  const eclatImages = await ensureServiceImages({
+    businessId: eclat.id,
+    services: eclatServices,
+    coverImageUrl: eclat.coverImageUrl,
+    setCover: true,
+  });
+
   console.log(`Seeded business: ${business.name} (${business.slug})`);
   console.log(`Public code: ${business.publicCode}`);
   console.log('Login: owner@demosalon.com / admin123');
   console.log(`Seeded business: ${eclat.name} (${eclat.slug})`);
   console.log(`Public code: ${eclat.publicCode}`);
   console.log('Login: owner@eclatunisexsalon.in / admin123');
+  console.log(`Service images: demo +${demoImages.attached}${demoImages.cover ? ' (cover)' : ''}, eclat +${eclatImages.attached}${eclatImages.cover ? ' (cover)' : ''}`);
 }
 
 main()

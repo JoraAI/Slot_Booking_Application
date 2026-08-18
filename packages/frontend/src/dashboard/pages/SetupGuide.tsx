@@ -91,6 +91,17 @@ export const SetupGuide: React.FC = () => (
       </p>
     </GuideSection>
 
+    <GuideSection id="images" title="Logo, cover, and service images">
+      <ol className="list-decimal pl-5 space-y-2">
+        <li>
+          In <Link className="text-primary underline" to="/dashboard/settings">Settings</Link> or
+          {' '}<Link className="text-primary underline" to="/dashboard/services">Services</Link>, click
+          Upload next to the image field, or paste a public image URL.
+        </li>
+        <li>JPEG, PNG, and WebP up to 2MB. Images are compressed to WebP and stored in Reservly so about 10 salons fit on the free database. Save the page after the preview appears.</li>
+      </ol>
+    </GuideSection>
+
     <GuideSection id="subscription" title="Subscription model">
       <ol className="list-decimal pl-5 space-y-2">
         <li>Open <Link className="text-primary underline" to="/dashboard/subscription">Subscription</Link>.</li>

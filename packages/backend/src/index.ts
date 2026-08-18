@@ -9,6 +9,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { publicRouter } from './routes/public';
 import { ownerRouter } from './routes/owner';
 import { internalRouter } from './routes/internal';
+import { serveMediaAsset } from './services/MediaService';
 
 const app = express();
 // Render/Fly inject PORT (often 10000). Local default stays 3001.
@@ -219,6 +220,7 @@ app.use(cors({
   origin: [process.env.FRONTEND_URL || 'http://localhost:5173'],
   credentials: true,
 }));
+app.use('/api/owner/media/upload', express.json({ limit: '6mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -230,6 +232,9 @@ app.get('/api/health', (_req, res) => {
 // Routes. Owner + internal namespaces are mounted BEFORE the public router so
 // the public `/:identifier/...` routes can never shadow `/api/owner/...` or
 // `/api/internal/...` (e.g. identifier="owner" must not capture owner routes).
+app.get('/api/media/:id', (req, res) => {
+  void serveMediaAsset(req, res);
+});
 app.use('/api/owner', ownerRouter);
 app.use('/api/internal', internalRouter);
 app.use('/api', publicRouter);

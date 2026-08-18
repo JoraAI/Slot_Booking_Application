@@ -2,15 +2,24 @@ import React, { useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 
+const MAX_BYTES = 2 * 1024 * 1024
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.onerror = () => reject(new Error('Could not read the image file'))
+    reader.readAsDataURL(file)
+  })
+}
+
 /**
- * Cloudinary upload button.
- *
- * Fetches a short-lived signed upload signature from the backend
- * (`POST /api/owner/media/signature`) — the API secret never leaves the
- * server — then uploads the file directly to Cloudinary from the browser.
- *
- * When Cloudinary is not configured the signature endpoint returns 503 and the
- * user gets a clear error; text-based configuration remains fully usable.
+ * Uploads an image to Postgres via POST /owner/media/upload and returns a
+ * stable `/api/media/:id` URL for logo, cover, and service fields.
  */
 export const MediaUploadButton: React.FC<{
   onUploaded: (secureUrl: string, publicId: string) => void
@@ -24,37 +33,13 @@ export const MediaUploadButton: React.FC<{
   const handleFile = async (file: File) => {
     setUploading(true)
     try {
-      let signature
-      try {
-        signature = await api.getMediaSignature()
-      } catch (e: any) {
-        toast.error(
-          e?.status === 503
-            ? 'Media upload is not configured for this workspace. Add Cloudinary credentials on the server, or paste an image URL below.'
-            : e?.message || 'Could not reach the media upload service'
-        )
+      if (file.size > MAX_BYTES) {
+        toast.error('Image too large (max 2MB)')
         return
       }
-
-      if (file.size > signature.maxFileSizeBytes) {
-        toast.error(`Image too large (max ${Math.round(signature.maxFileSizeBytes / 1024 / 1024)}MB)`)
-        return
-      }
-
-      const body = new FormData()
-      body.append('file', file)
-      body.append('cloud_name', signature.cloudName)
-      body.append('api_key', signature.apiKey)
-      body.append('timestamp', String(signature.timestamp))
-      body.append('folder', signature.folder)
-      body.append('signature', signature.signature)
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`, { method: 'POST', body })
-      const data = await res.json()
-      if (!res.ok || !data.secure_url) {
-        throw new Error(data?.error?.message || 'Upload failed')
-      }
-      onUploaded(data.secure_url, data.public_id)
+      const dataBase64 = await fileToBase64(file)
+      const uploaded = await api.uploadMedia({ mimeType: file.type || 'image/jpeg', dataBase64 })
+      onUploaded(uploaded.url, uploaded.publicId || '')
       toast.success('Image uploaded')
     } catch (e: any) {
       toast.error(e.message || 'Upload failed')

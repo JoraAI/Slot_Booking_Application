@@ -521,12 +521,12 @@ class ApiClient {
     return this.request<void>(`/owner/page-sections/${id}`, { method: 'DELETE' })
   }
 
-  // ---------- Media (Cloudinary) ----------
+  // ---------- Media (Postgres) ----------
 
-  getMediaSignature() {
-    return this.request<{ cloudName: string; apiKey: string; signature: string; timestamp: number; folder: string; maxFileSizeBytes: number; allowedFormats: string[] }>('/owner/media/signature', {
+  uploadMedia(data: { mimeType: string; dataBase64: string }) {
+    return this.request<{ url: string; publicId: string | null }>('/owner/media/upload', {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify(data),
     })
   }
 

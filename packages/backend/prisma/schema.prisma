@@ -153,8 +153,21 @@ model Business {
   managementOtps          BookingManagementOtp[]
   customerContacts        CustomerContact[]
   customerNotifications   CustomerNotification[]
+  mediaAssets             MediaAsset[]
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  mimeType    String
+  byteSize    Int
+  data        Bytes
+  createdAt   DateTime @default(now())
+
+  @@index([businessId])
 }
 
 model WorkingHour {

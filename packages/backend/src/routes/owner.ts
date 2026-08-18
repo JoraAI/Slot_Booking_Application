@@ -28,6 +28,7 @@ import {
   normalizeCustomerEmail,
   normalizeCustomerPhone,
 } from '../services/CustomerService';
+import { createMediaAsset, decodeImageBase64, publicMediaUrl } from '../services/MediaService';
 
 export const ownerRouter = Router();
 
@@ -2362,43 +2363,31 @@ ownerRouter.get('/qr', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ---------- Media (Cloudinary signed upload) ----------
+// ---------- Media (Postgres BYTEA) ----------
 
-/**
- * Backend-signed Cloudinary upload credentials. The frontend uploads media
- * directly to Cloudinary using these params; the API secret is never exposed.
- * Requires CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET.
- */
-ownerRouter.post('/media/signature', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/media/upload', async (req: AuthRequest, res: Response) => {
   try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
-    if (!cloudName || !apiKey || !apiSecret) {
-      return res.status(503).json({ error: 'Media upload is not configured for this workspace' });
+    const parsed = z.object({
+      mimeType: z.string().optional(),
+      dataBase64: z.string().min(1),
+    }).parse(req.body);
+
+    let bytes: Buffer;
+    try {
+      bytes = decodeImageBase64(parsed.dataBase64);
+    } catch {
+      return res.status(400).json({ error: 'Invalid image data' });
     }
 
-    const business = await prisma.business.findUnique({
-      where: { id: req.owner!.businessId },
-      select: { publicCode: true },
-    });
-    if (!business) return res.status(404).json({ error: 'Business not found' });
-
-    const folder = `${process.env.CLOUDINARY_FOLDER_PREFIX || 'reservly-dev'}/${business.publicCode}`;
-    const timestamp = Math.round(Date.now() / 1000);
-    const toSign = `folder=${folder}&timestamp=${timestamp}`;
-    const signature = require('crypto').createHmac('sha256', apiSecret).update(toSign).digest('hex');
-
-    res.json({
-      cloudName,
-      apiKey,
-      signature,
-      timestamp,
-      folder,
-      maxFileSizeBytes: 5 * 1024 * 1024,
-      allowedFormats: ['jpg', 'png', 'webp'],
+    const asset = await createMediaAsset(req.owner!.businessId, bytes);
+    res.status(201).json({
+      url: publicMediaUrl(asset.id, req),
+      publicId: asset.id,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
