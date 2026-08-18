@@ -62,7 +62,8 @@ class RefundService {
     business: { id: string },
     bookingId: string
   ): Promise<{ booking: any; refundIntent: any | null; createdIntent: boolean }> {
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(
+      async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'cancel:' + bookingId}, 0))`;
 
       const fresh = await tx.booking.findFirst({
@@ -90,7 +91,9 @@ class RefundService {
         await tx.booking.update({ where: { id: cancelled.id }, data: { paymentStatus: 'refund_pending' } });
       }
       return { booking: cancelled, refundIntent, createdIntent: created };
-    });
+      },
+      { timeout: 20_000 }
+    );
   }
 
   /**
@@ -101,7 +104,8 @@ class RefundService {
     businessId: string,
     booking: { id: string }
   ): Promise<{ refundIntent: any | null; createdIntent: boolean }> {
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(
+      async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'refund:' + booking.id}, 0))`;
       const fresh = await tx.booking.findFirst({ where: { id: booking.id, businessId } });
       if (!fresh) {
@@ -114,7 +118,9 @@ class RefundService {
         await tx.booking.update({ where: { id: fresh.id }, data: { paymentStatus: 'refund_pending' } });
       }
       return { refundIntent, createdIntent: created };
-    });
+      },
+      { timeout: 20_000 }
+    );
   }
 
   /** Create or return the single durable refund intent for a booking. */

@@ -13,6 +13,7 @@ import { reminderService } from '../services/ReminderService';
 import { analyticsService } from '../services/AnalyticsService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
 import { timeService } from '../services/TimeService';
+import { subscriptionService } from '../services/SubscriptionService';
 import { validateLocation } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
 import { toOwnerConfig } from '../services/ownerDto';
@@ -574,7 +575,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerEmail', 'ownerWhatsapp',
       'enableWaitlist', 'enableRecurring', 'enablePayments', 'enableMultiStaff',
       'paymentMode', 'depositAmount', 'depositPercentage',
-      'subscriptionPlan', 'subscriptionCommissionPercent', 'subscriptionMonthlyInr',
       'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
@@ -621,31 +621,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       }
       updateData.minBookingNoticeHours = hours;
     }
-    if (updateData.subscriptionPlan !== undefined) {
-      const plan = String(updateData.subscriptionPlan || '').trim().toUpperCase();
-      if (!['COMMISSION', 'MONTHLY_799'].includes(plan)) {
-        return res.status(400).json({ error: 'Subscription plan must be COMMISSION or MONTHLY_799' });
-      }
-      updateData.subscriptionPlan = plan;
-    }
-    if (updateData.subscriptionCommissionPercent !== undefined) {
-      if (updateData.subscriptionCommissionPercent === null || updateData.subscriptionCommissionPercent === '') {
-        updateData.subscriptionCommissionPercent = null;
-      } else {
-        const pct = Number(updateData.subscriptionCommissionPercent);
-        if (!Number.isFinite(pct) || pct < 0 || pct > 30) {
-          return res.status(400).json({ error: 'Commission percent must be between 0 and 30' });
-        }
-        updateData.subscriptionCommissionPercent = Math.round(pct * 100) / 100;
-      }
-    }
-    if (updateData.subscriptionMonthlyInr !== undefined) {
-      const monthly = Number(updateData.subscriptionMonthlyInr);
-      if (!Number.isInteger(monthly) || monthly < 0 || monthly > 50000) {
-        return res.status(400).json({ error: 'Monthly subscription must be between 0 and 50000 INR' });
-      }
-      updateData.subscriptionMonthlyInr = monthly;
-    }
+    // subscription is intentionally managed via dedicated subscription endpoints
 
     for (const field of [
       'smtpHost',
@@ -1300,6 +1276,44 @@ ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
     ownerEmailPresent: !!business?.ownerEmail,
     ownerWhatsappPresent: !!business?.ownerWhatsapp,
   });
+});
+
+/**
+ * Owner subscription status + billing info (platform-managed).
+ */
+ownerRouter.get('/subscription', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const view = await subscriptionService.getSubscriptionView(businessId);
+    res.json(view);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.post('/subscription/select', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      plan: z.enum(['COMMISSION', 'MONTHLY_799', 'YEARLY_799']),
+    });
+    const parsed = schema.parse(req.body);
+    await subscriptionService.selectPlan(req.owner!.businessId, parsed.plan as any);
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// For now this endpoint “activates” the plan by marking the current due as paid.
+// In production, wire this to Razorpay webhook/verification.
+ownerRouter.post('/subscription/mark-paid', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const r = await subscriptionService.markPaid(businessId);
+    res.json({ ok: true, ...r });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 /**

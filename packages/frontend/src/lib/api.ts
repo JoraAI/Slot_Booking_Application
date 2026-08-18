@@ -342,6 +342,32 @@ class ApiClient {
     }>('/owner/settings/status')
   }
 
+  getOwnerSubscription() {
+    return this.request<{
+      plan: 'COMMISSION' | 'MONTHLY_799' | 'YEARLY_799'
+      status: 'ACTIVE' | 'PAST_DUE'
+      isActive: boolean
+      dueInr: number
+      paidInr: number
+      currentMonthKey: string | null
+      currentCycleEndsAt: string | null
+    }>('/owner/subscription')
+  }
+
+  selectOwnerSubscriptionPlan(plan: 'COMMISSION' | 'MONTHLY_799' | 'YEARLY_799') {
+    return this.request<{ ok: boolean }>('/owner/subscription/select', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    })
+  }
+
+  markSubscriptionPaid() {
+    return this.request<{ ok: boolean; dueInr: number; plan: string }>('/owner/subscription/mark-paid', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  }
+
   getWaitlist(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<{ entries: WaitlistEntry[]; total: number; page: number; totalPages: number }>(`/owner/waitlist${qs}`)

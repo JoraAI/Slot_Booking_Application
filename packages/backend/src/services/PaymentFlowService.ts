@@ -121,7 +121,8 @@ class PaymentFlowService {
     // service-day (POOLED) or staff-day (STAFF_BASED) serialize against each
     // other, so overlapping-start and shared-staff races can never both pass
     // their availability re-checks.
-    const attempt = await prisma.$transaction(async (tx) => {
+    const attempt = await prisma.$transaction(
+      async (tx) => {
       let resolvedStaffId = staffId;
       if (service.resourceMode === 'STAFF_BASED') {
         // Auto-assign: resolve the staff first so we can lock the staff-day;
@@ -178,7 +179,9 @@ class PaymentFlowService {
           source,
         },
       });
-    });
+      },
+      { timeout: 20_000 }
+    );
 
     // Create the Razorpay order OUTSIDE the DB transaction. On failure, the
     // hold is released by marking the attempt FAILED.

@@ -18,6 +18,7 @@ import { timeService } from './../services/TimeService';
 import { businessResolver } from '../services/BusinessResolver';
 import { locationInfo } from '../services/LocationService';
 import { bookingManagementService } from '../services/BookingManagementService';
+import { subscriptionService } from '../services/SubscriptionService';
 
 export const publicRouter = Router();
 
@@ -245,6 +246,8 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
     const business = await businessResolver.resolveOrThrow(req.params.identifier);
     const tz = business.timezone || 'Asia/Kolkata';
     const now = timeService.toUtc(tz, timeService.todayStr(tz), timeService.toTimeStr(new Date(), tz));
+    const subView = await subscriptionService.getSubscriptionView(business.id, new Date());
+    const bookingWindowDays = subView.isActive ? business.bookingWindowDays : 0;
 
     const [serviceCategories, services, pageSections, workingHours, staff, formFields] = await Promise.all([
       prisma.serviceCategory.findMany({
@@ -294,7 +297,7 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
         publicCode: business.publicCode,
         timezone: business.timezone,
         description: business.description,
-        bookingWindowDays: business.bookingWindowDays,
+        bookingWindowDays,
         minBookingNoticeHours: business.minBookingNoticeHours ?? 0,
         showAvailableCount: business.showAvailableCount,
         branding: {
@@ -338,10 +341,23 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
 publicRouter.get('/:identifier/availability', async (req: Request, res: Response) => {
   try {
     const parsed = availabilityQuerySchema.parse(req.query);
+    const business = await businessResolver.resolveOrThrow(req.params.identifier);
+    const subView = await subscriptionService.getSubscriptionView(business.id, new Date());
+    if (!subView.isActive) {
+      if (!parsed.serviceId) return res.json([]);
+      return res.json({
+        date: parsed.date,
+        serviceId: parsed.serviceId,
+        durationMinutes: 0,
+        bufferMinutes: 0,
+        timezone: business.timezone || 'Asia/Kolkata',
+        slots: [],
+        nextAvailable: null,
+      });
+    }
 
     // If no serviceId is supplied, fall back to the legacy flow for compat.
     if (!parsed.serviceId) {
-      const business = await businessResolver.resolveOrThrow(req.params.identifier);
       const result = await availabilityService.getLegacyAvailability(
         business.slug,
         parsed.date,
@@ -367,6 +383,11 @@ publicRouter.get('/:identifier/availability', async (req: Request, res: Response
 publicRouter.post('/:identifier/bookings', async (req: Request, res: Response) => {
   try {
     const parsed = bookingSchema.parse(req.body);
+    const business = await businessResolver.resolveOrThrow(req.params.identifier);
+    const subView = await subscriptionService.getSubscriptionView(business.id, new Date());
+    if (!subView.isActive) {
+      return res.status(402).json({ error: 'Subscription required. Your booking services are currently paused.' });
+    }
     const booking = await bookingService.createBooking(req.params.identifier, {
       ...parsed,
       source: parsed.source || 'DIRECT',
@@ -407,6 +428,9 @@ publicRouter.delete('/:identifier/bookings/:id', (_req: Request, res: Response) 
 publicRouter.post('/:identifier/waitlist', featureGuard('waitlist'), async (req: Request, res: Response) => {
   try {
     const parsed = waitlistSchema.parse(req.body);
+    const business = await businessResolver.resolveOrThrow(req.params.identifier);
+    const subView = await subscriptionService.getSubscriptionView(business.id, new Date());
+    if (!subView.isActive) return res.status(402).json({ error: 'Subscription required. Waitlist is paused.' });
     const entry = await waitlistService.addToWaitlist(req.params.identifier, parsed);
     res.status(201).json(entry);
   } catch (error: any) {
@@ -460,6 +484,11 @@ publicRouter.post('/:identifier/payments/verify', featureGuard('payments'), asyn
 publicRouter.post('/:identifier/recurring', featureGuard('recurring'), async (req: Request, res: Response) => {
   try {
     const parsed = recurringSchema.parse(req.body);
+    const business = await businessResolver.resolveOrThrow(req.params.identifier);
+    const subView = await subscriptionService.getSubscriptionView(business.id, new Date());
+    if (!subView.isActive) {
+      return res.status(402).json({ error: 'Subscription required. Recurring booking is paused.' });
+    }
     const result = await recurringService.createRecurringBooking(req.params.identifier, parsed);
     res.status(201).json(result);
   } catch (error: any) {

@@ -208,9 +208,16 @@ class AvailabilityService {
 
     const candidates = this.generateCandidates(periods, granularity, duration, buffer);
 
+    // Compute the “earliest allowed booking” cutoff once per availability call.
+    // This method runs inside an interactive DB transaction + candidate loop.
+    const minHours = Math.max(0, Number(business.minBookingNoticeHours) || 0);
+    const earliest = new Date(Date.now() + minHours * 60 * 60 * 1000);
+    const earliestDate = timeService.toDateStr(earliest, tz);
+    const earliestMinutes = MINUTES(timeService.toTimeStr(earliest, tz));
+
     const slots: AvailabilitySlot[] = [];
     for (const candidate of candidates) {
-      if (this.isTooSoon(business, tz, dateStr, candidate)) continue;
+      if (this.isTooSoonByCutoff(dateStr, candidate, earliestDate, earliestMinutes)) continue;
 
       const occupiedEnd = candidate + duration + buffer;
       if (service.resourceMode === 'STAFF_BASED') {
@@ -419,14 +426,28 @@ class AvailabilityService {
     return result;
   }
 
+  private isTooSoonByCutoff(dateStr: string, startMin: number, earliestDate: string, earliestMinutes: number): boolean {
+    if (dateStr < earliestDate) return true;
+    if (dateStr > earliestDate) return false;
+    return startMin <= earliestMinutes;
+  }
+
   /**
    * Slots at or before now + minBookingNoticeHours are not offered.
-   * Compares the slot's real start instant so midnight formatting cannot
-   * treat all of today's remaining office hours as already passed.
+   *
+   * Important: this must stay fast because it runs inside the availability
+   * candidate loop while holding an interactive DB transaction/lock.
+   * We therefore compute the cutoff once, then compare:
+   * - business-local date string (YYYY-MM-DD in `tz`)
+   * - minutes within day
    */
   private isTooSoon(business: BusinessLike, tz: string, dateStr: string, startMin: number): boolean {
     const hours = Math.max(0, Number(business.minBookingNoticeHours) || 0);
-    return timeService.isAtOrBeforeNotice(tz, dateStr, HHMM(startMin), hours);
+    const earliest = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const earliestDate = timeService.toDateStr(earliest, tz);
+    if (dateStr < earliestDate) return true;
+    if (dateStr > earliestDate) return false;
+    return startMin <= MINUTES(timeService.toTimeStr(earliest, tz));
   }
 
   /**
@@ -456,13 +477,17 @@ class AvailabilityService {
 
     const duration = 30;
     const legacyCapacity = 1;
+    const minHours = Math.max(0, Number(business.minBookingNoticeHours) || 0);
+    const earliest = new Date(Date.now() + minHours * 60 * 60 * 1000);
+    const earliestDate = timeService.toDateStr(earliest, tz);
+    const earliestMinutes = MINUTES(timeService.toTimeStr(earliest, tz));
     const slots = this.generateCandidates(
       [{ openMin: MINUTES(workingHour.openTime), closeMin: MINUTES(workingHour.closeTime) }],
       duration,
       duration,
       0
     )
-      .filter((c) => !this.isTooSoon(business, tz, dateStr, c))
+      .filter((c) => !this.isTooSoonByCutoff(dateStr, c, earliestDate, earliestMinutes))
       .map((c) => ({ time: HHMM(c), endTime: HHMM(c + duration) }));
 
     const { gte: startOfDay, lte: endOfDay } = timeService.dayRangeUtc(dateStr);

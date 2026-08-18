@@ -125,6 +125,11 @@ model Business {
   subscriptionPlan        String    @default("COMMISSION") // 'COMMISSION' | 'MONTHLY_799'
   subscriptionCommissionPercent Float?
   subscriptionMonthlyInr  Int       @default(799)
+  subscriptionStatus      String    @default("ACTIVE") // 'ACTIVE' | 'PAST_DUE'
+  subscriptionPaidUntil   DateTime?
+  subscriptionCommissionPaidForMonth String? // YYYY-MM for commission plan
+  subscriptionCommissionPaidInr Int? @default(0)
+  subscriptionLastPaidAt  DateTime?
   razorpayKeyId           String?
   razorpayKeySecret       String?
   razorpayTestMode        Boolean   @default(true)

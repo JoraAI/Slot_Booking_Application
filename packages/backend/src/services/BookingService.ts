@@ -68,8 +68,9 @@ class BookingService {
     // verify path passes `client` without `lock` (its hold is the reserved
     // capacity and consume-once guards it).
     if (!opts?.client) {
-      return prisma.$transaction((tx) =>
-        this.createBooking(identifier, { ...data }, { ...opts, client: tx, lock: true })
+      return prisma.$transaction(
+        (tx) => this.createBooking(identifier, { ...data }, { ...opts, client: tx, lock: true }),
+        { timeout: 20_000 }
       );
     }
 
