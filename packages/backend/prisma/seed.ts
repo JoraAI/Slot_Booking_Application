@@ -57,6 +57,8 @@ async function main() {
       accentColor: '#F59E0B',
       enableMultiStaff: true,
       slotGranularityMinutes: 15,
+      ownerEmail: 'owner@demosalon.com',
+      ownerPassword: hashedPassword,
     },
     create: {
       name: 'Demo Salon & Spa',
@@ -105,7 +107,7 @@ async function main() {
     { label: 'Full Name', fieldType: 'text', required: true, visible: true, placeholder: 'Enter your full name' },
     { label: 'Age', fieldType: 'number', required: false, visible: true, placeholder: 'Enter your age' },
     { label: 'Gender', fieldType: 'select', required: false, visible: true, options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
-    { label: 'Phone Number', fieldType: 'tel', required: true, visible: true, placeholder: 'Enter your phone number' },
+    { label: 'Phone Number', fieldType: 'tel', required: false, visible: true, placeholder: 'Enter your phone number' },
     { label: 'Email Address', fieldType: 'email', required: false, visible: true, placeholder: 'Enter your email address' },
     { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, visible: true, placeholder: 'Any special requests?' },
   ]);
@@ -161,6 +163,8 @@ async function main() {
       accentColor: '#F2F2F2',
       enableMultiStaff: true,
       slotGranularityMinutes: 15,
+      ownerEmail: 'owner@eclatunisexsalon.in',
+      ownerPassword: hashedPassword,
     },
     create: {
       name: 'Eclat Unisex Salon',
@@ -206,7 +210,7 @@ async function main() {
 
   await ensureFormFields(eclat.id, [
     { label: 'Full Name', fieldType: 'text', required: true, visible: true, placeholder: 'Enter your full name' },
-    { label: 'Phone Number', fieldType: 'tel', required: true, visible: true, placeholder: 'Enter your phone number' },
+    { label: 'Phone Number', fieldType: 'tel', required: false, visible: true, placeholder: 'Enter your phone number' },
     { label: 'Email Address', fieldType: 'email', required: false, visible: true, placeholder: 'Enter your email address' },
     { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, visible: true, placeholder: 'Hair length, preferred look, or special requests' },
   ]);

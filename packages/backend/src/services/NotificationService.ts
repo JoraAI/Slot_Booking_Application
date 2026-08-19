@@ -23,6 +23,10 @@ class NotificationService {
     ));
   }
 
+  private bookingServiceName(booking: any): string {
+    return String(booking?.serviceNameSnapshot || booking?.service?.name || 'Appointment');
+  }
+
   smtpConfigured(business?: any): boolean {
     return smtpConfigured(business);
   }
@@ -227,7 +231,7 @@ class NotificationService {
     const dateStr = new Intl.DateTimeFormat('en-IN', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: tz,
     }).format(new Date(booking.date));
-    const serviceName = this.esc(booking.serviceNameSnapshot || 'Appointment');
+    const serviceName = this.esc(this.bookingServiceName(booking));
     const durationMin = booking.durationMinutesSnapshot
       ? `${booking.durationMinutesSnapshot} min`
       : '';
@@ -277,6 +281,7 @@ class NotificationService {
         `<h2>New Booking at ${this.esc(business.name)}</h2>
         <p><strong>Customer:</strong> ${this.esc(booking.customerName)}</p>
         <p><strong>Phone:</strong> ${this.esc(booking.customerPhone)}</p>
+        <p><strong>Service:</strong> ${serviceName}${durationMin ? ` (${durationMin})` : ''}</p>
         <p><strong>Date:</strong> ${dateStr}</p>
         <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>
         ${booking.staff ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}`,
@@ -285,7 +290,7 @@ class NotificationService {
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
-        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
+        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n💇 ${this.bookingServiceName(booking)}${booking.durationMinutesSnapshot ? ` (${booking.durationMinutesSnapshot} min)` : ''}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
         { business }
       );
     }
@@ -295,6 +300,8 @@ class NotificationService {
     const dateStr = new Date(booking.date).toLocaleDateString('en-IN', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
+    const serviceName = this.bookingServiceName(booking);
+    const serviceHtml = this.esc(serviceName);
 
     // ONE customer message whose content branches on the durable refund state.
     let customerRefundCopy = '';
@@ -311,9 +318,15 @@ class NotificationService {
       await this.sendEmail(booking.customerEmail, `Booking Cancelled - ${business.name}`,
         `<h2 style="color: #EF4444;">Booking Cancelled</h2>
         <p>Hi ${booking.customerName},</p>
-        <p>Your appointment at <strong>${business.name}</strong> on ${dateStr} at ${booking.startTime} has been cancelled.</p>
+        <p>Your <strong>${serviceHtml}</strong> appointment at <strong>${business.name}</strong> on ${dateStr} at ${booking.startTime} has been cancelled.</p>
         ${customerRefundCopy}
         <p style="color: #6B7280; font-size: 13px;">Booking ID: ${booking.id}</p>`,
+        { business }
+      );
+    }
+    if (business.notifyCustomerWhatsapp && booking.customerPhone) {
+      await this.sendWhatsApp(booking.customerPhone,
+        `❌ Booking cancelled\n\n${business.name}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${refund && refund.amount > 0 ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}`,
         { business }
       );
     }
@@ -329,7 +342,7 @@ class NotificationService {
     if (business.notifyOwnerEmail) {
       await this.sendEmail(business.ownerEmail, `Booking Cancelled - ${booking.customerName}`,
         `<h2>Booking Cancelled</h2>
-        <p>${booking.customerName}'s booking on ${dateStr} at ${booking.startTime} has been cancelled.</p>
+        <p>${booking.customerName}'s <strong>${serviceHtml}</strong> booking on ${dateStr} at ${booking.startTime} has been cancelled.</p>
         ${booking.paymentAmount ? `<p><strong>Paid amount:</strong> ₹${booking.paymentAmount}</p>` : ''}
         ${refundLine}
         ${manualAction}`,
@@ -338,7 +351,7 @@ class NotificationService {
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
-        `❌ Booking cancelled\n\n${booking.customerName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`,
+        `❌ Booking cancelled\n\n${booking.customerName}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`,
         { business }
       );
     }
@@ -349,11 +362,13 @@ class NotificationService {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
 
+    const serviceName = this.bookingServiceName(booking);
     if (business.notifyCustomerEmail && booking.customerEmail) {
       await this.sendEmail(booking.customerEmail, `Booking Updated - ${business.name}`,
         `<h2>Booking Updated</h2>
         <p>Hi ${booking.customerName},</p>
-        <p>Your booking at <strong>${business.name}</strong> has been updated.</p>
+        <p>Your <strong>${this.esc(serviceName)}</strong> booking at <strong>${business.name}</strong> has been updated.</p>
+        <p><strong>Service:</strong> ${this.esc(serviceName)}</p>
         <p><strong>Date:</strong> ${dateStr}</p>
         <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`,
         { business }
@@ -531,7 +546,7 @@ class NotificationService {
    * Failure must never throw into the caller (sending is best-effort).
    */
   async sendReminder(booking: any, business: any, channel: 'email' | 'whatsapp'): Promise<void> {
-    const serviceName = this.esc(booking.serviceNameSnapshot || 'Appointment');
+    const serviceName = this.esc(this.bookingServiceName(booking));
     const subject = `Reminder: ${serviceName} at ${this.esc(business.name)}`;
     const line = `${booking.dateDisplay} at ${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}`;
     // Reminders intentionally carry location/directions ONLY — the manage/cancel
@@ -546,6 +561,7 @@ class NotificationService {
           <p>Hi ${this.esc(booking.customerName)},</p>
           <p>This is a reminder for your ${serviceName} at <strong>${this.esc(business.name)}</strong>.</p>
           <div style="background: #F9FAFB; padding: 16px; border-radius: 12px; margin: 16px 0;">
+            <p><strong>Service:</strong> ${serviceName}</p>
             <p><strong>Date:</strong> ${booking.dateDisplay}</p>
             <p><strong>Time:</strong> ${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}</p>
             ${booking.staff?.name ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}

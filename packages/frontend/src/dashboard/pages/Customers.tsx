@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import type { CustomerContact } from '../../types'
 
-const EMPTY_FORM = { name: '', phone: '', email: '', notes: '' }
+const EMPTY_FORM = { name: '', phone: '', email: '', notes: '', lastServiceName: '', lastBookedAt: '' }
 
 export const CustomersPage: React.FC = () => {
   const [customers, setCustomers] = useState<CustomerContact[]>([])
@@ -42,6 +42,8 @@ export const CustomersPage: React.FC = () => {
       phone: customer.phone || '',
       email: customer.email || '',
       notes: customer.notes || '',
+      lastServiceName: customer.lastServiceName || '',
+      lastBookedAt: customer.lastBookedAt ? customer.lastBookedAt.slice(0, 10) : '',
     })
   }
 
@@ -57,6 +59,8 @@ export const CustomersPage: React.FC = () => {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         notes: form.notes.trim() || null,
+        lastServiceName: form.lastServiceName.trim() || null,
+        lastBookedAt: form.lastBookedAt || null,
       }
       if (editing === 'new') await api.createCustomer(payload)
       else if (editing) await api.updateCustomer(editing.id, payload)
@@ -159,8 +163,9 @@ export const CustomersPage: React.FC = () => {
                     {customer.phone || 'No phone'} · {customer.email || 'No email'}
                   </p>
                   <p className="text-xs text-gray-400">
-                    {customer.bookingCount} booking{customer.bookingCount === 1 ? '' : 's'}
-                    {customer.lastBookedAt ? ` · Last booked ${new Date(customer.lastBookedAt).toLocaleDateString()}` : ''}
+                    {customer.lastServiceName ? `${customer.lastServiceName} · ` : ''}
+                    {customer.lastBookedAt ? `Last booked ${new Date(customer.lastBookedAt).toLocaleDateString()}` : 'No booking date yet'}
+                    {` · ${customer.bookingCount} booking${customer.bookingCount === 1 ? '' : 's'}`}
                   </p>
                   {customer.notes && <p className="text-xs text-gray-500 mt-1">{customer.notes}</p>}
                 </div>
@@ -181,6 +186,8 @@ export const CustomersPage: React.FC = () => {
             <Field label="Name" value={form.name} onChange={(value) => setForm((f) => ({ ...f, name: value }))} />
             <Field label="Phone" value={form.phone} onChange={(value) => setForm((f) => ({ ...f, phone: value }))} placeholder="+919876543210" />
             <Field label="Email" value={form.email} onChange={(value) => setForm((f) => ({ ...f, email: value }))} placeholder="customer@example.com" type="email" />
+            <Field label="Recent service" value={form.lastServiceName} onChange={(value) => setForm((f) => ({ ...f, lastServiceName: value }))} placeholder="Haircut, Facial…" />
+            <Field label="Last booked date" value={form.lastBookedAt} onChange={(value) => setForm((f) => ({ ...f, lastBookedAt: value }))} type="date" />
             <div>
               <label className="block text-sm font-medium mb-1">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={3}

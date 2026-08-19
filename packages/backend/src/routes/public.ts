@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
+import { hashOwnerPassword } from '../services/OwnerPassword';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -18,6 +18,7 @@ import { timeService } from './../services/TimeService';
 import { businessResolver } from '../services/BusinessResolver';
 import { locationInfo } from '../services/LocationService';
 import { bookingManagementService } from '../services/BookingManagementService';
+import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import { subscriptionService } from '../services/SubscriptionService';
 import { serveMediaAsset } from '../services/MediaService';
 
@@ -73,14 +74,26 @@ const signupSchema = z.object({
   ownerWhatsapp: z.string().optional().nullable(),
 });
 
+const optionalCustomerPhone = z.preprocess(
+  (value) => (value == null ? '' : String(value).trim()),
+  z.union([z.literal(''), z.string().min(7, 'Enter a valid phone number').max(30)])
+);
+const optionalCustomerEmail = z.preprocess(
+  (value) => {
+    const trimmed = value == null ? '' : String(value).trim();
+    return trimmed === '' ? null : trimmed;
+  },
+  z.string().email().max(254).nullable()
+);
+
 const bookingSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Invalid time format'),
   serviceId: z.string().min(1),
   staffId: z.string().optional().nullable(),
   customerName: z.string().trim().min(1),
-  customerPhone: z.string().trim().min(7),
-  customerEmail: z.string().trim().email().optional().nullable(),
+  customerPhone: optionalCustomerPhone,
+  customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   isRecurring: z.boolean().optional(),
   recurringRule: z.string().optional().nullable(),
@@ -98,13 +111,15 @@ const waitlistSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   customerName: z.string().trim().min(1),
-  customerPhone: z.string().trim().min(7),
-  customerEmail: z.string().trim().email().optional().nullable(),
+  customerPhone: optionalCustomerPhone,
+  customerEmail: optionalCustomerEmail,
   staffId: z.string().optional().nullable(),
   serviceId: z.string().optional().nullable(),
   durationMinutes: z.number().int().positive().optional(),
   source: z.string().optional().nullable(),
   formData: z.record(z.any()).optional(),
+}).refine((value) => !!(value.customerPhone || value.customerEmail), {
+  message: 'Add a phone number or email so we can notify you',
 });
 
 const recurringSchema = z.object({
@@ -113,8 +128,8 @@ const recurringSchema = z.object({
   serviceId: z.string().min(1),
   staffId: z.string().optional().nullable(),
   customerName: z.string().trim().min(1),
-  customerPhone: z.string().trim().min(7),
-  customerEmail: z.string().trim().email().optional().nullable(),
+  customerPhone: optionalCustomerPhone,
+  customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   frequency: z.enum(['weekly', 'biweekly', 'monthly']),
   count: z.number().int().min(1).max(52),
@@ -128,8 +143,8 @@ const paymentInitiateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Invalid time format'),
   customerName: z.string().trim().min(1),
-  customerPhone: z.string().trim().min(7),
-  customerEmail: z.string().trim().email().optional().nullable(),
+  customerPhone: optionalCustomerPhone,
+  customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   source: z.string().optional().nullable(),
 }).strict(); // reject client-supplied amount/finalPrice/duration/endTime/paymentMode
@@ -182,7 +197,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
     }
     if (!publicCode) return res.status(500).json({ error: 'Could not generate a unique public code' });
 
-    const hashedPassword = await bcrypt.hash(parsed.ownerPassword, 10);
+    const hashedPassword = await hashOwnerPassword(parsed.ownerPassword);
 
     const business = await prisma.business.create({
       data: {
@@ -208,7 +223,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
         formFields: {
           create: [
             { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-            { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
+            { label: 'Phone Number', fieldType: 'tel', required: false, order: 2, visible: true, placeholder: 'Enter your phone number' },
             { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
             { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Any special requests?' },
           ],
@@ -276,7 +291,7 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
         where: { businessId: business.id, isActive: true },
       }),
       prisma.formField.findMany({
-        where: { businessId: business.id, visible: true },
+        where: { businessId: business.id },
         orderBy: { order: 'asc' },
       }),
     ]);
@@ -320,7 +335,12 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
       pageSections,
       workingHours,
       staff,
-      formFields,
+      formFields: ensurePhoneAndEmailFields(formFields)
+        .filter((field) => field.visible)
+        .map((field, index) => ({
+          ...field,
+          id: field.id || (field.fieldType === 'tel' ? 'contact-phone' : field.fieldType === 'email' ? 'contact-email' : `field-${index}`),
+        })),
       featureFlags: {
         waitlist: business.enableWaitlist,
         recurring: business.enableRecurring,

@@ -1,5 +1,4 @@
 import { Router, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -17,6 +16,7 @@ import { subscriptionService } from '../services/SubscriptionService';
 import { validateLocation } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
 import { toOwnerConfig } from '../services/ownerDto';
+import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
   metaWhatsappConfigured,
   smtpConfigured,
@@ -24,10 +24,9 @@ import {
 } from '../services/notificationCredentials';
 import {
   customerService,
-  customerIdentityKey,
-  normalizeCustomerEmail,
   normalizeCustomerPhone,
 } from '../services/CustomerService';
+import { hashOwnerPassword, isHashedOwnerPassword, verifyOwnerPassword } from '../services/OwnerPassword';
 import { createMediaAsset, decodeImageBase64 } from '../services/MediaService';
 
 export const ownerRouter = Router();
@@ -87,9 +86,16 @@ ownerRouter.post('/login', async (req, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const isValid = await bcrypt.compare(password, business.ownerPassword);
+    const isValid = await verifyOwnerPassword(business.ownerPassword, password);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!isHashedOwnerPassword(business.ownerPassword)) {
+      await prisma.business.update({
+        where: { id: business.id },
+        data: { ownerPassword: await hashOwnerPassword(password) },
+      });
     }
 
     const token = jwt.sign(
@@ -159,6 +165,63 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
     res.json(toOwnerConfig(business));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @openapi
+ * /owner/password:
+ *   put:
+ *     tags: [Owner - Auth]
+ *     summary: Update dashboard password
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword: { type: string, minLength: 8, maxLength: 72 }
+ *     responses:
+ *       200:
+ *         description: Password updated
+ *       400:
+ *         description: Invalid password
+ *       401:
+ *         description: Current password is wrong
+ */
+ownerRouter.put('/password', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(8, 'New password must be at least 8 characters').max(72),
+    }).parse(req.body);
+
+    const business = await prisma.business.findUnique({
+      where: { id: req.owner!.businessId },
+      select: { id: true, ownerPassword: true },
+    });
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+
+    const matches = await verifyOwnerPassword(business.ownerPassword, input.currentPassword);
+    if (!matches) return res.status(401).json({ error: 'Current password is incorrect' });
+    if (input.currentPassword === input.newPassword) {
+      return res.status(400).json({ error: 'Choose a different new password' });
+    }
+
+    await prisma.business.update({
+      where: { id: business.id },
+      data: { ownerPassword: await hashOwnerPassword(input.newPassword) },
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid password' });
+    }
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -1014,7 +1077,14 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
       message: 'formFields is required',
     });
     const parsed = schema.parse(req.body);
-    const incoming = parsed.formFields ?? parsed.fields ?? [];
+    const previous = await prisma.formField.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: { order: 'asc' },
+    });
+    const incoming = ensurePhoneAndEmailFields(
+      parsed.formFields ?? parsed.fields ?? [],
+      previous as Array<{ label: string; fieldType: string; required: boolean; options?: string[]; placeholder?: string | null; order?: number; visible: boolean }>
+    );
 
     const invalidSelect = incoming.find((f) => f.fieldType === 'select' && f.options.length === 0);
     if (invalidSelect) {
@@ -1058,9 +1128,22 @@ const customerInputSchema = z.object({
   phone: z.string().trim().max(30).optional().nullable(),
   email: z.string().trim().email().max(254).optional().nullable().or(z.literal('')),
   notes: z.string().trim().max(2000).optional().nullable(),
+  lastServiceName: z.string().trim().max(160).optional().nullable().or(z.literal('')),
+  lastBookedAt: z.string().trim().max(40).optional().nullable().or(z.literal('')),
 }).refine((value) => !!(value.phone || value.email), {
   message: 'Add at least a phone number or email address',
 });
+
+function parseOwnerBookedAt(value?: string | null): Date | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (day) return new Date(`${day[1]}-${day[2]}-${day[3]}T12:00:00.000Z`);
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) throw new Error('Enter a valid last booked date');
+  return parsed;
+}
 
 ownerRouter.get('/customers', async (req: AuthRequest, res: Response) => {
   try {
@@ -1075,6 +1158,7 @@ ownerRouter.get('/customers', async (req: AuthRequest, res: Response) => {
           { name: { contains: query, mode: 'insensitive' } },
           { phone: { contains: query } },
           { email: { contains: query, mode: 'insensitive' } },
+          { lastServiceName: { contains: query, mode: 'insensitive' } },
         ],
       } : {}),
     };
@@ -1096,17 +1180,13 @@ ownerRouter.get('/customers', async (req: AuthRequest, res: Response) => {
 ownerRouter.post('/customers', async (req: AuthRequest, res: Response) => {
   try {
     const input = customerInputSchema.parse(req.body);
-    const phone = normalizeCustomerPhone(input.phone);
-    const email = normalizeCustomerEmail(input.email);
-    const customer = await prisma.customerContact.create({
-      data: {
-        businessId: req.owner!.businessId,
-        identityKey: customerIdentityKey(phone, email),
-        name: input.name,
-        phone,
-        email,
-        notes: input.notes || null,
-      },
+    const customer = await customerService.upsertContact(req.owner!.businessId, {
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+      notes: input.notes,
+      lastServiceName: input.lastServiceName || null,
+      lastBookedAt: parseOwnerBookedAt(input.lastBookedAt ?? null),
     });
     res.status(201).json(customer);
   } catch (error: any) {
@@ -1114,7 +1194,7 @@ ownerRouter.post('/customers', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: error.issues[0]?.message || 'Invalid customer' });
     }
     if (error.code === 'P2002') {
-      return res.status(409).json({ error: 'A customer with this phone number already exists' });
+      return res.status(409).json({ error: 'A customer with this phone or email already exists' });
     }
     res.status(400).json({ error: error.message });
   }
@@ -1133,26 +1213,26 @@ ownerRouter.put('/customers/:id', async (req: AuthRequest, res: Response) => {
       phone: req.body.phone !== undefined ? req.body.phone : existing.phone,
       email: req.body.email !== undefined ? req.body.email : existing.email,
       notes: req.body.notes !== undefined ? req.body.notes : existing.notes,
+      lastServiceName: req.body.lastServiceName !== undefined ? req.body.lastServiceName : existing.lastServiceName,
+      lastBookedAt: req.body.lastBookedAt !== undefined
+        ? req.body.lastBookedAt
+        : (existing.lastBookedAt ? existing.lastBookedAt.toISOString() : ''),
     });
-    const phone = normalizeCustomerPhone(input.phone);
-    const email = normalizeCustomerEmail(input.email);
-    const customer = await prisma.customerContact.update({
-      where: { id: existing.id },
-      data: {
-        identityKey: customerIdentityKey(phone, email),
-        name: input.name,
-        phone,
-        email,
-        notes: input.notes || null,
-      },
-    });
+    const customer = await customerService.upsertContact(businessId, {
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+      notes: input.notes,
+      lastServiceName: input.lastServiceName || null,
+      lastBookedAt: parseOwnerBookedAt(input.lastBookedAt ?? null),
+    }, { keepId: existing.id });
     res.json(customer);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || 'Invalid customer' });
     }
     if (error.code === 'P2002') {
-      return res.status(409).json({ error: 'A customer with this phone number already exists' });
+      return res.status(409).json({ error: 'A customer with this phone or email already exists' });
     }
     res.status(400).json({ error: error.message });
   }

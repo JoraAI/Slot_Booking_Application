@@ -405,7 +405,10 @@ export const StepRouter: React.FC = () => {
 
           {stepName === 'confirmation' && booking && (
             <ConfirmationScreen
-              booking={booking}
+              booking={{
+                ...booking,
+                serviceNameSnapshot: booking.serviceNameSnapshot || selectedService?.name || null,
+              }}
               businessName={config.business.name}
               location={config.business.location}
               depositPaid={config.payment.mode === 'deposit' ? config.payment.depositAmount : null}

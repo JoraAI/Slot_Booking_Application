@@ -85,7 +85,7 @@ class PaymentFlowService {
 
     const customerData: CustomerData = {
       customerName: body.customerName,
-      customerPhone: body.customerPhone,
+      customerPhone: body.customerPhone || '',
       customerEmail: body.customerEmail || null,
     };
     const formData = body.formData || {};

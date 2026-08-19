@@ -29,13 +29,30 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
 
 const STARTER_FIELDS: Omit<DraftField, 'id'>[] = [
   { label: 'Full Name', fieldType: 'text', required: true, options: [], placeholder: 'Enter your full name', visible: true },
-  { label: 'Phone Number', fieldType: 'tel', required: true, options: [], placeholder: 'Enter your phone number', visible: true },
+  { label: 'Phone Number', fieldType: 'tel', required: false, options: [], placeholder: 'Enter your phone number', visible: true },
   { label: 'Email Address', fieldType: 'email', required: false, options: [], placeholder: 'Enter your email address', visible: true },
   { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, options: [], placeholder: 'Any special requests?', visible: true },
 ]
 
 let draftKey = 0
 const nextKey = () => `draft-${++draftKey}`
+
+function isPhonebookField(field: { fieldType: FieldType }): boolean {
+  return field.fieldType === 'tel' || field.fieldType === 'email'
+}
+
+function withPhonebookFields(fields: DraftField[]): DraftField[] {
+  const next = fields.map((field) => isPhonebookField(field) ? { ...field, visible: true } : field)
+  if (!next.some((field) => field.fieldType === 'tel')) {
+    const nameIndex = next.findIndex((field) => /name/i.test(field.label) && field.fieldType === 'text')
+    next.splice(nameIndex >= 0 ? nameIndex + 1 : Math.min(1, next.length), 0, { ...STARTER_FIELDS[1], id: nextKey() })
+  }
+  if (!next.some((field) => field.fieldType === 'email')) {
+    const telIndex = next.findIndex((field) => field.fieldType === 'tel')
+    next.splice(telIndex >= 0 ? telIndex + 1 : next.length, 0, { ...STARTER_FIELDS[2], id: nextKey() })
+  }
+  return next
+}
 
 function toDraft(field: FormField): DraftField {
   return {
@@ -62,18 +79,26 @@ export const FormBuilder: React.FC = () => {
   useEffect(() => {
     if (!config) return
     setFields(
-      config.formFields.length > 0
-        ? config.formFields.map(toDraft)
-        : STARTER_FIELDS.map((f) => ({ ...f, id: nextKey() }))
+      withPhonebookFields(
+        config.formFields.length > 0
+          ? config.formFields.map(toDraft)
+          : STARTER_FIELDS.map((f) => ({ ...f, id: nextKey() }))
+      )
     )
   }, [config])
 
   const update = (id: string, patch: Partial<DraftField>) => {
-    setFields((prev) => prev && prev.map((f) => (f.id === id ? { ...f, ...patch } : f)))
+    setFields((prev) => prev && prev.map((f) => {
+      if (f.id !== id) return f
+      if (isPhonebookField(f)) {
+        return { ...f, ...patch, fieldType: f.fieldType, visible: true }
+      }
+      return { ...f, ...patch }
+    }))
   }
 
   const removeField = (id: string) => {
-    setFields((prev) => prev && prev.filter((f) => f.id !== id))
+    setFields((prev) => prev && prev.filter((f) => f.id !== id || isPhonebookField(f)))
   }
 
   const move = (index: number, direction: -1 | 1) => {
@@ -91,6 +116,11 @@ export const FormBuilder: React.FC = () => {
     const label = newLabel.trim()
     if (!label) {
       toast.error('Enter a label for the new field')
+      return
+    }
+    if ((newType === 'tel' && (fields || []).some((f) => f.fieldType === 'tel'))
+      || (newType === 'email' && (fields || []).some((f) => f.fieldType === 'email'))) {
+      toast.error('Phone and email are already on the form')
       return
     }
     setFields((prev) => [
@@ -125,7 +155,7 @@ export const FormBuilder: React.FC = () => {
           options: f.fieldType === 'select' ? f.options : [],
           placeholder: f.placeholder.trim() || null,
           order: index,
-          visible: f.visible,
+          visible: isPhonebookField(f) ? true : f.visible,
         }))
       )
       setFields(result.formFields.map(toDraft))
@@ -155,7 +185,7 @@ export const FormBuilder: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold">Form Builder</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Visible fields appear on your public booking form, in this order.
+            Phone and email stay on the booking form for the contact book. You can make them optional, but you cannot hide or remove them.
           </p>
         </div>
         <div className="flex gap-2">
@@ -168,7 +198,7 @@ export const FormBuilder: React.FC = () => {
 
       {fields.every((f) => !f.visible) && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-3 text-sm text-amber-800 dark:text-amber-200">
-          Every field is hidden. Customers need at least a name and phone field to book.
+          Every field is hidden. Customers still see name, phone, and email. Add or unhide other fields as needed.
         </div>
       )}
 
@@ -205,8 +235,9 @@ export const FormBuilder: React.FC = () => {
                 />
                 <select
                   value={field.fieldType}
+                  disabled={isPhonebookField(field)}
                   onChange={(e) => update(field.id, { fieldType: e.target.value as FieldType })}
-                  className="px-2 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800"
+                  className="px-2 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 disabled:opacity-60"
                 >
                   {FIELD_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -215,10 +246,16 @@ export const FormBuilder: React.FC = () => {
                 <button onClick={() => update(field.id, { required: !field.required })} className={`text-xs px-2 py-1 rounded ${field.required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
                   {field.required ? 'Required' : 'Optional'}
                 </button>
-                <button onClick={() => update(field.id, { visible: !field.visible })} className={`text-xs px-2 py-1 rounded ${field.visible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {field.visible ? 'Visible' : 'Hidden'}
-                </button>
-                <button onClick={() => removeField(field.id)} className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Remove</button>
+                {isPhonebookField(field) ? (
+                  <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Always shown</span>
+                ) : (
+                  <>
+                    <button onClick={() => update(field.id, { visible: !field.visible })} className={`text-xs px-2 py-1 rounded ${field.visible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {field.visible ? 'Visible' : 'Hidden'}
+                    </button>
+                    <button onClick={() => removeField(field.id)} className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Remove</button>
+                  </>
+                )}
               </div>
             </div>
 

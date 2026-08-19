@@ -194,6 +194,13 @@ class ApiClient {
     return this.request<BusinessConfig>('/owner/me')
   }
 
+  updateOwnerPassword(data: { currentPassword: string; newPassword: string }) {
+    return this.request<{ success: boolean }>('/owner/password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
   getOwnerBookings(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<{ bookings: Booking[]; total: number; page: number; totalPages: number }>(`/owner/bookings${qs}`)
@@ -272,14 +279,14 @@ class ApiClient {
     return this.request<{ customers: CustomerContact[]; total: number; page: number; totalPages: number }>(`/owner/customers${qs}`)
   }
 
-  createCustomer(data: { name: string; phone?: string | null; email?: string | null; notes?: string | null }) {
+  createCustomer(data: { name: string; phone?: string | null; email?: string | null; notes?: string | null; lastServiceName?: string | null; lastBookedAt?: string | null }) {
     return this.request<CustomerContact>('/owner/customers', {
       method: 'POST',
       body: JSON.stringify(data),
     })
   }
 
-  updateCustomer(id: string, data: { name: string; phone?: string | null; email?: string | null; notes?: string | null }) {
+  updateCustomer(id: string, data: { name: string; phone?: string | null; email?: string | null; notes?: string | null; lastServiceName?: string | null; lastBookedAt?: string | null }) {
     return this.request<CustomerContact>(`/owner/customers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),

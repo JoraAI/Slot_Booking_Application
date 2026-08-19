@@ -201,6 +201,15 @@ export const ManageBookingPage: React.FC = () => {
           <div className="text-center py-8 space-y-3">
             <div className="text-3xl">👍</div>
             <h1 className="font-bold">Booking cancelled</h1>
+            {booking && (
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {booking.serviceName || 'Appointment'}
+                {' · '}
+                {new Date(booking.date).toLocaleDateString('en-IN')}
+                {' · '}
+                {booking.startTime} - {booking.endTime}
+              </p>
+            )}
             {refund && refund.status === 'FAILED' ? (
               <>
                 <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">

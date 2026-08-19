@@ -29,6 +29,8 @@ export const Settings: React.FC = () => {
   } | null>(null)
   const [geoError, setGeoError] = useState('')
   const [geoLoading, setGeoLoading] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [savingPassword, setSavingPassword] = useState(false)
   const [form, setForm] = useState({
     name: config?.name || '',
     description: config?.description || '',
@@ -223,6 +225,30 @@ export const Settings: React.FC = () => {
     }
   }
 
+  const handleUpdatePassword = async () => {
+    if (passwordForm.newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters')
+      return
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('New password and confirmation do not match')
+      return
+    }
+    setSavingPassword(true)
+    try {
+      await api.updateOwnerPassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      })
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      toast.success('Password updated')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update password')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
@@ -257,6 +283,39 @@ export const Settings: React.FC = () => {
             <p className="text-xs text-gray-400 mt-1">Use international format, including country code.</p>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Dashboard password</h2>
+          <p className="text-sm text-gray-500">
+            Change the password used to sign in. It is stored as a one-way hash in the database and is never shown again.
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Current password</label>
+            <input type="password" value={passwordForm.currentPassword} autoComplete="current-password"
+              onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">New password</label>
+            <input type="password" value={passwordForm.newPassword} autoComplete="new-password"
+              onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Confirm new password</label>
+            <input type="password" value={passwordForm.confirmPassword} autoComplete="new-password"
+              onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+        </div>
+        <button onClick={handleUpdatePassword} disabled={savingPassword}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+          {savingPassword ? 'Updating…' : 'Update password'}
+        </button>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">

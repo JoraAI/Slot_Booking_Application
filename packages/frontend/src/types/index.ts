@@ -127,6 +127,7 @@ export interface CustomerContact {
   notes: string | null
   bookingCount: number
   lastBookedAt: string | null
+  lastServiceName: string | null
   createdAt: string
   updatedAt: string
 }

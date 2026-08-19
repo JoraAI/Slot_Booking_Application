@@ -51,6 +51,10 @@ export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
 
       <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left space-y-2 max-w-sm mx-auto">
         <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Service</span>
+          <span className="font-medium">{booking.serviceNameSnapshot || 'Appointment'}</span>
+        </div>
+        <div className="flex justify-between text-sm">
           <span className="text-gray-500">Date</span>
           <span className="font-medium">
             {new Date(booking.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -73,12 +77,6 @@ export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
         {booking.isRecurring && (
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
             <p className="text-sm text-primary font-medium">🔄 Recurring booking</p>
-          </div>
-        )}
-        {booking.serviceNameSnapshot && (
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Service</span>
-            <span className="font-medium">{booking.serviceNameSnapshot}</span>
           </div>
         )}
         {booking.finalPrice != null && (
@@ -121,7 +119,9 @@ export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
 
       <p className="text-xs text-gray-400">
         Booking Reference: {booking.id}<br />
-        Confirmation sent to {booking.customerEmail || booking.customerPhone}
+        {booking.customerEmail || booking.customerPhone
+          ? `Confirmation sent to ${booking.customerEmail || booking.customerPhone}`
+          : 'Keep this reference if you need to view or cancel later.'}
       </p>
     </motion.div>
   )

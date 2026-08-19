@@ -205,16 +205,19 @@ model CustomerContact {
   name          String
   phone         String?
   email         String?
-  notes         String?
-  bookingCount  Int      @default(0)
-  lastBookedAt  DateTime?
-  notifications CustomerNotification[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  notes           String?
+  bookingCount    Int      @default(0)
+  lastBookedAt    DateTime?
+  lastServiceName String?
+  notifications   CustomerNotification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([businessId, identityKey])
   @@index([businessId, name])
   @@index([businessId, updatedAt])
+  @@index([businessId, phone])
+  @@index([businessId, email])
 }
 
 model CustomerNotification {

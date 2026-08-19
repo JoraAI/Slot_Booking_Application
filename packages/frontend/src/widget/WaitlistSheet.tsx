@@ -21,6 +21,10 @@ export const WaitlistSheet: React.FC<WaitlistSheetProps> = ({ slug, slotTime, sl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!name.trim() || (!phone.trim() && !email.trim())) {
+      toast.error('Add a name and a phone number or email')
+      return
+    }
     setSubmitting(true)
     try {
       await api.joinWaitlist(slug, {
@@ -55,14 +59,14 @@ export const WaitlistSheet: React.FC<WaitlistSheetProps> = ({ slug, slotTime, sl
           <>
             <h3 className="text-lg font-semibold mb-1">Join Waitlist</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              This slot is full. We'll notify you if a spot opens up.
+              This slot is full. We'll notify you if a spot opens up. Leave a phone number or email.
             </p>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name"
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-              <input required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone Number" type="tel"
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone Number" type="tel"
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email (optional)" type="email"
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               <button type="submit" disabled={submitting}
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md font-medium text-sm disabled:opacity-50">

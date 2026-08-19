@@ -46,7 +46,7 @@ class BookingService {
       serviceId: string;
       staffId?: string | null;
       customerName: string;
-      customerPhone: string;
+      customerPhone?: string | null;
       customerEmail?: string | null;
       formData?: any;
       isRecurring?: boolean;
@@ -167,7 +167,7 @@ class BookingService {
         startTime: data.startTime,
         endTime,
         customerName: data.customerName,
-        customerPhone: data.customerPhone,
+        customerPhone: data.customerPhone || '',
         customerEmail: data.customerEmail || null,
         formData: data.formData || {},
         seatIndex: 0,
@@ -188,6 +188,7 @@ class BookingService {
       name: booking.customerName,
       phone: booking.customerPhone,
       email: booking.customerEmail,
+      lastServiceName: service.name,
     }, db);
 
     // Return the plaintext management token exactly once (creation only).
