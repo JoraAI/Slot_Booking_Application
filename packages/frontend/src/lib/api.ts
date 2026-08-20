@@ -327,6 +327,7 @@ class ApiClient {
     subject: string
     message: string
     messageHtml?: string | null
+    channels?: ('email' | 'whatsapp')[]
     filters?: { service?: string | null; attributes?: Record<string, string> | null } | null
   }) {
     return this.request<{

@@ -5,62 +5,26 @@ import { Link } from 'react-router-dom'
 import type { CustomerContact, CustomerNotification } from '../../types'
 import { RichMessageEditor } from '../components/RichMessageEditor'
 
-export const Notifications: React.FC = () => {
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState<{
-    smtpConfigured: boolean
-    metaWhatsappConfigured: boolean
-    frontendUrlConfigured: boolean
-    ownerEmailPresent: boolean
-    ownerWhatsappPresent: boolean
-  } | null>(null)
-  const [result, setResult] = useState<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } } | null>(null)
-  const [history, setHistory] = useState<CustomerNotification[]>([])
-  const [customers, setCustomers] = useState<CustomerContact[]>([])
-  const [customerId, setCustomerId] = useState('')
-  const [toName, setToName] = useState('')
-  const [toEmail, setToEmail] = useState('')
-  const [toPhone, setToPhone] = useState('')
-  const [channels, setChannels] = useState<('email' | 'whatsapp')[]>([])
-  const [subject, setSubject] = useState('Message from your salon')
-  const [message, setMessage] = useState('')
-  const [messageHtml, setMessageHtml] = useState('')
-  const [sending, setSending] = useState(false)
-  const [broadcasting, setBroadcasting] = useState(false)
-  const [filterOptions, setFilterOptions] = useState<{
-    services: string[]
-    attributes: Array<{ key: string; label: string; values: string[] }>
-    totalCustomers: number
-  } | null>(null)
-  const [filterService, setFilterService] = useState('')
-  const [filterAttrs, setFilterAttrs] = useState<Record<string, string>>({})
+type BroadcastReport = {
+  total: number
+  matched?: number
+  emailed: number
+  whatsapped: number
+  reached: number
+  unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }>
+  ownerNotified: boolean
+}
+
+type FilterOptions = {
+  services: string[]
+  attributes: Array<{ key: string; label: string; values: string[] }>
+  totalCustomers: number
+}
+
+type AudienceMode = 'individual' | 'filtered'
+
+function useAudiencePreview(filterService: string, filterAttrs: Record<string, string>) {
   const [audience, setAudience] = useState<{ matched: number; total: number } | null>(null)
-  const [broadcastReport, setBroadcastReport] = useState<{
-    total: number
-    matched?: number
-    emailed: number
-    whatsapped: number
-    reached: number
-    unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }>
-    ownerNotified: boolean
-  } | null>(null)
-
-  useEffect(() => {
-    Promise.all([
-      api.getOwnerSettingsStatus(),
-      api.getCustomerNotifications(),
-      api.getCustomers({ limit: '200' }),
-      api.getCustomerFilters(),
-    ])
-      .then(([readiness, notifications, phonebook, filters]) => {
-        setStatus(readiness)
-        setHistory(notifications)
-        setCustomers(phonebook.customers)
-        setFilterOptions(filters)
-      })
-      .catch(() => setStatus(null))
-  }, [])
-
   const filterParams = useMemo(() => {
     const params: Record<string, string> = {}
     if (filterService) params.service = filterService
@@ -69,8 +33,6 @@ export const Notifications: React.FC = () => {
     }
     return params
   }, [filterService, filterAttrs])
-
-  const hasAudienceFilter = Object.keys(filterParams).length > 0
 
   useEffect(() => {
     let cancelled = false
@@ -89,6 +51,205 @@ export const Notifications: React.FC = () => {
     }
   }, [filterParams])
 
+  const hasFilter = Object.keys(filterParams).length > 0
+  const filterPayload = hasFilter
+    ? {
+        service: filterService || null,
+        attributes: (() => {
+          const attrs = Object.fromEntries(Object.entries(filterAttrs).filter(([, value]) => !!value))
+          return Object.keys(attrs).length ? attrs : null
+        })(),
+      }
+    : null
+
+  return { audience, hasFilter, filterPayload }
+}
+
+function AudienceFilters({
+  filterOptions,
+  filterService,
+  setFilterService,
+  filterAttrs,
+  setFilterAttrs,
+  audience,
+}: {
+  filterOptions: FilterOptions | null
+  filterService: string
+  setFilterService: (value: string) => void
+  filterAttrs: Record<string, string>
+  setFilterAttrs: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  audience: { matched: number; total: number } | null
+}) {
+  const inputCls = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800'
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3 bg-gray-50/70 dark:bg-gray-950/30">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Filters</h3>
+        <button
+          type="button"
+          className="text-xs text-primary hover:underline"
+          onClick={() => { setFilterService(''); setFilterAttrs({}) }}
+        >
+          Clear filters
+        </button>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1">Recent service</label>
+          <select value={filterService} onChange={(e) => setFilterService(e.target.value)} className={inputCls}>
+            <option value="">Any service</option>
+            {(filterOptions?.services || []).map((service) => (
+              <option key={service} value={service}>{service}</option>
+            ))}
+          </select>
+        </div>
+        {(filterOptions?.attributes || []).map((field) => (
+          <div key={field.key}>
+            <label className="block text-xs font-medium mb-1">{field.label}</label>
+            <select
+              value={filterAttrs[field.key] || ''}
+              onChange={(e) => setFilterAttrs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">Any</option>
+              {field.values.map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-gray-500">
+        {audience
+          ? `Matching ${audience.matched} of ${audience.total} customers`
+          : 'Loading audience…'}
+      </p>
+    </div>
+  )
+}
+
+function ModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: AudienceMode
+  onChange: (mode: AudienceMode) => void
+}) {
+  return (
+    <div className="flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1 max-w-md">
+      <button
+        type="button"
+        onClick={() => onChange('individual')}
+        className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'individual' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500'}`}
+      >
+        One person
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('filtered')}
+        className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'filtered' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500'}`}
+      >
+        Filtered group
+      </button>
+    </div>
+  )
+}
+
+function BroadcastSummary({ report, channel }: { report: BroadcastReport; channel: 'email' | 'whatsapp' }) {
+  return (
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2 text-sm">
+      <p>
+        Reached {report.reached} of {report.matched ?? report.total}
+        {' '}({channel === 'email' ? `${report.emailed} email` : `${report.whatsapped} WhatsApp`}).
+      </p>
+      {report.unsent.length === 0 ? (
+        <p className="text-green-600">Everyone eligible on this channel was sent the message.</p>
+      ) : (
+        <>
+          <p className="text-amber-700 dark:text-amber-300">
+            Not sent to {report.unsent.length} customer{report.unsent.length === 1 ? '' : 's'}
+            {report.ownerNotified ? ' — the same list was emailed to you.' : '.'}
+          </p>
+          <div className="max-h-48 overflow-auto space-y-2">
+            {report.unsent.map((person) => (
+              <div key={person.id} className="text-xs bg-amber-50 dark:bg-amber-900/20 rounded-md p-2">
+                <p className="font-medium">{person.name}</p>
+                <p className="text-gray-500">{person.email || 'No email'} · {person.phone || 'No number'}</p>
+                <p className="text-amber-800 dark:text-amber-200 mt-1">{person.reason}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export const Notifications: React.FC = () => {
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<{
+    smtpConfigured: boolean
+    metaWhatsappConfigured: boolean
+    frontendUrlConfigured: boolean
+    ownerEmailPresent: boolean
+    ownerWhatsappPresent: boolean
+  } | null>(null)
+  const [result, setResult] = useState<{ email: { ok: boolean; error?: string }; whatsapp: { ok: boolean; error?: string } } | null>(null)
+  const [history, setHistory] = useState<CustomerNotification[]>([])
+  const [customers, setCustomers] = useState<CustomerContact[]>([])
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
+
+  const [emailMode, setEmailMode] = useState<AudienceMode>('individual')
+  const [emailCustomerId, setEmailCustomerId] = useState('')
+  const [emailName, setEmailName] = useState('')
+  const [emailTo, setEmailTo] = useState('')
+  const [emailSubject, setEmailSubject] = useState('Message from your salon')
+  const [emailPlain, setEmailPlain] = useState('')
+  const [emailHtml, setEmailHtml] = useState('')
+  const [emailFilterService, setEmailFilterService] = useState('')
+  const [emailFilterAttrs, setEmailFilterAttrs] = useState<Record<string, string>>({})
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [broadcastingEmail, setBroadcastingEmail] = useState(false)
+  const [emailReport, setEmailReport] = useState<BroadcastReport | null>(null)
+  const emailAudience = useAudiencePreview(emailFilterService, emailFilterAttrs)
+
+  const [waMode, setWaMode] = useState<AudienceMode>('individual')
+  const [waCustomerId, setWaCustomerId] = useState('')
+  const [waName, setWaName] = useState('')
+  const [waPhone, setWaPhone] = useState('')
+  const [waMessage, setWaMessage] = useState('')
+  const [waFilterService, setWaFilterService] = useState('')
+  const [waFilterAttrs, setWaFilterAttrs] = useState<Record<string, string>>({})
+  const [sendingWa, setSendingWa] = useState(false)
+  const [broadcastingWa, setBroadcastingWa] = useState(false)
+  const [waReport, setWaReport] = useState<BroadcastReport | null>(null)
+  const waAudience = useAudiencePreview(waFilterService, waFilterAttrs)
+
+  useEffect(() => {
+    Promise.all([
+      api.getOwnerSettingsStatus(),
+      api.getCustomerNotifications(),
+      api.getCustomers({ limit: '200' }),
+      api.getCustomerFilters(),
+    ])
+      .then(([readiness, notifications, phonebook, filters]) => {
+        setStatus(readiness)
+        setHistory(notifications)
+        setCustomers(phonebook.customers)
+        setFilterOptions(filters)
+      })
+      .catch(() => setStatus(null))
+  }, [])
+
+  const refreshHistory = async () => {
+    const [notifications, phonebook] = await Promise.all([
+      api.getCustomerNotifications(),
+      api.getCustomers({ limit: '200' }),
+    ])
+    setHistory(notifications)
+    setCustomers(phonebook.customers)
+  }
+
   const handleTest = async () => {
     setLoading(true)
     try {
@@ -103,111 +264,157 @@ export const Notifications: React.FC = () => {
     }
   }
 
-  const applyCustomer = (id: string) => {
-    setCustomerId(id)
+  const applyEmailCustomer = (id: string) => {
+    setEmailCustomerId(id)
     const customer = customers.find((item) => item.id === id)
     if (!customer) return
-    setToName(customer.name)
-    setToEmail(customer.email || '')
-    setToPhone(customer.phone || '')
-    const next: ('email' | 'whatsapp')[] = []
-    if (customer.email) next.push('email')
-    if (customer.phone) next.push('whatsapp')
-    setChannels(next)
+    setEmailName(customer.name)
+    setEmailTo(customer.email || '')
   }
 
-  const toggleChannel = (channel: 'email' | 'whatsapp') => {
-    setChannels((current) => current.includes(channel)
-      ? current.filter((item) => item !== channel)
-      : [...current, channel])
+  const applyWaCustomer = (id: string) => {
+    setWaCustomerId(id)
+    const customer = customers.find((item) => item.id === id)
+    if (!customer) return
+    setWaName(customer.name)
+    setWaPhone(customer.phone || '')
   }
 
-  const clearMessage = () => {
-    setMessage('')
-    setMessageHtml('')
-    setSubject('Message from your salon')
-  }
-
-  const sendCustom = async () => {
-    if (channels.length === 0 || !message.trim()) {
-      toast.error('Choose email and/or WhatsApp and enter a message')
+  const sendOneEmail = async () => {
+    if (!emailPlain.trim()) {
+      toast.error('Enter an email message')
       return
     }
-    if (channels.includes('email') && !toEmail.trim()) {
+    if (!emailTo.trim()) {
       toast.error('Enter the email address to send to')
       return
     }
-    if (channels.includes('whatsapp') && !toPhone.trim()) {
-      toast.error('Enter the phone number to send WhatsApp to')
-      return
-    }
-    setSending(true)
+    setSendingEmail(true)
     try {
       const res = await api.sendCustomNotification({
-        customerId: customerId || null,
-        name: toName.trim() || toEmail.trim() || toPhone.trim(),
-        email: toEmail.trim() || null,
-        phone: toPhone.trim() || null,
-        channels,
-        subject: subject.trim() || 'Message from your salon',
-        message: message.trim(),
-        messageHtml: messageHtml || message.trim(),
+        customerId: emailCustomerId || null,
+        name: emailName.trim() || emailTo.trim(),
+        email: emailTo.trim(),
+        phone: null,
+        channels: ['email'],
+        subject: emailSubject.trim() || 'Message from your salon',
+        message: emailPlain.trim(),
+        messageHtml: emailHtml || emailPlain.trim(),
       })
-      const sent = res.results.filter((item) => item.ok).length
-      const failures = res.results.filter((item) => !item.ok)
-      if (sent) toast.success(`Sent through ${sent} channel${sent === 1 ? '' : 's'}`)
-      failures.forEach((item) => toast.error(`${item.channel}: ${item.error || 'failed'}`))
-      if (failures.length === 0) clearMessage()
-      const [notifications, phonebook] = await Promise.all([
-        api.getCustomerNotifications(),
-        api.getCustomers({ limit: '200' }),
-      ])
-      setHistory(notifications)
-      setCustomers(phonebook.customers)
+      const failure = res.results.find((item) => !item.ok)
+      if (failure) toast.error(failure.error || 'Email failed')
+      else {
+        toast.success('Email sent')
+        setEmailPlain('')
+        setEmailHtml('')
+        setEmailSubject('Message from your salon')
+      }
+      await refreshHistory()
     } catch (err: any) {
-      toast.error(err.message || 'Could not send notification')
+      toast.error(err.message || 'Could not send email')
     } finally {
-      setSending(false)
+      setSendingEmail(false)
     }
   }
 
-  const sendToAudience = async () => {
-    if (!message.trim()) {
-      toast.error('Enter a message to send')
+  const sendBulkEmail = async () => {
+    if (!emailPlain.trim()) {
+      toast.error('Enter an email message')
       return
     }
-    const count = audience?.matched ?? customers.length
+    const count = emailAudience.audience?.matched ?? customers.length
     if (!count) {
-      toast.error(hasAudienceFilter ? 'No customers match these filters' : 'There are no customers in the phonebook yet')
+      toast.error(emailAudience.hasFilter ? 'No customers match these filters' : 'There are no customers in the phonebook yet')
       return
     }
-    const label = hasAudienceFilter
-      ? `Send this message to ${count} matching customer${count === 1 ? '' : 's'}?`
-      : `Send this message to all ${count} customer${count === 1 ? '' : 's'}?`
-    if (!window.confirm(`${label} Valid emails get email, valid WhatsApp numbers get WhatsApp.`)) {
+    if (!window.confirm(`Send this email to ${count} matching customer${count === 1 ? '' : 's'}? Only contacts with a valid email will be emailed.`)) {
       return
     }
-    setBroadcasting(true)
-    setBroadcastReport(null)
+    setBroadcastingEmail(true)
+    setEmailReport(null)
     try {
-      const attrs = Object.fromEntries(Object.entries(filterAttrs).filter(([, value]) => !!value))
       const report = await api.sendBroadcastNotification({
-        subject: subject.trim() || 'Message from your salon',
-        message: message.trim(),
-        messageHtml: messageHtml || message.trim(),
-        filters: hasAudienceFilter
-          ? { service: filterService || null, attributes: Object.keys(attrs).length ? attrs : null }
-          : null,
+        subject: emailSubject.trim() || 'Message from your salon',
+        message: emailPlain.trim(),
+        messageHtml: emailHtml || emailPlain.trim(),
+        channels: ['email'],
+        filters: emailAudience.filterPayload,
       })
-      setBroadcastReport(report)
-      if (report.reached) toast.success(`Reached ${report.reached} of ${report.matched ?? report.total} customers`)
-      if (report.unsent.length) toast.error(`${report.unsent.length} customer${report.unsent.length === 1 ? '' : 's'} were not sent`)
-      const notifications = await api.getCustomerNotifications()
-      setHistory(notifications)
+      setEmailReport(report)
+      if (report.reached) toast.success(`Emailed ${report.reached} of ${report.matched ?? report.total}`)
+      if (report.unsent.length) toast.error(`${report.unsent.length} could not be emailed`)
+      await refreshHistory()
     } catch (err: any) {
-      toast.error(err.message || 'Could not send broadcast')
+      toast.error(err.message || 'Could not send bulk email')
     } finally {
-      setBroadcasting(false)
+      setBroadcastingEmail(false)
+    }
+  }
+
+  const sendOneWhatsapp = async () => {
+    if (!waMessage.trim()) {
+      toast.error('Enter a WhatsApp message')
+      return
+    }
+    if (!waPhone.trim()) {
+      toast.error('Enter the WhatsApp number to send to')
+      return
+    }
+    setSendingWa(true)
+    try {
+      const res = await api.sendCustomNotification({
+        customerId: waCustomerId || null,
+        name: waName.trim() || waPhone.trim(),
+        email: null,
+        phone: waPhone.trim(),
+        channels: ['whatsapp'],
+        subject: 'Message from your salon',
+        message: waMessage.trim(),
+      })
+      const failure = res.results.find((item) => !item.ok)
+      if (failure) toast.error(failure.error || 'WhatsApp failed')
+      else {
+        toast.success('WhatsApp sent')
+        setWaMessage('')
+      }
+      await refreshHistory()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send WhatsApp')
+    } finally {
+      setSendingWa(false)
+    }
+  }
+
+  const sendBulkWhatsapp = async () => {
+    if (!waMessage.trim()) {
+      toast.error('Enter a WhatsApp message')
+      return
+    }
+    const count = waAudience.audience?.matched ?? customers.length
+    if (!count) {
+      toast.error(waAudience.hasFilter ? 'No customers match these filters' : 'There are no customers in the phonebook yet')
+      return
+    }
+    if (!window.confirm(`Send this WhatsApp to ${count} matching customer${count === 1 ? '' : 's'}? Only contacts with a valid number will get WhatsApp.`)) {
+      return
+    }
+    setBroadcastingWa(true)
+    setWaReport(null)
+    try {
+      const report = await api.sendBroadcastNotification({
+        subject: 'Message from your salon',
+        message: waMessage.trim(),
+        channels: ['whatsapp'],
+        filters: waAudience.filterPayload,
+      })
+      setWaReport(report)
+      if (report.reached) toast.success(`WhatsApped ${report.reached} of ${report.matched ?? report.total}`)
+      if (report.unsent.length) toast.error(`${report.unsent.length} could not be reached on WhatsApp`)
+      await refreshHistory()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send bulk WhatsApp')
+    } finally {
+      setBroadcastingWa(false)
     }
   }
 
@@ -217,6 +424,8 @@ export const Notifications: React.FC = () => {
       {error ? ` — ${error}` : ''}
     </p>
   )
+
+  const inputCls = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800'
 
   return (
     <div className="space-y-6">
@@ -261,162 +470,148 @@ export const Notifications: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-2xl">
-        <h2 className="text-lg font-semibold">Send a custom message</h2>
-        <p className="text-sm text-gray-500">
-          Message one person, or broadcast to a filtered audience (recent service, gender, and other intake fields).
-          Email keeps your formatting; WhatsApp gets the same text without fonts.
-        </p>
+        <div>
+          <h2 className="text-lg font-semibold">Email</h2>
+          <p className="text-sm text-gray-500">Send to one person, or switch to a filtered group for bulk email.</p>
+        </div>
+        <ModeToggle mode={emailMode} onChange={setEmailMode} />
 
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3 bg-gray-50/70 dark:bg-gray-950/30">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">Audience filters</h3>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => { setFilterService(''); setFilterAttrs({}) }}
-            >
-              Clear filters
-            </button>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3">
+        {emailMode === 'individual' ? (
+          <>
             <div>
-              <label className="block text-xs font-medium mb-1">Recent service</label>
-              <select
-                value={filterService}
-                onChange={(e) => setFilterService(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-              >
-                <option value="">Any service</option>
-                {(filterOptions?.services || []).map((service) => (
-                  <option key={service} value={service}>{service}</option>
+              <label className="block text-sm font-medium mb-1">Saved customer (optional)</label>
+              <select value={emailCustomerId} onChange={(e) => applyEmailCustomer(e.target.value)} className={inputCls}>
+                <option value="">Type an email below</option>
+                {customers.filter((c) => c.email).map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} · {customer.email}
+                  </option>
                 ))}
               </select>
             </div>
-            {(filterOptions?.attributes || []).map((field) => (
-              <div key={field.key}>
-                <label className="block text-xs font-medium mb-1">{field.label}</label>
-                <select
-                  value={filterAttrs[field.key] || ''}
-                  onChange={(e) => setFilterAttrs((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-                >
-                  <option value="">Any</option>
-                  {field.values.map((value) => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </select>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input value={emailName} onChange={(e) => setEmailName(e.target.value)} placeholder="Customer name" className={inputCls} />
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500">
-            {audience
-              ? `Matching ${audience.matched} of ${audience.total} customers`
-              : 'Loading audience…'}
-            {!filterOptions?.attributes?.length && !filterOptions?.services?.length
-              ? ' — filters appear after bookings capture service / form answers like Gender.'
-              : ''}
-          </p>
-        </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} placeholder="customer@example.com" className={inputCls} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <AudienceFilters
+            filterOptions={filterOptions}
+            filterService={emailFilterService}
+            setFilterService={setEmailFilterService}
+            filterAttrs={emailFilterAttrs}
+            setFilterAttrs={setEmailFilterAttrs}
+            audience={emailAudience.audience}
+          />
+        )}
 
         <div>
-          <label className="block text-sm font-medium mb-1">Saved customer (optional — single send)</label>
-          <select value={customerId} onChange={(e) => applyCustomer(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
-            <option value="">Type an email or number below</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}{customer.phone ? ` · ${customer.phone}` : ''}{customer.email ? ` · ${customer.email}` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Name</label>
-          <input value={toName} onChange={(e) => setToName(e.target.value)} placeholder="Customer name"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
-          <input type="email" value={toEmail} onChange={(e) => {
-            setToEmail(e.target.value)
-            if (e.target.value.trim() && !channels.includes('email')) setChannels((c) => [...c, 'email'])
-          }} placeholder="customer@example.com"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">WhatsApp number</label>
-          <input value={toPhone} onChange={(e) => {
-            setToPhone(e.target.value)
-            if (e.target.value.trim() && !channels.includes('whatsapp')) setChannels((c) => [...c, 'whatsapp'])
-          }} placeholder="+919876543210"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-        </div>
-        <div className="flex gap-4 text-sm">
-          <label className={`flex items-center gap-2 ${!toEmail.trim() ? 'opacity-40' : ''}`}>
-            <input type="checkbox" checked={channels.includes('email')} disabled={!toEmail.trim()} onChange={() => toggleChannel('email')} />
-            Send email
-          </label>
-          <label className={`flex items-center gap-2 ${!toPhone.trim() ? 'opacity-40' : ''}`}>
-            <input type="checkbox" checked={channels.includes('whatsapp')} disabled={!toPhone.trim()} onChange={() => toggleChannel('whatsapp')} />
-            Send WhatsApp
-          </label>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Email subject</label>
-          <input value={subject} onChange={(e) => setSubject(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          <label className="block text-sm font-medium mb-1">Subject</label>
+          <input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} className={inputCls} />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Message</label>
           <RichMessageEditor
-            valueHtml={messageHtml}
+            valueHtml={emailHtml}
             onChange={(html, plain) => {
-              setMessageHtml(html)
-              setMessage(plain)
+              setEmailHtml(html)
+              setEmailPlain(plain)
             }}
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={sendCustom} disabled={sending || broadcasting}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
-            {sending ? 'Sending...' : 'Send to this contact'}
-          </button>
-          <button onClick={sendToAudience} disabled={sending || broadcasting}
-            className="px-4 py-2 border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/5 disabled:opacity-50">
-            {broadcasting
-              ? 'Sending…'
-              : hasAudienceFilter
-                ? `Send to ${audience?.matched ?? 0} matching`
-                : `Send to all ${audience?.total ?? customers.length} customers`}
-          </button>
+          {emailMode === 'individual' ? (
+            <button onClick={sendOneEmail} disabled={sendingEmail || broadcastingEmail}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {sendingEmail ? 'Sending…' : 'Send email'}
+            </button>
+          ) : (
+            <button onClick={sendBulkEmail} disabled={sendingEmail || broadcastingEmail}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {broadcastingEmail
+                ? 'Sending emails…'
+                : `Email ${emailAudience.audience?.matched ?? customers.length} matching`}
+            </button>
+          )}
         </div>
-        {broadcastReport && (
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2 text-sm">
-            <p>
-              Reached {broadcastReport.reached} of {broadcastReport.matched ?? broadcastReport.total}
-              {' '}({broadcastReport.emailed} email, {broadcastReport.whatsapped} WhatsApp).
-            </p>
-            {broadcastReport.unsent.length === 0 ? (
-              <p className="text-green-600">Everyone with a valid email or WhatsApp number was sent the message.</p>
-            ) : (
-              <>
-                <p className="text-amber-700 dark:text-amber-300">
-                  Not sent to {broadcastReport.unsent.length} customer{broadcastReport.unsent.length === 1 ? '' : 's'}
-                  {broadcastReport.ownerNotified ? ' — the same list was emailed to you.' : '.'}
-                </p>
-                <div className="max-h-48 overflow-auto space-y-2">
-                  {broadcastReport.unsent.map((person) => (
-                    <div key={person.id} className="text-xs bg-amber-50 dark:bg-amber-900/20 rounded-md p-2">
-                      <p className="font-medium">{person.name}</p>
-                      <p className="text-gray-500">{person.email || 'No email'} · {person.phone || 'No number'}</p>
-                      <p className="text-amber-800 dark:text-amber-200 mt-1">{person.reason}</p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+        {emailReport && emailMode === 'filtered' && <BroadcastSummary report={emailReport} channel="email" />}
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-2xl">
+        <div>
+          <h2 className="text-lg font-semibold">WhatsApp</h2>
+          <p className="text-sm text-gray-500">Send to one person, or switch to a filtered group for bulk WhatsApp. Plain text only.</p>
+        </div>
+        <ModeToggle mode={waMode} onChange={setWaMode} />
+
+        {waMode === 'individual' ? (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-1">Saved customer (optional)</label>
+              <select value={waCustomerId} onChange={(e) => applyWaCustomer(e.target.value)} className={inputCls}>
+                <option value="">Type a number below</option>
+                {customers.filter((c) => c.phone).map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} · {customer.phone}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input value={waName} onChange={(e) => setWaName(e.target.value)} placeholder="Customer name" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">WhatsApp number</label>
+                <input value={waPhone} onChange={(e) => setWaPhone(e.target.value)} placeholder="+919876543210" className={inputCls} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <AudienceFilters
+            filterOptions={filterOptions}
+            filterService={waFilterService}
+            setFilterService={setWaFilterService}
+            filterAttrs={waFilterAttrs}
+            setFilterAttrs={setWaFilterAttrs}
+            audience={waAudience.audience}
+          />
         )}
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Message</label>
+          <textarea
+            value={waMessage}
+            onChange={(e) => setWaMessage(e.target.value)}
+            rows={6}
+            maxLength={3000}
+            placeholder="Write the WhatsApp message"
+            className={inputCls}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {waMode === 'individual' ? (
+            <button onClick={sendOneWhatsapp} disabled={sendingWa || broadcastingWa}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {sendingWa ? 'Sending…' : 'Send WhatsApp'}
+            </button>
+          ) : (
+            <button onClick={sendBulkWhatsapp} disabled={sendingWa || broadcastingWa}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {broadcastingWa
+                ? 'Sending WhatsApp…'
+                : `WhatsApp ${waAudience.audience?.matched ?? customers.length} matching`}
+            </button>
+          )}
+        </div>
+        {waReport && waMode === 'filtered' && <BroadcastSummary report={waReport} channel="whatsapp" />}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">

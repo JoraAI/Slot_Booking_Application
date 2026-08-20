@@ -1298,6 +1298,7 @@ ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Respo
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
       messageHtml: z.string().trim().max(12000).optional().nullable(),
+      channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2).default(['email', 'whatsapp']),
       filters: z.object({
         service: z.string().trim().max(160).optional().nullable(),
         attributes: z.record(z.string().trim().max(120)).optional().nullable(),
@@ -1308,7 +1309,8 @@ ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Respo
       input.subject,
       input.message,
       input.filters,
-      input.messageHtml
+      input.messageHtml,
+      [...new Set(input.channels)]
     );
     res.json(report);
   } catch (error: any) {

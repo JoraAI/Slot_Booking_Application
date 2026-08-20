@@ -662,7 +662,8 @@ class NotificationService {
       service?: string | null;
       attributes?: Record<string, string> | null;
     } | null,
-    messageHtml?: string | null
+    messageHtml?: string | null,
+    channelsWanted: Array<'email' | 'whatsapp'> = ['email', 'whatsapp']
   ): Promise<{
     total: number;
     matched: number;
@@ -674,6 +675,9 @@ class NotificationService {
   }> {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new Error('Business not found');
+
+    const wanted = [...new Set(channelsWanted)];
+    if (wanted.length === 0) throw new Error('Choose email or WhatsApp');
 
     const allCustomers = await prisma.customerContact.findMany({
       where: { businessId },
@@ -701,22 +705,26 @@ class NotificationService {
         const reasons: string[] = [];
         const channels: Array<'email' | 'whatsapp'> = [];
 
-        if (canEmail) {
-          if (smtpReady) channels.push('email');
-          else reasons.push('email not sent — SMTP is not configured');
-        } else if (customer.email) {
-          reasons.push(`email not sent — invalid address (${customer.email})`);
-        } else {
-          reasons.push('email not sent — no email saved');
+        if (wanted.includes('email')) {
+          if (canEmail) {
+            if (smtpReady) channels.push('email');
+            else reasons.push('email not sent — SMTP is not configured');
+          } else if (customer.email) {
+            reasons.push(`email not sent — invalid address (${customer.email})`);
+          } else {
+            reasons.push('email not sent — no email saved');
+          }
         }
 
-        if (canWhatsapp) {
-          if (whatsappReady) channels.push('whatsapp');
-          else reasons.push('WhatsApp not sent — Meta Cloud API is not configured');
-        } else if (customer.phone) {
-          reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
-        } else {
-          reasons.push('WhatsApp not sent — no number saved');
+        if (wanted.includes('whatsapp')) {
+          if (canWhatsapp) {
+            if (whatsappReady) channels.push('whatsapp');
+            else reasons.push('WhatsApp not sent — Meta Cloud API is not configured');
+          } else if (customer.phone) {
+            reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
+          } else {
+            reasons.push('WhatsApp not sent — no number saved');
+          }
         }
 
         if (channels.length === 0) {
