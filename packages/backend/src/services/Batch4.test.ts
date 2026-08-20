@@ -203,7 +203,7 @@ test('B4-3. public config exposes location but never secrets', async () => {
   assert.ok(!JSON.stringify(res.json).includes('razorpayKeySecret'), 'no razorpay secret serialized');
   assert.ok(!JSON.stringify(res.json).includes('ownerPassword'), 'no owner password serialized');
   assert.ok(!JSON.stringify(res.json).includes('smtpPassEnc'));
-  assert.ok(!JSON.stringify(res.json).includes('twilioAuthTokenEnc'));
+  assert.ok(!JSON.stringify(res.json).includes('metaWhatsappAccessTokenEnc'));
 });
 
 test('B4-4. unpaid + paid confirmation notifications include location, directions, manageUrl, replyTo', async () => {
@@ -239,7 +239,7 @@ test('B4-4. unpaid + paid confirmation notifications include location, direction
     assert.ok(customerWhatsApp, `customer whatsapp sent (paid=${paid})`);
     assert.match(customerWhatsApp[1], /maps\/dir\/\?api=1/);
     assert.ok(customerWhatsApp[1].includes(booking.managementUrl), 'managementUrl present in whatsapp');
-    assert.match(customerWhatsApp[1], /wa\.me\/919999999999/, 'owner WhatsApp contact via wa.me, never as Twilio From');
+    assert.match(customerWhatsApp[1], /wa\.me\/919999999999/, 'owner WhatsApp contact via wa.me, never as Meta From');
   }
 });
 

@@ -63,8 +63,7 @@ export const SetupGuide: React.FC = () => (
         <li>
           <strong>WhatsApp:</strong> Meta Phone Number ID and Access Token. Optional template names can be
           saved for utility/marketing campaigns. Meta requires approved templates for business-initiated
-          messages outside the 24-hour customer-service window. Optional SMS From is only needed if you
-          enable SMS OTP for booking management (Twilio SMS remains separate).
+          messages outside the 24-hour customer-service window.
         </li>
         <li>
           Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),

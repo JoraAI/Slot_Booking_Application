@@ -381,7 +381,6 @@ class ApiClient {
   getOwnerSettingsStatus() {
     return this.request<{
       smtpConfigured: boolean
-      twilioSmsConfigured: boolean
       metaWhatsappConfigured: boolean
       frontendUrlConfigured: boolean
       locationComplete: boolean

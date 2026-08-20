@@ -9,12 +9,6 @@ export type SmtpConfig = {
   fromName: string;
 };
 
-export type TwilioConfig = {
-  accountSid: string;
-  authToken: string;
-  from: string;
-};
-
 export type MetaWhatsappConfig = {
   phoneNumberId: string;
   accessToken: string;
@@ -30,10 +24,6 @@ type DeliveryBusiness = {
   smtpUser?: string | null;
   smtpPassEnc?: string | null;
   smtpFromName?: string | null;
-  twilioAccountSid?: string | null;
-  twilioAuthTokenEnc?: string | null;
-  twilioWhatsappFrom?: string | null;
-  twilioSmsFrom?: string | null;
   metaWhatsappPhoneNumberId?: string | null;
   metaWhatsappAccessTokenEnc?: string | null;
   metaWhatsappTemplateUtility?: string | null;
@@ -53,27 +43,6 @@ export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
     pass,
     fromName: String(business?.smtpFromName || process.env.SMTP_FROM_NAME || business?.name || 'Reservly').trim() || 'Reservly',
   };
-}
-
-function normalizeWhatsappFrom(from: string): string {
-  const trimmed = from.trim();
-  return trimmed.startsWith('whatsapp:') ? trimmed : `whatsapp:${trimmed}`;
-}
-
-export function resolveTwilioWhatsapp(business?: DeliveryBusiness): TwilioConfig | null {
-  const accountSid = String(business?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || '').trim();
-  const authToken = String(decryptSecret(business?.twilioAuthTokenEnc) || process.env.TWILIO_AUTH_TOKEN || '').trim();
-  const from = String(business?.twilioWhatsappFrom || process.env.TWILIO_WHATSAPP_FROM || '').trim();
-  if (!accountSid || !authToken || !from) return null;
-  return { accountSid, authToken, from: normalizeWhatsappFrom(from) };
-}
-
-export function resolveTwilioSms(business?: DeliveryBusiness): TwilioConfig | null {
-  const accountSid = String(business?.twilioAccountSid || process.env.TWILIO_ACCOUNT_SID || '').trim();
-  const authToken = String(decryptSecret(business?.twilioAuthTokenEnc) || process.env.TWILIO_AUTH_TOKEN || '').trim();
-  const from = String(business?.twilioSmsFrom || process.env.TWILIO_SMS_FROM || '').trim();
-  if (!accountSid || !authToken || !from) return null;
-  return { accountSid, authToken, from };
 }
 
 export function resolveMetaWhatsapp(business?: DeliveryBusiness): MetaWhatsappConfig | null {
@@ -100,14 +69,6 @@ export function resolveMetaWhatsapp(business?: DeliveryBusiness): MetaWhatsappCo
 
 export function smtpConfigured(business?: DeliveryBusiness): boolean {
   return !!resolveSmtp(business);
-}
-
-export function twilioWhatsappConfigured(business?: DeliveryBusiness): boolean {
-  return !!resolveTwilioWhatsapp(business);
-}
-
-export function twilioSmsConfigured(business?: DeliveryBusiness): boolean {
-  return !!resolveTwilioSms(business);
 }
 
 export function metaWhatsappConfigured(business?: DeliveryBusiness): boolean {

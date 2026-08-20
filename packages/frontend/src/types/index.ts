@@ -46,10 +46,6 @@ export interface BusinessConfig {
   metaWhatsappTemplateMarketing: string | null
   metaWhatsappAccessTokenConfigured?: boolean
   metaWhatsappConfigured?: boolean
-  twilioAccountSid: string | null
-  twilioSmsFrom: string | null
-  twilioAuthTokenConfigured?: boolean
-  twilioSmsConfigured?: boolean
   subscriptionPlan: 'COMMISSION' | 'MONTHLY_799'
   subscriptionCommissionPercent: number | null
   subscriptionMonthlyInr: number

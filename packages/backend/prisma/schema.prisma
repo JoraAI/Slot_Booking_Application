@@ -83,7 +83,7 @@ model Business {
   minBookingNoticeHours   Int       @default(0)
   showAvailableCount      Boolean   @default(false)
   bookingManagementOtpEnabled Boolean @default(false)
-  bookingManagementOtpChannel String? // 'EMAIL' | 'SMS' | 'EITHER'
+  bookingManagementOtpChannel String? // 'EMAIL' (email-only; SMS removed)
   // Batch 4 — salon location (address + optional lat/lng pair, directions
   // links are generated server-side; no Maps API key is used).
   address                 String?
@@ -104,10 +104,6 @@ model Business {
   smtpUser                String?
   smtpPassEnc             String?
   smtpFromName            String?
-  twilioAccountSid        String?
-  twilioAuthTokenEnc      String?
-  twilioWhatsappFrom      String?
-  twilioSmsFrom           String?
   metaWhatsappPhoneNumberId String?
   metaWhatsappBusinessAccountId String?
   metaWhatsappAccessTokenEnc String?

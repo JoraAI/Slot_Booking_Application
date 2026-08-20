@@ -302,7 +302,7 @@ test('7. OTP expiry, single-use, attempt limits, resend limits, masking', async 
   );
 });
 
-test('8. owner cannot enable SMS OTP without Twilio SMS config', async () => {
+test('8. owner cannot enable email OTP without SMTP config', async () => {
   business = await makeBusiness();
   const token = jwt.sign(
     { businessId: business.id, email: business.ownerEmail },
@@ -310,15 +310,6 @@ test('8. owner cannot enable SMS OTP without Twilio SMS config', async () => {
     { expiresIn: '1h' } as any
   );
 
-  // SMS channel without Twilio SMS config -> refused
-  const sms = await req('PUT', '/owner/config', {
-    headers: { Authorization: `Bearer ${token}` },
-    body: { bookingManagementOtpEnabled: true, bookingManagementOtpChannel: 'SMS' },
-  });
-  assert.strictEqual(sms.status, 400);
-  assert.ok(/Twilio/.test(sms.json.error));
-
-  // EMAIL channel without SMTP -> refused
   const email = await req('PUT', '/owner/config', {
     headers: { Authorization: `Bearer ${token}` },
     body: { bookingManagementOtpEnabled: true, bookingManagementOtpChannel: 'EMAIL' },

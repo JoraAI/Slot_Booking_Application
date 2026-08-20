@@ -20,7 +20,6 @@ import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
   metaWhatsappConfigured,
   smtpConfigured,
-  twilioSmsConfigured,
 } from '../services/notificationCredentials';
 import {
   customerService,
@@ -739,7 +738,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
       'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
-      'twilioAccountSid', 'twilioSmsFrom',
       'metaWhatsappPhoneNumberId', 'metaWhatsappBusinessAccountId',
       'metaWhatsappTemplateUtility', 'metaWhatsappTemplateMarketing',
     ];
@@ -787,8 +785,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'smtpHost',
       'smtpUser',
       'smtpFromName',
-      'twilioAccountSid',
-      'twilioSmsFrom',
       'metaWhatsappPhoneNumberId',
       'metaWhatsappBusinessAccountId',
       'metaWhatsappTemplateUtility',
@@ -821,11 +817,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     } else if (req.body.clearSmtpPass === true) {
       updateData.smtpPassEnc = null;
     }
-    if (typeof req.body.twilioAuthToken === 'string' && req.body.twilioAuthToken.trim() !== '') {
-      updateData.twilioAuthTokenEnc = encryptSecret(req.body.twilioAuthToken.trim());
-    } else if (req.body.clearTwilioAuthToken === true) {
-      updateData.twilioAuthTokenEnc = null;
-    }
     if (typeof req.body.metaWhatsappAccessToken === 'string' && req.body.metaWhatsappAccessToken.trim() !== '') {
       updateData.metaWhatsappAccessTokenEnc = encryptSecret(req.body.metaWhatsappAccessToken.trim());
     } else if (req.body.clearMetaWhatsappAccessToken === true) {
@@ -842,28 +833,16 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.razorpayKeySecret = null;
     }
 
-    // OTP requires a configured delivery channel. Refuse enabling a channel
-    // whose provider is unconfigured rather than failing silently later.
+    // OTP is email-only and requires SMTP. Refuse enabling when SMTP is missing.
     if (updateData.bookingManagementOtpEnabled === true) {
-      const channel = updateData.bookingManagementOtpChannel ?? existing.bookingManagementOtpChannel;
-      if (!channel) {
-        return res.status(400).json({ error: 'Select an OTP channel (EMAIL, SMS, or EITHER)' });
-      }
-      if (!['EMAIL', 'SMS', 'EITHER'].includes(channel)) {
-        return res.status(400).json({ error: 'Invalid OTP channel' });
-      }
+      updateData.bookingManagementOtpChannel = 'EMAIL';
       const merged = { ...existing, ...updateData };
-      const smtp = smtpConfigured(merged);
-      const sms = twilioSmsConfigured(merged);
-      if (channel === 'EMAIL' && !smtp) {
+      if (!smtpConfigured(merged)) {
         return res.status(400).json({ error: 'Email OTP requires SMTP credentials in Settings (username and password).' });
       }
-      if (channel === 'SMS' && !sms) {
-        return res.status(400).json({ error: 'SMS OTP requires Twilio credentials in Settings (Account SID, Auth Token, and SMS From number).' });
-      }
-      if (channel === 'EITHER' && !smtp && !sms) {
-        return res.status(400).json({ error: 'OTP (EITHER) requires SMTP or Twilio SMS credentials in Settings.' });
-      }
+    } else if (updateData.bookingManagementOtpChannel !== undefined) {
+      // Channel is fixed to email; ignore legacy SMS / EITHER values from older clients.
+      updateData.bookingManagementOtpChannel = 'EMAIL';
     }
 
     // Batch 2 — live paid checkout requires usable Razorpay credentials.
@@ -1606,10 +1585,8 @@ ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
   const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
   res.json({
     smtpConfigured: smtpConfigured(business),
-    twilioSmsConfigured: twilioSmsConfigured(business),
     metaWhatsappConfigured: metaWhatsappConfigured(business),
     smtpPassConfigured: !!business?.smtpPassEnc,
-    twilioAuthTokenConfigured: !!business?.twilioAuthTokenEnc,
     metaWhatsappAccessTokenConfigured: !!business?.metaWhatsappAccessTokenEnc,
     frontendUrlConfigured: isHttpsAbsolute,
     locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),

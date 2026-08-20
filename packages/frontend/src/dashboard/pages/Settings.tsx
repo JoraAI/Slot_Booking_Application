@@ -20,7 +20,6 @@ export const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false)
   const [providerStatus, setProviderStatus] = useState<{
     smtpConfigured: boolean
-    twilioSmsConfigured: boolean
     metaWhatsappConfigured: boolean
     frontendUrlConfigured: boolean
     locationComplete: boolean
@@ -70,10 +69,6 @@ export const Settings: React.FC = () => {
     metaWhatsappTemplateMarketing: config?.metaWhatsappTemplateMarketing || '',
     metaWhatsappAccessToken: '',
     clearMetaWhatsappAccessToken: false,
-    twilioAccountSid: config?.twilioAccountSid || '',
-    twilioSmsFrom: config?.twilioSmsFrom || '',
-    twilioAuthToken: '',
-    clearTwilioAuthToken: false,
     enableWaitlist: config?.enableWaitlist || false,
     enableRecurring: config?.enableRecurring || false,
     enableMultiStaff: config?.enableMultiStaff || false,
@@ -130,10 +125,6 @@ export const Settings: React.FC = () => {
         metaWhatsappTemplateMarketing: config.metaWhatsappTemplateMarketing || '',
         metaWhatsappAccessToken: '',
         clearMetaWhatsappAccessToken: false,
-        twilioAccountSid: config.twilioAccountSid || '',
-        twilioSmsFrom: config.twilioSmsFrom || '',
-        twilioAuthToken: '',
-        clearTwilioAuthToken: false,
         enableWaitlist: config.enableWaitlist || false,
         enableRecurring: config.enableRecurring || false,
         enableMultiStaff: config.enableMultiStaff || false,
@@ -209,11 +200,9 @@ export const Settings: React.FC = () => {
         ...p,
         smtpPass: '',
         metaWhatsappAccessToken: '',
-        twilioAuthToken: '',
         razorpayKeySecret: '',
         clearSmtpPass: false,
         clearMetaWhatsappAccessToken: false,
-        clearTwilioAuthToken: false,
         clearRazorpayKeySecret: false,
       }))
       api.getOwnerSettingsStatus().then(setProviderStatus).catch(() => {})
@@ -416,37 +405,10 @@ export const Settings: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">SMS From (OTP)</label>
-            <input value={form.twilioSmsFrom} onChange={(e) => setForm(p => ({ ...p, twilioSmsFrom: e.target.value }))}
-              placeholder="+14155552671"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
             <label className="block text-sm font-medium mb-1">Marketing template name (optional)</label>
             <input value={form.metaWhatsappTemplateMarketing} onChange={(e) => setForm(p => ({ ...p, metaWhatsappTemplateMarketing: e.target.value }))}
               placeholder="promo_broadcast_v1"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Twilio Account SID (SMS OTP only)</label>
-            <input value={form.twilioAccountSid} onChange={(e) => setForm(p => ({ ...p, twilioAccountSid: e.target.value }))}
-              placeholder="ACxxxxxxxx"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Twilio Auth Token (SMS OTP only)</label>
-            <input type="password" value={form.twilioAuthToken} onChange={(e) => setForm(p => ({ ...p, twilioAuthToken: e.target.value, clearTwilioAuthToken: false }))}
-              placeholder={config?.twilioAuthTokenConfigured ? '•••••••• (leave blank to keep)' : 'Auth token'}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            <p className="text-xs text-gray-400 mt-1">
-              {config?.twilioAuthTokenConfigured ? '✓ Token saved for SMS OTP. ' : 'Not saved yet. '}
-              {config?.twilioAuthTokenConfigured && (
-                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, twilioAuthToken: '', clearTwilioAuthToken: true }))}>
-                  Remove saved token
-                </button>
-              )}
-            </p>
           </div>
         </div>
 
@@ -750,9 +712,9 @@ export const Settings: React.FC = () => {
         <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <div>
             <p className="text-sm font-medium">Require OTP for booking management</p>
-            <p className="text-xs text-gray-500">Adds an email or SMS verification step.</p>
+            <p className="text-xs text-gray-500">Adds an email verification step (sent via your SMTP settings).</p>
           </div>
-          <button onClick={() => setForm(p => ({ ...p, bookingManagementOtpEnabled: !p.bookingManagementOtpEnabled }))}
+          <button onClick={() => setForm(p => ({ ...p, bookingManagementOtpEnabled: !p.bookingManagementOtpEnabled, bookingManagementOtpChannel: 'EMAIL' }))}
             className={`relative w-12 h-6 rounded-full transition-colors ${form.bookingManagementOtpEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
             <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.bookingManagementOtpEnabled ? 'left-6' : 'left-0.5'}`} />
           </button>
@@ -760,31 +722,12 @@ export const Settings: React.FC = () => {
 
         {form.bookingManagementOtpEnabled && (
           <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">OTP Channel</label>
-              <select value={form.bookingManagementOtpChannel} onChange={(e) => setForm(p => ({ ...p, bookingManagementOtpChannel: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
-                <option value="EMAIL">Email</option>
-                <option value="SMS">SMS</option>
-                <option value="EITHER">Email or SMS</option>
-              </select>
-            </div>
-            <div className="space-y-1 text-xs">
-              <p className={providerStatus?.smtpConfigured ? 'text-green-600' : 'text-amber-600'}>
-                {providerStatus?.smtpConfigured ? '✓ SMTP configured' : '⚠ SMTP not configured — Email OTP will be unavailable'}
-              </p>
-              <p className={providerStatus?.twilioSmsConfigured ? 'text-green-600' : 'text-amber-600'}>
-                {providerStatus?.twilioSmsConfigured ? '✓ Twilio SMS configured' : '⚠ Twilio SMS not configured — SMS OTP will be unavailable'}
-              </p>
-            </div>
-            {!providerStatus?.smtpConfigured && form.bookingManagementOtpChannel === 'EMAIL' && (
+            <p className={`text-xs ${providerStatus?.smtpConfigured ? 'text-green-600' : 'text-amber-600'}`}>
+              {providerStatus?.smtpConfigured ? '✓ SMTP configured — OTP emails can be sent' : '⚠ SMTP not configured — Email OTP will be unavailable'}
+            </p>
+            {!providerStatus?.smtpConfigured && (
               <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
                 Enable Email OTP only after saving SMTP username and password above.
-              </p>
-            )}
-            {!providerStatus?.twilioSmsConfigured && form.bookingManagementOtpChannel === 'SMS' && (
-              <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-                Enable SMS OTP only after saving Twilio Account SID, Auth Token, and SMS From above.
               </p>
             )}
           </div>

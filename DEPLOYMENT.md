@@ -121,8 +121,8 @@ openssl rand -hex 32   # CRON_SECRET
 
 Do **not** set `PORT=3001` on Render. Leave `PORT` unset so Render injects it (usually `10000`), or set `PORT=10000` explicitly. Listening on `3001` makes the service look live in logs but return `Not Found` on the public URL.
 
-Optional later (Cloudinary media, or a platform-wide SMTP/Twilio fallback) — see `packages/backend/.env.example`.
-Owners enter their own SMTP and Twilio credentials in Dashboard → Settings; those are stored encrypted in the database.
+Optional later (Cloudinary media, or a platform-wide SMTP/Meta WhatsApp fallback) — see `packages/backend/.env.example`.
+Owners enter their own SMTP and Meta WhatsApp credentials in Dashboard → Settings; those are stored encrypted in the database.
 
 - `CLOUDINARY_*`
 
@@ -167,7 +167,7 @@ Optional override (Production + Preview) only if the API is not `reservly-api.on
 VITE_API_BASE_URL=https://your-api-host.example
 ```
 
-No trailing slash. Never put `JWT_SECRET` / `CRON_SECRET` / Twilio / Razorpay in `VITE_*`. Do **not** set this to the Vercel frontend URL.
+No trailing slash. Never put `JWT_SECRET` / `CRON_SECRET` / Meta / Razorpay in `VITE_*`. Do **not** set this to the Vercel frontend URL.
 
 4. Deploy → copy the Vercel URL, e.g. `https://reservly.vercel.app`
 5. Update Render env:
@@ -246,7 +246,7 @@ DATABASE_URL="your-neon-url" pnpm --filter backend db:seed
 - ~750 free instance hours / month per workspace
 - Neon free may suspend compute → first DB query after idle can be slow
 - Do **not** use Render free Postgres for long-term data (expires ~30 days) — use Neon/Supabase
-- Twilio / Razorpay are paid third parties when you enable them
+- Meta WhatsApp / Razorpay are paid third parties when you enable them
 - No in-process timers — external cron (Step 6) is required
 
 ---

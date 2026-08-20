@@ -41,7 +41,7 @@ async function makeBusiness(overrides: any = {}) {
       bookingWindowDays: 14,
       enablePayments: true,
       paymentMode: 'full',
-      // Keep tests fast + network-independent: notifications try SMTP/Twilio.
+      // Keep tests fast + network-independent: notifications try SMTP/Meta.
       notifyCustomerEmail: false,
       notifyOwnerEmail: false,
       notifyCustomerWhatsapp: false,

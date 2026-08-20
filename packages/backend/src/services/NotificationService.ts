@@ -5,7 +5,6 @@ import {
   metaWhatsappConfigured,
   resolveMetaWhatsapp,
   resolveSmtp,
-  resolveTwilioSms,
   smtpConfigured,
 } from './notificationCredentials';
 import {
@@ -177,41 +176,6 @@ class NotificationService {
     }
   }
 
-  /** Twilio SMS (plain SMS, not WhatsApp) using the owner's SMS From number. */
-  private async sendSms(to: string, message: string, business?: any): Promise<void> {
-    try {
-      const twilio = resolveTwilioSms(business);
-      if (!twilio) {
-        throw new Error('SMS: Twilio SMS is not configured. Add Account SID, Auth Token, and SMS From number in Settings.');
-      }
-
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilio.accountSid}/Messages.json`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          From: twilio.from,
-          To: to,
-          Body: message,
-        }),
-      });
-
-      if (!response.ok) {
-        const body = await response.text();
-        console.error('SMS sending failed:', body);
-        throw new Error('SMS sending failed');
-      } else {
-        console.log(`SMS sent to ${to}`);
-      }
-    } catch (error) {
-      console.error('SMS sending failed:', error);
-      throw error;
-    }
-  }
-
   /** Send a booking-management OTP by email. Throws on delivery failure. */
   async sendOtpEmail(to: string, code: string, businessName: string, business?: any): Promise<void> {
     await this.sendEmail(to, `Your verification code - ${businessName}`,
@@ -221,11 +185,6 @@ class NotificationService {
       <p style="color:#6B7280; font-size:13px;">This code expires in 10 minutes. Never share it.</p>`,
       { throwOnError: true, business }
     );
-  }
-
-  /** Send a booking-management OTP by SMS. Throws on delivery failure. */
-  async sendOtpSms(to: string, code: string, businessName: string, business?: any): Promise<void> {
-    await this.sendSms(to, `Your ${businessName} booking verification code is: ${code}. It expires in 10 minutes.`, business);
   }
 
   async sendBookingConfirmation(booking: any, business: any): Promise<void> {
@@ -261,7 +220,7 @@ class NotificationService {
       </div>
     `;
 
-    // Notify customer from the owner's SMTP / Twilio sender.
+    // Notify customer from the owner's SMTP / Meta WhatsApp sender.
     if (business.notifyCustomerEmail && booking.customerEmail) {
       await this.sendEmail(
         booking.customerEmail,
@@ -584,7 +543,7 @@ class NotificationService {
 
   /**
    * Owner-authored message to one phonebook contact. Delivery uses the owner's
-   * SMTP/Twilio credentials stored on the business.
+   * SMTP / Meta WhatsApp credentials stored on the business.
    */
   async sendCustomCustomerNotification(
     businessId: string,

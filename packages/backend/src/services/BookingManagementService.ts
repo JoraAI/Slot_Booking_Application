@@ -2,10 +2,7 @@ import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import { notificationService } from './NotificationService';
 import { locationInfo } from './LocationService';
-import {
-  smtpConfigured as smtpReady,
-  twilioSmsConfigured as smsReady,
-} from './notificationCredentials';
+import { smtpConfigured as smtpReady } from './notificationCredentials';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -156,28 +153,14 @@ class BookingManagementService {
     return { session, booking: session.booking };
   }
 
-  /** Resolve which channel/destination to use for a booking's OTP. */
-  private resolveOtpTarget(business: any, booking: any): { channel: 'EMAIL' | 'SMS'; destination: string } {
-    const configured = business.bookingManagementOtpChannel || 'EITHER';
-    const smtp = this.smtpConfigured(business);
-    const sms = this.twilioSmsConfigured(business);
+  /** Resolve email destination for a booking's OTP (email-only). */
+  private resolveOtpTarget(business: any, booking: any): { channel: 'EMAIL'; destination: string } {
+    if (!this.smtpConfigured(business)) {
+      throw new Error('Email OTP is not configured for this business');
+    }
     const email = booking.customerEmail;
-    const phone = booking.customerPhone;
-
-    if (configured === 'EMAIL') {
-      if (!smtp) throw new Error('Email OTP is not configured for this business');
-      if (!email) throw new Error('Booking has no email address for OTP delivery');
-      return { channel: 'EMAIL', destination: email };
-    }
-    if (configured === 'SMS') {
-      if (!sms) throw new Error('SMS OTP is not configured for this business');
-      if (!phone) throw new Error('Booking has no phone number for OTP delivery');
-      return { channel: 'SMS', destination: phone };
-    }
-    // EITHER: prefer email when available + configured, else SMS
-    if (smtp && email) return { channel: 'EMAIL', destination: email };
-    if (sms && phone) return { channel: 'SMS', destination: phone };
-    throw new Error('No OTP delivery channel is available for this booking');
+    if (!email) throw new Error('Booking has no email address for OTP delivery');
+    return { channel: 'EMAIL', destination: email };
   }
 
   /** Request an OTP for a token-authorized booking. */
@@ -206,8 +189,7 @@ class BookingManagementService {
     const code = this.generateOtpCode();
 
     try {
-      if (channel === 'EMAIL') await notificationService.sendOtpEmail(destination, code, business.name, business);
-      else await notificationService.sendOtpSms(destination, code, business.name, business);
+      await notificationService.sendOtpEmail(destination, code, business.name, business);
     } catch {
       // Never leak whether delivery succeeded/failed to unauthenticated callers
       // beyond a generic error; the token is already verified so this is fine.
@@ -273,10 +255,6 @@ class BookingManagementService {
 
   smtpConfigured(business?: any): boolean {
     return smtpReady(business);
-  }
-
-  twilioSmsConfigured(business?: any): boolean {
-    return smsReady(business);
   }
 }
 
