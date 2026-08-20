@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import type { CustomerContact, CustomerNotification } from '../../types'
+import { RichMessageEditor } from '../components/RichMessageEditor'
 
 export const Notifications: React.FC = () => {
   const [loading, setLoading] = useState(false)
@@ -23,10 +24,20 @@ export const Notifications: React.FC = () => {
   const [channels, setChannels] = useState<('email' | 'whatsapp')[]>([])
   const [subject, setSubject] = useState('Message from your salon')
   const [message, setMessage] = useState('')
+  const [messageHtml, setMessageHtml] = useState('')
   const [sending, setSending] = useState(false)
   const [broadcasting, setBroadcasting] = useState(false)
+  const [filterOptions, setFilterOptions] = useState<{
+    services: string[]
+    attributes: Array<{ key: string; label: string; values: string[] }>
+    totalCustomers: number
+  } | null>(null)
+  const [filterService, setFilterService] = useState('')
+  const [filterAttrs, setFilterAttrs] = useState<Record<string, string>>({})
+  const [audience, setAudience] = useState<{ matched: number; total: number } | null>(null)
   const [broadcastReport, setBroadcastReport] = useState<{
     total: number
+    matched?: number
     emailed: number
     whatsapped: number
     reached: number
@@ -35,14 +46,48 @@ export const Notifications: React.FC = () => {
   } | null>(null)
 
   useEffect(() => {
-    Promise.all([api.getOwnerSettingsStatus(), api.getCustomerNotifications(), api.getCustomers({ limit: '200' })])
-      .then(([readiness, notifications, phonebook]) => {
+    Promise.all([
+      api.getOwnerSettingsStatus(),
+      api.getCustomerNotifications(),
+      api.getCustomers({ limit: '200' }),
+      api.getCustomerFilters(),
+    ])
+      .then(([readiness, notifications, phonebook, filters]) => {
         setStatus(readiness)
         setHistory(notifications)
         setCustomers(phonebook.customers)
+        setFilterOptions(filters)
       })
       .catch(() => setStatus(null))
   }, [])
+
+  const filterParams = useMemo(() => {
+    const params: Record<string, string> = {}
+    if (filterService) params.service = filterService
+    for (const [key, value] of Object.entries(filterAttrs)) {
+      if (value) params[key] = value
+    }
+    return params
+  }, [filterService, filterAttrs])
+
+  const hasAudienceFilter = Object.keys(filterParams).length > 0
+
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      api.previewCustomerAudience(filterParams)
+        .then((preview) => {
+          if (!cancelled) setAudience({ matched: preview.matched, total: preview.total })
+        })
+        .catch(() => {
+          if (!cancelled) setAudience(null)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [filterParams])
 
   const handleTest = async () => {
     setLoading(true)
@@ -77,6 +122,12 @@ export const Notifications: React.FC = () => {
       : [...current, channel])
   }
 
+  const clearMessage = () => {
+    setMessage('')
+    setMessageHtml('')
+    setSubject('Message from your salon')
+  }
+
   const sendCustom = async () => {
     if (channels.length === 0 || !message.trim()) {
       toast.error('Choose email and/or WhatsApp and enter a message')
@@ -100,15 +151,13 @@ export const Notifications: React.FC = () => {
         channels,
         subject: subject.trim() || 'Message from your salon',
         message: message.trim(),
+        messageHtml: messageHtml || message.trim(),
       })
       const sent = res.results.filter((item) => item.ok).length
       const failures = res.results.filter((item) => !item.ok)
       if (sent) toast.success(`Sent through ${sent} channel${sent === 1 ? '' : 's'}`)
       failures.forEach((item) => toast.error(`${item.channel}: ${item.error || 'failed'}`))
-      if (failures.length === 0) {
-        setMessage('')
-        setSubject('Message from your salon')
-      }
+      if (failures.length === 0) clearMessage()
       const [notifications, phonebook] = await Promise.all([
         api.getCustomerNotifications(),
         api.getCustomers({ limit: '200' }),
@@ -122,33 +171,41 @@ export const Notifications: React.FC = () => {
     }
   }
 
-  const sendToAll = async () => {
+  const sendToAudience = async () => {
     if (!message.trim()) {
-      toast.error('Enter a message to send to all customers')
+      toast.error('Enter a message to send')
       return
     }
-    const count = customers.length
+    const count = audience?.matched ?? customers.length
     if (!count) {
-      toast.error('There are no customers in the phonebook yet')
+      toast.error(hasAudienceFilter ? 'No customers match these filters' : 'There are no customers in the phonebook yet')
       return
     }
-    if (!window.confirm(`Send this message to all ${count} customer${count === 1 ? '' : 's'}? Valid emails get email, valid WhatsApp numbers get WhatsApp. Anyone who cannot be reached will be listed for you.`)) {
+    const label = hasAudienceFilter
+      ? `Send this message to ${count} matching customer${count === 1 ? '' : 's'}?`
+      : `Send this message to all ${count} customer${count === 1 ? '' : 's'}?`
+    if (!window.confirm(`${label} Valid emails get email, valid WhatsApp numbers get WhatsApp.`)) {
       return
     }
     setBroadcasting(true)
     setBroadcastReport(null)
     try {
+      const attrs = Object.fromEntries(Object.entries(filterAttrs).filter(([, value]) => !!value))
       const report = await api.sendBroadcastNotification({
         subject: subject.trim() || 'Message from your salon',
         message: message.trim(),
+        messageHtml: messageHtml || message.trim(),
+        filters: hasAudienceFilter
+          ? { service: filterService || null, attributes: Object.keys(attrs).length ? attrs : null }
+          : null,
       })
       setBroadcastReport(report)
-      if (report.reached) toast.success(`Reached ${report.reached} of ${report.total} customers`)
+      if (report.reached) toast.success(`Reached ${report.reached} of ${report.matched ?? report.total} customers`)
       if (report.unsent.length) toast.error(`${report.unsent.length} customer${report.unsent.length === 1 ? '' : 's'} were not sent`)
       const notifications = await api.getCustomerNotifications()
       setHistory(notifications)
     } catch (err: any) {
-      toast.error(err.message || 'Could not send to all customers')
+      toast.error(err.message || 'Could not send broadcast')
     } finally {
       setBroadcasting(false)
     }
@@ -170,7 +227,6 @@ export const Notifications: React.FC = () => {
         </Link>
       </div>
 
-      {/* Readiness — platform prerequisites for email/WhatsApp channels */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
         <h2 className="text-lg font-semibold">Channel Readiness</h2>
         <p className="text-sm text-gray-500">
@@ -204,15 +260,66 @@ export const Notifications: React.FC = () => {
         )}
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-lg">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-2xl">
         <h2 className="text-lg font-semibold">Send a custom message</h2>
         <p className="text-sm text-gray-500">
-          Send to a saved customer, type an email / WhatsApp number, or send the same message to
-          everyone in the phonebook. Valid emails get email; valid WhatsApp numbers get WhatsApp.
-          Anyone who cannot be reached is listed below and emailed to you.
+          Message one person, or broadcast to a filtered audience (recent service, gender, and other intake fields).
+          Email keeps your formatting; WhatsApp gets the same text without fonts.
         </p>
+
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3 bg-gray-50/70 dark:bg-gray-950/30">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Audience filters</h3>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => { setFilterService(''); setFilterAttrs({}) }}
+            >
+              Clear filters
+            </button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Recent service</label>
+              <select
+                value={filterService}
+                onChange={(e) => setFilterService(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+              >
+                <option value="">Any service</option>
+                {(filterOptions?.services || []).map((service) => (
+                  <option key={service} value={service}>{service}</option>
+                ))}
+              </select>
+            </div>
+            {(filterOptions?.attributes || []).map((field) => (
+              <div key={field.key}>
+                <label className="block text-xs font-medium mb-1">{field.label}</label>
+                <select
+                  value={filterAttrs[field.key] || ''}
+                  onChange={(e) => setFilterAttrs((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+                >
+                  <option value="">Any</option>
+                  {field.values.map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500">
+            {audience
+              ? `Matching ${audience.matched} of ${audience.total} customers`
+              : 'Loading audience…'}
+            {!filterOptions?.attributes?.length && !filterOptions?.services?.length
+              ? ' — filters appear after bookings capture service / form answers like Gender.'
+              : ''}
+          </p>
+        </div>
+
         <div>
-          <label className="block text-sm font-medium mb-1">Saved customer (optional)</label>
+          <label className="block text-sm font-medium mb-1">Saved customer (optional — single send)</label>
           <select value={customerId} onChange={(e) => applyCustomer(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800">
             <option value="">Type an email or number below</option>
@@ -254,33 +361,39 @@ export const Notifications: React.FC = () => {
             Send WhatsApp
           </label>
         </div>
-        {channels.includes('email') && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Email subject</label>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-        )}
+        <div>
+          <label className="block text-sm font-medium mb-1">Email subject</label>
+          <input value={subject} onChange={(e) => setSubject(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        </div>
         <div>
           <label className="block text-sm font-medium mb-1">Message</label>
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={6} maxLength={3000}
-            placeholder="Write the message customers should receive"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          <RichMessageEditor
+            valueHtml={messageHtml}
+            onChange={(html, plain) => {
+              setMessageHtml(html)
+              setMessage(plain)
+            }}
+          />
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={sendCustom} disabled={sending || broadcasting}
             className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50">
-            {sending ? 'Sending...' : 'Send message'}
+            {sending ? 'Sending...' : 'Send to this contact'}
           </button>
-          <button onClick={sendToAll} disabled={sending || broadcasting}
+          <button onClick={sendToAudience} disabled={sending || broadcasting}
             className="px-4 py-2 border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/5 disabled:opacity-50">
-            {broadcasting ? 'Sending to all...' : `Send to all ${customers.length} customers`}
+            {broadcasting
+              ? 'Sending…'
+              : hasAudienceFilter
+                ? `Send to ${audience?.matched ?? 0} matching`
+                : `Send to all ${audience?.total ?? customers.length} customers`}
           </button>
         </div>
         {broadcastReport && (
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2 text-sm">
             <p>
-              Reached {broadcastReport.reached} of {broadcastReport.total}
+              Reached {broadcastReport.reached} of {broadcastReport.matched ?? broadcastReport.total}
               {' '}({broadcastReport.emailed} email, {broadcastReport.whatsapped} WhatsApp).
             </p>
             {broadcastReport.unsent.length === 0 ? (

@@ -189,6 +189,7 @@ class BookingService {
       phone: booking.customerPhone,
       email: booking.customerEmail,
       lastServiceName: service.name,
+      formData: data.formData || booking.formData,
     }, db);
 
     // Return the plaintext management token exactly once (creation only).

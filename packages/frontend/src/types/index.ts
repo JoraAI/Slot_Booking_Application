@@ -128,6 +128,7 @@ export interface CustomerContact {
   bookingCount: number
   lastBookedAt: string | null
   lastServiceName: string | null
+  attributes?: Record<string, string>
   createdAt: string
   updatedAt: string
 }

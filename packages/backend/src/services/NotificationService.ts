@@ -12,6 +12,8 @@ import {
   isValidNotifyEmail,
   isValidWhatsappNumber,
 } from './CustomerService';
+import { contactMatchesFilters } from './CustomerAttributes';
+import { htmlToPlainText, wrapEmailMessage } from './MessageFormat';
 
 type SendOpts = { replyTo?: string; throwOnError?: boolean; business?: any };
 
@@ -589,7 +591,8 @@ class NotificationService {
     customerId: string,
     channels: Array<'email' | 'whatsapp'>,
     subject: string,
-    message: string
+    message: string,
+    messageHtml?: string | null
   ): Promise<Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }>> {
     const [business, customer] = await Promise.all([
       prisma.business.findUnique({ where: { id: businessId } }),
@@ -598,6 +601,10 @@ class NotificationService {
     if (!business) throw new Error('Business not found');
     if (!customer) throw new Error('Customer not found');
 
+    const plainMessage = htmlToPlainText(messageHtml || message);
+    const emailBody = wrapEmailMessage(business.name, messageHtml || message, (v) => this.esc(v));
+    const historyMessage = plainMessage.slice(0, 3000);
+
     const results: Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }> = [];
     for (const channel of channels) {
       let ok = false;
@@ -605,11 +612,10 @@ class NotificationService {
       try {
         if (channel === 'email') {
           if (!customer.email) throw new Error('Customer does not have an email address');
-          const safeMessage = this.esc(message).replace(/\n/g, '<br>');
           await this.sendEmail(
             customer.email,
             subject,
-            `<h2>${this.esc(business.name)}</h2><p>${safeMessage}</p>`,
+            emailBody,
             { replyTo: business.ownerEmail, throwOnError: true, business }
           );
         } else {
@@ -619,7 +625,7 @@ class NotificationService {
             : '';
           await this.sendWhatsApp(
             customer.phone,
-            `${business.name}\n\n${message}${ownerContact}`,
+            `${business.name}\n\n${plainMessage}${ownerContact}`,
             { throwOnError: true, business }
           );
         }
@@ -634,7 +640,7 @@ class NotificationService {
           customerId: customer.id,
           channel,
           subject: channel === 'email' ? subject : null,
-          message,
+          message: historyMessage,
           recipientName: customer.name,
           recipientEmail: customer.email,
           recipientPhone: customer.phone,
@@ -651,9 +657,15 @@ class NotificationService {
   async sendBroadcast(
     businessId: string,
     subject: string,
-    message: string
+    message: string,
+    filters?: {
+      service?: string | null;
+      attributes?: Record<string, string> | null;
+    } | null,
+    messageHtml?: string | null
   ): Promise<{
     total: number;
+    matched: number;
     emailed: number;
     whatsapped: number;
     reached: number;
@@ -663,15 +675,17 @@ class NotificationService {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new Error('Business not found');
 
-    const customers = await prisma.customerContact.findMany({
+    const allCustomers = await prisma.customerContact.findMany({
       where: { businessId },
       orderBy: { name: 'asc' },
-      take: 300,
+      take: 500,
     });
-    if (customers.length === 0) throw new Error('There are no customers in the phonebook yet');
+    const customers = allCustomers.filter((customer) => contactMatchesFilters(customer, filters));
+    if (allCustomers.length === 0) throw new Error('There are no customers in the phonebook yet');
+    if (customers.length === 0) throw new Error('No customers match the selected filters');
 
     const smtpReady = this.smtpConfigured(business);
-      const whatsappReady = this.metaWhatsappConfigured(business);
+    const whatsappReady = this.metaWhatsappConfigured(business);
     const unsent: Array<{ id: string; name: string; email: string | null; phone: string | null; reason: string }> = [];
     let emailed = 0;
     let whatsapped = 0;
@@ -721,7 +735,8 @@ class NotificationService {
           customer.id,
           channels,
           subject,
-          message
+          message,
+          messageHtml
         );
         const gotEmail = results.some((r) => r.channel === 'email' && r.ok);
         const gotWhatsapp = results.some((r) => r.channel === 'whatsapp' && r.ok);
@@ -757,7 +772,7 @@ class NotificationService {
           business.ownerEmail,
           `Broadcast incomplete — ${unsent.length} customer${unsent.length === 1 ? '' : 's'} were not sent`,
           `<h2>These customers were not sent your message</h2>
-          <p>Your broadcast from <strong>${this.esc(business.name)}</strong> reached ${reached} of ${customers.length} customers.</p>
+          <p>Your broadcast from <strong>${this.esc(business.name)}</strong> reached ${reached} of ${customers.length} matched customers.</p>
           <p>The people below had no valid email/WhatsApp number, or delivery failed:</p>
           <table style="border-collapse:collapse;font-size:14px;">
             <thead>
@@ -778,7 +793,7 @@ class NotificationService {
       }
     }
 
-    return { total: customers.length, emailed, whatsapped, reached, unsent, ownerNotified };
+    return { total: allCustomers.length, matched: customers.length, emailed, whatsapped, reached, unsent, ownerNotified };
   }
 
   /**

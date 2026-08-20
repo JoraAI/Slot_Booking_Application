@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import crypto from 'crypto';
+import { attributesFromFormData, mergeAttributes } from './CustomerAttributes';
 
 export function normalizeCustomerPhone(value?: string | null): string | null {
   const trimmed = String(value || '').trim();
@@ -46,6 +47,7 @@ export type CustomerContactInput = {
   notes?: string | null;
   lastServiceName?: string | null;
   lastBookedAt?: Date | null;
+  attributes?: Record<string, string> | null;
 };
 
 export function pickContactKeeper<T extends { id: string; lastBookedAt?: Date | null; bookingCount?: number; updatedAt?: Date }>(
@@ -178,6 +180,9 @@ class CustomerService {
       const nextBookedAt = options.incrementBooking
         ? (input.lastBookedAt || new Date())
         : (input.lastBookedAt !== undefined ? input.lastBookedAt : keeper.lastBookedAt);
+      const nextAttributes = input.attributes
+        ? mergeAttributes(keeper.attributes, input.attributes)
+        : undefined;
 
       return db.customerContact.update({
         where: { id: keeper.id },
@@ -189,6 +194,7 @@ class CustomerService {
           ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
           lastServiceName: nextService,
           lastBookedAt: nextBookedAt,
+          ...(nextAttributes ? { attributes: nextAttributes } : {}),
           ...(options.incrementBooking ? { bookingCount: { increment: 1 } } : {}),
         },
       });
@@ -205,6 +211,7 @@ class CustomerService {
         lastServiceName: input.lastServiceName || null,
         lastBookedAt: options.incrementBooking ? (input.lastBookedAt || new Date()) : (input.lastBookedAt || null),
         bookingCount: options.incrementBooking ? 1 : 0,
+        attributes: input.attributes || {},
       },
     });
   }
@@ -216,14 +223,21 @@ class CustomerService {
       phone?: string | null;
       email?: string | null;
       lastServiceName?: string | null;
+      formData?: Record<string, unknown> | null;
     },
     db: any = prisma
   ): Promise<any> {
+    const fields = await db.formField.findMany({
+      where: { businessId },
+      select: { id: true, label: true, fieldType: true },
+    });
+    const attributes = attributesFromFormData(fields, customer.formData);
     return this.upsertContact(businessId, {
       name: customer.name,
       phone: customer.phone,
       email: customer.email,
       lastServiceName: customer.lastServiceName,
+      attributes,
     }, { incrementBooking: true, db });
   }
 

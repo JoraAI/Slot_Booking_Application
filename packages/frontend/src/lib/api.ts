@@ -312,6 +312,7 @@ class ApiClient {
     channels: ('email' | 'whatsapp')[]
     subject: string
     message: string
+    messageHtml?: string | null
   }) {
     return this.request<{
       customer: CustomerContact
@@ -322,9 +323,15 @@ class ApiClient {
     })
   }
 
-  sendBroadcastNotification(data: { subject: string; message: string }) {
+  sendBroadcastNotification(data: {
+    subject: string
+    message: string
+    messageHtml?: string | null
+    filters?: { service?: string | null; attributes?: Record<string, string> | null } | null
+  }) {
     return this.request<{
       total: number
+      matched: number
       emailed: number
       whatsapped: number
       reached: number
@@ -334,6 +341,32 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  }
+
+  getCustomerFilters() {
+    return this.request<{
+      services: string[]
+      attributes: Array<{ key: string; label: string; values: string[] }>
+      totalCustomers: number
+    }>('/owner/customers/filters')
+  }
+
+  previewCustomerAudience(params?: Record<string, string>) {
+    const qs = params && Object.keys(params).length
+      ? '?' + new URLSearchParams(params).toString()
+      : ''
+    return this.request<{
+      matched: number
+      total: number
+      sample: Array<{
+        id: string
+        name: string
+        email: string | null
+        phone: string | null
+        lastServiceName: string | null
+        attributes?: Record<string, string>
+      }>
+    }>(`/owner/customers/preview${qs}`)
   }
 
   getCustomerNotifications(limit = 25) {

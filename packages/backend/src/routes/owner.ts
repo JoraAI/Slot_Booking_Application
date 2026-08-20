@@ -24,10 +24,12 @@ import {
 } from '../services/notificationCredentials';
 import {
   customerService,
+  normalizeCustomerEmail,
   normalizeCustomerPhone,
 } from '../services/CustomerService';
 import { hashOwnerPassword, isHashedOwnerPassword, verifyOwnerPassword } from '../services/OwnerPassword';
 import { createMediaAsset, decodeImageBase64 } from '../services/MediaService';
+import { attributeKeyFromLabel, attributesFromFormData, contactMatchesFilters } from '../services/CustomerAttributes';
 
 export const ownerRouter = Router();
 
@@ -1256,6 +1258,7 @@ ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) 
       channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2),
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
+      messageHtml: z.string().trim().max(12000).optional().nullable(),
     }).parse(req.body);
 
     const channels = [...new Set(input.channels)];
@@ -1277,7 +1280,8 @@ ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) 
       customer.id,
       channels,
       input.subject,
-      input.message
+      input.message,
+      input.messageHtml
     );
     res.json({ customer, results });
   } catch (error: any) {
@@ -1293,11 +1297,18 @@ ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Respo
     const input = z.object({
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
+      messageHtml: z.string().trim().max(12000).optional().nullable(),
+      filters: z.object({
+        service: z.string().trim().max(160).optional().nullable(),
+        attributes: z.record(z.string().trim().max(120)).optional().nullable(),
+      }).optional().nullable(),
     }).parse(req.body);
     const report = await notificationService.sendBroadcast(
       req.owner!.businessId,
       input.subject,
-      input.message
+      input.message,
+      input.filters,
+      input.messageHtml
     );
     res.json(report);
   } catch (error: any) {
@@ -1314,19 +1325,171 @@ ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response
       channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2),
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
+      messageHtml: z.string().trim().max(12000).optional().nullable(),
     }).parse(req.body);
     const results = await notificationService.sendCustomCustomerNotification(
       req.owner!.businessId,
       req.params.id,
       [...new Set(input.channels)],
       input.subject,
-      input.message
+      input.message,
+      input.messageHtml
     );
     res.json({ results });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.issues[0]?.message || 'Invalid notification' });
     }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.get('/customers/filters', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const [contacts, formFields] = await Promise.all([
+      prisma.customerContact.findMany({
+        where: { businessId },
+        select: { id: true, phone: true, email: true, lastServiceName: true, attributes: true },
+        take: 500,
+      }),
+      prisma.formField.findMany({
+        where: { businessId },
+        select: { id: true, label: true, fieldType: true, options: true },
+        orderBy: { order: 'asc' },
+      }),
+    ]);
+
+    // One-time-ish backfill: if contacts lack attributes, pull from latest matching bookings.
+    const needsBackfill = contacts.filter((c) => {
+      const attrs = c.attributes && typeof c.attributes === 'object' ? Object.keys(c.attributes as object) : [];
+      return attrs.length === 0;
+    });
+    if (needsBackfill.length > 0) {
+      const bookings = await prisma.booking.findMany({
+        where: { businessId },
+        orderBy: { createdAt: 'desc' },
+        take: 800,
+        select: {
+          customerPhone: true,
+          customerEmail: true,
+          formData: true,
+          serviceNameSnapshot: true,
+        },
+      });
+      for (const contact of needsBackfill) {
+        const phone = normalizeCustomerPhone(contact.phone);
+        const email = normalizeCustomerEmail(contact.email);
+        const match = bookings.find((b) => {
+          const bPhone = normalizeCustomerPhone(b.customerPhone);
+          const bEmail = normalizeCustomerEmail(b.customerEmail);
+          return (phone && bPhone && phone === bPhone) || (email && bEmail && email === bEmail);
+        });
+        if (!match) continue;
+        const attrs = attributesFromFormData(formFields, match.formData as Record<string, unknown>);
+        if (Object.keys(attrs).length === 0 && !match.serviceNameSnapshot) continue;
+        await prisma.customerContact.update({
+          where: { id: contact.id },
+          data: {
+            attributes: attrs,
+            ...(match.serviceNameSnapshot && !contact.lastServiceName
+              ? { lastServiceName: match.serviceNameSnapshot }
+              : {}),
+          },
+        });
+        contact.attributes = attrs;
+        if (match.serviceNameSnapshot && !contact.lastServiceName) {
+          contact.lastServiceName = match.serviceNameSnapshot;
+        }
+      }
+    }
+
+    const refreshed = needsBackfill.length
+      ? await prisma.customerContact.findMany({
+          where: { businessId },
+          select: { lastServiceName: true, attributes: true },
+          take: 500,
+        })
+      : contacts;
+
+    const services = [...new Set(
+      refreshed.map((c) => c.lastServiceName).filter((v): v is string => !!v && !!String(v).trim())
+    )].sort((a, b) => a.localeCompare(b));
+
+    const attributeValues: Record<string, string[]> = {};
+    for (const contact of refreshed) {
+      const attrs = contact.attributes && typeof contact.attributes === 'object' && !Array.isArray(contact.attributes)
+        ? (contact.attributes as Record<string, string>)
+        : {};
+      for (const [key, value] of Object.entries(attrs)) {
+        if (!value) continue;
+        if (!attributeValues[key]) attributeValues[key] = [];
+        if (!attributeValues[key].includes(value)) attributeValues[key].push(value);
+      }
+    }
+
+    // Include select options from the intake form even before anyone has booked with them.
+    const attributeFields = formFields
+      .filter((f) => !['tel', 'email', 'textarea', 'checkbox'].includes(f.fieldType))
+      .filter((f) => !(/\b(full\s*)?name\b/i.test(f.label) && f.fieldType === 'text'))
+      .map((f) => {
+        const key = attributeKeyFromLabel(f.label);
+        const fromContacts = attributeValues[key] || [];
+        const fromOptions = (f.options || []).filter(Boolean);
+        const values = [...new Set([...fromOptions, ...fromContacts])].sort((a, b) => a.localeCompare(b));
+        return { key, label: f.label, values };
+      })
+      .filter((f) => f.key && f.values.length > 0);
+
+    // Keep orphan contact-only keys (not in current form) visible too.
+    for (const [key, values] of Object.entries(attributeValues)) {
+      if (attributeFields.some((f) => f.key === key)) continue;
+      attributeFields.push({
+        key,
+        label: key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        values: values.sort((a, b) => a.localeCompare(b)),
+      });
+    }
+
+    res.json({
+      services,
+      attributes: attributeFields,
+      totalCustomers: refreshed.length,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+ownerRouter.get('/customers/preview', async (req: AuthRequest, res: Response) => {
+  try {
+    const service = String(req.query.service || '').trim() || null;
+    const attributes: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.query)) {
+      if (key === 'service') continue;
+      if (typeof value === 'string' && value.trim()) attributes[key] = value.trim();
+    }
+    const contacts = await prisma.customerContact.findMany({
+      where: { businessId: req.owner!.businessId },
+      take: 500,
+    });
+    const matched = contacts.filter((c) => contactMatchesFilters(c, {
+      service,
+      attributes: Object.keys(attributes).length ? attributes : null,
+    }));
+    res.json({
+      matched: matched.length,
+      total: contacts.length,
+      sample: matched.slice(0, 8).map((c) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        lastServiceName: c.lastServiceName,
+        attributes: c.attributes,
+      })),
+    });
+  } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
 });
