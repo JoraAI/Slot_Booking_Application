@@ -187,7 +187,7 @@ export const StepRouter: React.FC = () => {
     const { isValid } = validateCustomerForm(config.formFields, wizard.formData)
     if (!isValid) {
       setShowFormErrors(true)
-      toast.error('Please fill all required fields correctly')
+      toast.error('Please fix the highlighted fields')
       return
     }
 
