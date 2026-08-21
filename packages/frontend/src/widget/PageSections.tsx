@@ -1,5 +1,5 @@
 import React from 'react'
-import type { PageSection, PageSectionType, Service, WorkingHour } from '../types'
+import type { LocationInfo, PageSection, PageSectionType, Service, WorkingHour } from '../types'
 
 const SECTION_ICONS: Record<PageSectionType, string> = {
   HERO: '✨',
@@ -23,23 +23,31 @@ export const PageSections: React.FC<{
   sections: PageSection[]
   services: Service[]
   workingHours: WorkingHour[]
-}> = ({ sections, services, workingHours }) => {
+  location?: LocationInfo | null
+}> = ({ sections, services, workingHours, location }) => {
   const visible = sections.filter((s) => s.isVisible).sort((a, b) => a.displayOrder - b.displayOrder)
   if (visible.length === 0) return null
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-10 pt-2 space-y-6">
       {visible.map((section) => (
-        <PageSectionBlock key={section.id} section={section} services={services} workingHours={workingHours} />
+        <PageSectionBlock
+          key={section.id}
+          section={section}
+          services={services}
+          workingHours={workingHours}
+          location={location}
+        />
       ))}
     </div>
   )
 }
 
-function PageSectionBlock({ section, services, workingHours }: {
+function PageSectionBlock({ section, services, workingHours, location }: {
   section: PageSection
   services: Service[]
   workingHours: WorkingHour[]
+  location?: LocationInfo | null
 }) {
   const subtitle = typeof section.configuration?.subtitle === 'string' ? section.configuration.subtitle : null
   const content = section.content || ''
@@ -122,6 +130,32 @@ function PageSectionBlock({ section, services, workingHours }: {
           </div>
         ) : (
           <p className="text-sm text-gray-500 whitespace-pre-line">{content}</p>
+        )}
+      </section>
+    )
+  }
+
+  if (section.type === 'CONTACT') {
+    const hasLocation = !!(location?.address || location?.directionsUrl)
+    return (
+      <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
+        <h2 className="text-lg font-bold mb-1">📞 {section.title || 'Contact'}</h2>
+        {subtitle && <p className="text-sm text-gray-500 mb-2">{subtitle}</p>}
+        {content && <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line mb-3">{content}</p>}
+        {hasLocation && (
+          <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-3 text-sm space-y-1">
+            {location?.address && <p className="text-gray-700 dark:text-gray-300">📍 {location.address}</p>}
+            {location?.directionsUrl && (
+              <a
+                href={location.directionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex text-primary font-medium hover:underline"
+              >
+                Get directions on Google Maps ↗
+              </a>
+            )}
+          </div>
         )}
       </section>
     )

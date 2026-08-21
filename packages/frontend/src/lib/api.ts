@@ -313,6 +313,7 @@ class ApiClient {
     subject: string
     message: string
     messageHtml?: string | null
+    imageUrl?: string | null
   }) {
     return this.request<{
       customer: CustomerContact
@@ -327,6 +328,7 @@ class ApiClient {
     subject: string
     message: string
     messageHtml?: string | null
+    imageUrl?: string | null
     channels?: ('email' | 'whatsapp')[]
     filters?: { service?: string | null; attributes?: Record<string, string> | null } | null
   }) {

@@ -32,6 +32,15 @@ import { attributeKeyFromLabel, attributesFromFormData, contactMatchesFilters } 
 
 export const ownerRouter = Router();
 
+const optionalImageUrl = z.preprocess(
+  (value) => (value === '' || value === undefined ? null : value),
+  z.union([
+    z.null(),
+    z.string().trim().url().max(2000),
+    z.string().trim().regex(/^\/api\/media\/[a-zA-Z0-9_-]+$/, 'Invalid media image URL'),
+  ]).optional()
+);
+
 /**
  * @openapi
  * /owner/login:
@@ -888,14 +897,15 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
 
     // Batch 4 — salon location validation (address ≤ 500; lat/lng pair; bounds).
+    // Merge with existing so a partial save (e.g. address only) still validates the pair.
     if (typeof updateData.address === 'string') {
       updateData.address = updateData.address.trim() || null;
     }
     if (updateData.address === '') updateData.address = null;
     const locationError = validateLocation({
-      address: updateData.address,
-      latitude: updateData.latitude,
-      longitude: updateData.longitude,
+      address: updateData.address !== undefined ? updateData.address : existing.address,
+      latitude: updateData.latitude !== undefined ? updateData.latitude : existing.latitude,
+      longitude: updateData.longitude !== undefined ? updateData.longitude : existing.longitude,
     });
     if (locationError) {
       return res.status(400).json({ error: locationError });
@@ -1083,11 +1093,11 @@ ownerRouter.put('/form-fields', async (req: AuthRequest, res: Response) => {
           businessId,
           label: f.label,
           fieldType: f.fieldType,
-          required: f.required,
+          required: f.fieldType === 'tel' ? true : f.required,
           options: f.fieldType === 'select' ? f.options : [],
           placeholder: f.placeholder || null,
           order: f.order ?? index,
-          visible: f.visible,
+          visible: f.fieldType === 'tel' || f.fieldType === 'email' ? true : f.visible,
         })),
       });
       return tx.formField.findMany({ where: { businessId }, orderBy: { order: 'asc' } });
@@ -1238,6 +1248,7 @@ ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) 
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
       messageHtml: z.string().trim().max(12000).optional().nullable(),
+      imageUrl: optionalImageUrl,
     }).parse(req.body);
 
     const channels = [...new Set(input.channels)];
@@ -1260,7 +1271,8 @@ ownerRouter.post('/notifications/send', async (req: AuthRequest, res: Response) 
       channels,
       input.subject,
       input.message,
-      input.messageHtml
+      input.messageHtml,
+      (input.imageUrl as string | null | undefined) || null
     );
     res.json({ customer, results });
   } catch (error: any) {
@@ -1277,6 +1289,7 @@ ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Respo
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
       messageHtml: z.string().trim().max(12000).optional().nullable(),
+      imageUrl: optionalImageUrl,
       channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2).default(['email', 'whatsapp']),
       filters: z.object({
         service: z.string().trim().max(160).optional().nullable(),
@@ -1289,7 +1302,8 @@ ownerRouter.post('/notifications/broadcast', async (req: AuthRequest, res: Respo
       input.message,
       input.filters,
       input.messageHtml,
-      [...new Set(input.channels)]
+      [...new Set(input.channels)],
+      (input.imageUrl as string | null | undefined) || null
     );
     res.json(report);
   } catch (error: any) {
@@ -1307,6 +1321,7 @@ ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response
       subject: z.string().trim().min(1).max(160).default('Message from your salon'),
       message: z.string().trim().min(1).max(3000),
       messageHtml: z.string().trim().max(12000).optional().nullable(),
+      imageUrl: optionalImageUrl,
     }).parse(req.body);
     const results = await notificationService.sendCustomCustomerNotification(
       req.owner!.businessId,
@@ -1314,7 +1329,8 @@ ownerRouter.post('/customers/:id/notify', async (req: AuthRequest, res: Response
       [...new Set(input.channels)],
       input.subject,
       input.message,
-      input.messageHtml
+      input.messageHtml,
+      (input.imageUrl as string | null | undefined) || null
     );
     res.json({ results });
   } catch (error: any) {

@@ -178,14 +178,16 @@ export const ManageBookingPage: React.FC = () => {
               </p>
             </div>
 
-            {booking.location?.directionsUrl && (
+            {(booking.location?.address || booking.location?.directionsUrl) && (
               <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4 space-y-1 text-sm">
                 <p className="font-medium">📍 Salon location</p>
                 {booking.location.address && <p className="text-xs text-gray-600 dark:text-gray-400">{booking.location.address}</p>}
-                <a href={booking.location.directionsUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-block text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
-                  🗺️ Get directions
-                </a>
+                {booking.location.directionsUrl && (
+                  <a href={booking.location.directionsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-block text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+                    🗺️ Get directions
+                  </a>
+                )}
               </div>
             )}
 

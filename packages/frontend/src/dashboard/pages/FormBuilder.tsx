@@ -29,7 +29,7 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
 
 const STARTER_FIELDS: Omit<DraftField, 'id'>[] = [
   { label: 'Full Name', fieldType: 'text', required: true, options: [], placeholder: 'Enter your full name', visible: true },
-  { label: 'Phone Number', fieldType: 'tel', required: false, options: [], placeholder: 'Enter your phone number', visible: true },
+  { label: 'Phone Number', fieldType: 'tel', required: true, options: [], placeholder: 'Enter your phone number', visible: true },
   { label: 'Email Address', fieldType: 'email', required: false, options: [], placeholder: 'Enter your email address', visible: true },
   { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, options: [], placeholder: 'Any special requests?', visible: true },
 ]
@@ -42,7 +42,13 @@ function isPhonebookField(field: { fieldType: FieldType }): boolean {
 }
 
 function withPhonebookFields(fields: DraftField[]): DraftField[] {
-  const next = fields.map((field) => isPhonebookField(field) ? { ...field, visible: true } : field)
+  const next = fields.map((field) => (
+    field.fieldType === 'tel'
+      ? { ...field, visible: true, required: true }
+      : isPhonebookField(field)
+        ? { ...field, visible: true }
+        : field
+  ))
   if (!next.some((field) => field.fieldType === 'tel')) {
     const nameIndex = next.findIndex((field) => /name/i.test(field.label) && field.fieldType === 'text')
     next.splice(nameIndex >= 0 ? nameIndex + 1 : Math.min(1, next.length), 0, { ...STARTER_FIELDS[1], id: nextKey() })
@@ -151,7 +157,7 @@ export const FormBuilder: React.FC = () => {
         fields.map((f, index) => ({
           label: f.label.trim(),
           fieldType: f.fieldType,
-          required: f.required,
+          required: f.fieldType === 'tel' ? true : f.required,
           options: f.fieldType === 'select' ? f.options : [],
           placeholder: f.placeholder.trim() || null,
           order: index,
@@ -185,7 +191,8 @@ export const FormBuilder: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold">Form Builder</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Phone and email stay on the booking form for the contact book. You can make them optional, but you cannot hide or remove them.
+            Phone is always required so confirmations and cancellations can reach WhatsApp.
+            Email stays on the form for the contact book - you can make email optional, but you cannot hide or remove phone or email.
           </p>
         </div>
         <div className="flex gap-2">
@@ -243,9 +250,13 @@ export const FormBuilder: React.FC = () => {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => update(field.id, { required: !field.required })} className={`text-xs px-2 py-1 rounded ${field.required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {field.required ? 'Required' : 'Optional'}
-                </button>
+                {field.fieldType === 'tel' ? (
+                  <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">Required</span>
+                ) : (
+                  <button onClick={() => update(field.id, { required: !field.required })} className={`text-xs px-2 py-1 rounded ${field.required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {field.required ? 'Required' : 'Optional'}
+                  </button>
+                )}
                 {isPhonebookField(field) ? (
                   <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">Always shown</span>
                 ) : (

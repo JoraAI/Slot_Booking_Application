@@ -106,14 +106,16 @@ export const ConfirmationScreen: React.FC<ConfirmationScreenProps> = ({
         </div>
       )}
 
-      {location?.directionsUrl && (
+      {(location?.address || location?.directionsUrl) && (
         <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 text-left max-w-sm mx-auto space-y-1">
           <p className="text-sm font-medium">📍 {businessName}</p>
           {location.address && <p className="text-xs text-gray-600 dark:text-gray-400">{location.address}</p>}
-          <a href={location.directionsUrl} target="_blank" rel="noopener noreferrer"
-            className="inline-block text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
-            🗺️ Get directions
-          </a>
+          {location.directionsUrl && (
+            <a href={location.directionsUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-block text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+              🗺️ Get directions
+            </a>
+          )}
         </div>
       )}
 

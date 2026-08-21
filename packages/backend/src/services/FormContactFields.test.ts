@@ -13,6 +13,16 @@ test('ensurePhoneAndEmailFields keeps phone and email visible and restores missi
   assert.ok(phone);
   assert.ok(email);
   assert.strictEqual(phone?.visible, true);
+  assert.strictEqual(phone?.required, true);
   assert.strictEqual(email?.visible, true);
   assert.strictEqual(email?.required, false);
+});
+
+test('ensurePhoneAndEmailFields forces phone required even when optional was saved', () => {
+  const result = ensurePhoneAndEmailFields([
+    { label: 'Full Name', fieldType: 'text', required: true, visible: true },
+    { label: 'Phone Number', fieldType: 'tel', required: false, visible: true },
+    { label: 'Email Address', fieldType: 'email', required: false, visible: true },
+  ]);
+  assert.strictEqual(result.find((field) => field.fieldType === 'tel')?.required, true);
 });

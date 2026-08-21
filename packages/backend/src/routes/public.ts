@@ -74,6 +74,10 @@ const signupSchema = z.object({
   ownerWhatsapp: z.string().optional().nullable(),
 });
 
+const requiredCustomerPhone = z.preprocess(
+  (value) => (value == null ? '' : String(value).trim()),
+  z.string().min(7, 'Phone number is required').max(30)
+);
 const optionalCustomerPhone = z.preprocess(
   (value) => (value == null ? '' : String(value).trim()),
   z.union([z.literal(''), z.string().min(7, 'Enter a valid phone number').max(30)])
@@ -92,7 +96,7 @@ const bookingSchema = z.object({
   serviceId: z.string().min(1),
   staffId: z.string().optional().nullable(),
   customerName: z.string().trim().min(1),
-  customerPhone: optionalCustomerPhone,
+  customerPhone: requiredCustomerPhone,
   customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   isRecurring: z.boolean().optional(),
@@ -128,7 +132,7 @@ const recurringSchema = z.object({
   serviceId: z.string().min(1),
   staffId: z.string().optional().nullable(),
   customerName: z.string().trim().min(1),
-  customerPhone: optionalCustomerPhone,
+  customerPhone: requiredCustomerPhone,
   customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   frequency: z.enum(['weekly', 'biweekly', 'monthly']),
@@ -143,7 +147,7 @@ const paymentInitiateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Invalid time format'),
   customerName: z.string().trim().min(1),
-  customerPhone: optionalCustomerPhone,
+  customerPhone: requiredCustomerPhone,
   customerEmail: optionalCustomerEmail,
   formData: z.record(z.any()).optional(),
   source: z.string().optional().nullable(),
@@ -223,7 +227,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
         formFields: {
           create: [
             { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-            { label: 'Phone Number', fieldType: 'tel', required: false, order: 2, visible: true, placeholder: 'Enter your phone number' },
+            { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
             { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
             { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Any special requests?' },
           ],

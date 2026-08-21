@@ -78,6 +78,10 @@ class BookingService {
     const business = await businessResolver.resolveOrThrow(identifier, db);
     const tz = business.timezone || 'Asia/Kolkata';
 
+    const phone = String(data.customerPhone || '').trim();
+    if (phone.length < 7) throw new Error('Phone number is required for WhatsApp notifications');
+    data.customerPhone = phone;
+
     const service = await db.service.findFirst({
       where: { id: data.serviceId, businessId: business.id, isActive: true },
       include: { staff: true, workingHours: true },

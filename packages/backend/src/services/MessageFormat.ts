@@ -16,12 +16,13 @@ export function htmlToPlainText(html: string): string {
 }
 
 const ALLOWED_TAGS = new Set([
-  'b', 'strong', 'i', 'em', 'u', 'br', 'p', 'div', 'span', 'font',
+  'b', 'strong', 'i', 'em', 'u', 'br', 'p', 'div', 'span', 'font', 'img',
 ]);
 
 /**
  * Allow only a small formatting subset for owner-authored email HTML.
  * Strips scripts/events and unknown tags while keeping font/size/color styles.
+ * Images are limited to https (or same-origin /api/media) sources.
  */
 export function sanitizeMessageHtml(input: string): string {
   const raw = String(input || '').trim();
@@ -44,7 +45,15 @@ export function sanitizeMessageHtml(input: string): string {
       const name = tag.toLowerCase();
       if (!ALLOWED_TAGS.has(name)) return '';
       if (name === 'br') return '<br>';
-      if (_full.startsWith('</')) return `</${name}>`;
+      if (_full.startsWith('</')) return name === 'img' ? '' : `</${name}>`;
+
+      if (name === 'img') {
+        const srcMatch = attrs.match(/src\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+        const src = (srcMatch?.[2] || srcMatch?.[3] || srcMatch?.[4] || '').trim();
+        if (!src || !(/^(https:\/\/|\/api\/media\/)/i.test(src))) return '';
+        const safeSrc = src.replace(/"/g, '');
+        return `<img src="${safeSrc}" alt="" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0;" />`;
+      }
 
       const safeAttrs: string[] = [];
       const styleMatch = attrs.match(/style\s*=\s*("([^"]*)"|'([^']*)')/i);
@@ -77,10 +86,19 @@ export function sanitizeMessageHtml(input: string): string {
     });
 }
 
-export function wrapEmailMessage(businessName: string, htmlBody: string, esc: (v: unknown) => string): string {
+export function wrapEmailMessage(
+  businessName: string,
+  htmlBody: string,
+  esc: (v: unknown) => string,
+  imageUrl?: string | null
+): string {
   const body = sanitizeMessageHtml(htmlBody);
+  const image = imageUrl && /^(https:\/\/|\/api\/media\/)/i.test(imageUrl)
+    ? `<p style="margin:16px 0;"><img src="${esc(imageUrl)}" alt="" style="max-width:100%;height:auto;border-radius:8px;" /></p>`
+    : '';
   return `<div style="font-family: Georgia, 'Times New Roman', serif; max-width: 600px; margin: 0 auto; color: #111827; line-height: 1.55;">
     <h2 style="margin: 0 0 12px; font-size: 20px;">${esc(businessName)}</h2>
+    ${image}
     <div>${body}</div>
   </div>`;
 }

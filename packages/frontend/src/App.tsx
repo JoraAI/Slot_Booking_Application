@@ -127,6 +127,7 @@ function BookingWidget() {
           sections={publicConfig.pageSections}
           services={publicConfig.services}
           workingHours={publicConfig.workingHours}
+          location={publicConfig.business.location}
         />
       )}
     </div>

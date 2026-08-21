@@ -12,7 +12,7 @@ export type IntakeField = {
 export const DEFAULT_PHONE_FIELD: IntakeField = {
   label: 'Phone Number',
   fieldType: 'tel',
-  required: false,
+  required: true,
   options: [],
   placeholder: 'Enter your phone number',
   visible: true,
@@ -31,7 +31,7 @@ function isContactType(fieldType: string): boolean {
   return fieldType === 'tel' || fieldType === 'email';
 }
 
-/** Phone and email always stay on the booking form. Owner may only toggle required. */
+/** Phone and email always stay on the booking form. Phone is always required for WhatsApp notifications. */
 export function ensurePhoneAndEmailFields<T extends IntakeField>(
   incoming: T[],
   previous: IntakeField[] = []
@@ -53,6 +53,7 @@ export function ensurePhoneAndEmailFields<T extends IntakeField>(
       id: fromPrevious?.id || `contact-${type}`,
       fieldType: type,
       visible: true,
+      ...(type === 'tel' ? { required: true } : {}),
     } as T;
     const telIndex = next.findIndex((field) => field.fieldType === 'tel');
     const at = type === 'email' && telIndex >= 0 ? telIndex + 1 : insertAfterName;
@@ -61,5 +62,10 @@ export function ensurePhoneAndEmailFields<T extends IntakeField>(
 
   attach('tel', DEFAULT_PHONE_FIELD);
   attach('email', DEFAULT_EMAIL_FIELD);
-  return next.map((field, index) => ({ ...field, order: index, ...(isContactType(field.fieldType) ? { visible: true } : {}) }));
+  return next.map((field, index) => ({
+    ...field,
+    order: index,
+    ...(isContactType(field.fieldType) ? { visible: true } : {}),
+    ...(field.fieldType === 'tel' ? { required: true } : {}),
+  }));
 }

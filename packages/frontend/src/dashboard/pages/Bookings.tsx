@@ -39,6 +39,7 @@ export const Bookings: React.FC = () => {
           <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Customer</th>
+              <th className="px-4 py-3 text-left font-medium text-gray-500">Service</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Time</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
@@ -47,14 +48,18 @@ export const Bookings: React.FC = () => {
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
             ) : bookings.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No bookings found</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No bookings found</td></tr>
             ) : bookings.map((b) => (
               <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <td className="px-4 py-3">
                   <p className="font-medium">{b.customerName}</p>
                   <p className="text-xs text-gray-400">{b.customerPhone}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                  {b.staff?.name && <p className="text-xs text-gray-400">{b.staff.name}</p>}
                 </td>
                 <td className="px-4 py-3">{b.date.split('T')[0]}</td>
                 <td className="px-4 py-3">{b.startTime} - {b.endTime}</td>

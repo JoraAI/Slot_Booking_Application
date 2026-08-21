@@ -48,7 +48,11 @@ export const DashboardHome: React.FC = () => {
               <div key={b.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
                 <div>
                   <p className="font-medium text-sm">{b.customerName}</p>
-                  <p className="text-xs text-gray-500">{b.date.split('T')[0]} at {b.startTime}</p>
+                  <p className="text-xs text-gray-500">
+                    {b.serviceNameSnapshot || b.service?.name || 'Appointment'}
+                    {' · '}
+                    {b.date.split('T')[0]} at {b.startTime}
+                  </p>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   b.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'

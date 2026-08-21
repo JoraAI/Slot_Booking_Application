@@ -141,7 +141,86 @@ class NotificationService {
     });
   }
 
-  private async sendWhatsApp(to: string, message: string, opts: SendOpts = {}): Promise<void> {
+  private async sendMetaWhatsappImage(
+    meta: { phoneNumberId: string; accessToken: string },
+    toDigits: string,
+    imageUrl: string,
+    caption: string
+  ): Promise<Response> {
+    const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${meta.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: toDigits,
+        type: 'image',
+        image: {
+          link: imageUrl,
+          ...(caption ? { caption: caption.slice(0, 1024) } : {}),
+        },
+      }),
+    });
+  }
+
+  private async sendMetaWhatsappCta(
+    meta: { phoneNumberId: string; accessToken: string },
+    toDigits: string,
+    body: string,
+    displayText: string,
+    buttonUrl: string
+  ): Promise<Response> {
+    const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${meta.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: toDigits,
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: { text: body.slice(0, 1024) },
+          action: {
+            name: 'cta_url',
+            parameters: {
+              display_text: displayText.slice(0, 20),
+              url: buttonUrl,
+            },
+          },
+        },
+      }),
+    });
+  }
+
+  private absolutePublicUrl(url: string): string | null {
+    const raw = String(url || '').trim();
+    if (!raw) return null;
+    if (/^https:\/\//i.test(raw)) return raw;
+    if (raw.startsWith('/api/media/')) {
+      const base = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      if (!base) return null;
+      return `${base}${raw}`;
+    }
+    return null;
+  }
+
+  private async sendWhatsApp(
+    to: string,
+    message: string,
+    opts: SendOpts & {
+      imageUrl?: string | null;
+      cta?: { displayText: string; url: string } | null;
+    } = {}
+  ): Promise<void> {
     try {
       const meta = resolveMetaWhatsapp(opts.business);
       if (!meta) {
@@ -154,13 +233,58 @@ class NotificationService {
       if (!toDigits) {
         throw new Error('WhatsApp destination number is invalid');
       }
-      let response = await this.sendMetaWhatsappText(meta, toDigits, message);
-      let bodyText = response.ok ? '' : await response.text();
-      // Business-initiated messages outside the customer-service window are rejected
-      // as free-form text. If the owner configured a utility template, retry once.
-      if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
-        response = await this.sendMetaWhatsappTemplate({ ...meta, utilityTemplate: meta.utilityTemplate }, toDigits, message);
+
+      const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
+      const ctaUrl = opts.cta?.url && /^https:\/\//i.test(opts.cta.url) ? opts.cta.url : null;
+      const ctaText = opts.cta?.displayText || 'View or cancel';
+      let response: Response;
+      let bodyText = '';
+
+      if (imageUrl) {
+        response = await this.sendMetaWhatsappImage(meta, toDigits, imageUrl, message);
         bodyText = response.ok ? '' : await response.text();
+        if (!response.ok && /customer service window|outside.*24|template/i.test(bodyText)) {
+          const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
+          response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
+          bodyText = response.ok ? '' : await response.text();
+          if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
+            response = await this.sendMetaWhatsappTemplate(
+              { ...meta, utilityTemplate: meta.utilityTemplate },
+              toDigits,
+              withLink
+            );
+            bodyText = response.ok ? '' : await response.text();
+          }
+        }
+      } else if (ctaUrl) {
+        // Prefer a WhatsApp CTA button for manage/cancel. Outside the 24h window
+        // Meta rejects interactive messages — fall back to text/template with the URL.
+        response = await this.sendMetaWhatsappCta(meta, toDigits, message, ctaText, ctaUrl);
+        bodyText = response.ok ? '' : await response.text();
+        if (!response.ok) {
+          const withLink = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
+          response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
+          bodyText = response.ok ? '' : await response.text();
+          if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
+            response = await this.sendMetaWhatsappTemplate(
+              { ...meta, utilityTemplate: meta.utilityTemplate },
+              toDigits,
+              withLink
+            );
+            bodyText = response.ok ? '' : await response.text();
+          }
+        }
+      } else {
+        response = await this.sendMetaWhatsappText(meta, toDigits, message);
+        bodyText = response.ok ? '' : await response.text();
+        if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
+          response = await this.sendMetaWhatsappTemplate(
+            { ...meta, utilityTemplate: meta.utilityTemplate },
+            toDigits,
+            message
+          );
+          bodyText = response.ok ? '' : await response.text();
+        }
       }
 
       if (!response.ok) {
@@ -199,7 +323,7 @@ class NotificationService {
     const locHtml = this.locationHtml(business);
     // One-time manage/cancel link — customer reschedule remains disabled (405).
     const manageLink = booking.managementUrl
-      ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#7C3AED; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">View or cancel booking</a></p>`
+      ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#7C3AED; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Cancel booking</a></p>`
       : '';
 
     const html = `
@@ -231,10 +355,18 @@ class NotificationService {
     }
     if (business.notifyCustomerWhatsapp && booking.customerPhone) {
       const { address, directions, contact } = this.locationText(business);
-      await this.sendWhatsApp(booking.customerPhone,
-        `✅ Booking Confirmed!\n\n${this.esc(business.name)}\n💇 ${serviceName}${durationMin ? ` (${durationMin})` : ''}\n📅 ${dateStr}\n🕐 ${booking.startTime} - ${booking.endTime}\n${booking.staff ? `👤 ${this.esc(booking.staff.name)}\n` : ''}${booking.finalPrice != null ? `💰 ₹${booking.finalPrice}\n` : ''}${address}${directions}${contact}${booking.managementUrl ? `\nManage booking: ${booking.managementUrl}` : ''}\nBooking Reference: ${this.esc(booking.id)}`,
-        { business }
-      );
+      // Address + directions are included. Manage/cancel is a CTA button when Meta allows it.
+      const body =
+        `✅ Booking Confirmed!\n\n${this.esc(business.name)}\n💇 ${serviceName}${durationMin ? ` (${durationMin})` : ''}\n📅 ${dateStr}\n🕐 ${booking.startTime} - ${booking.endTime}\n${booking.staff ? `👤 ${this.esc(booking.staff.name)}\n` : ''}${booking.finalPrice != null ? `💰 ₹${booking.finalPrice}\n` : ''}${address}${directions}${contact}\nBooking Reference: ${this.esc(booking.id)}`.trim();
+      const manageUrl = typeof booking.managementUrl === 'string' && /^https:\/\//i.test(booking.managementUrl)
+        ? booking.managementUrl
+        : null;
+      await this.sendWhatsApp(booking.customerPhone, body, {
+        business,
+        cta: manageUrl
+          ? { displayText: 'Cancel booking', url: manageUrl }
+          : null,
+      });
     }
 
     if (business.notifyOwnerEmail) {
@@ -551,7 +683,8 @@ class NotificationService {
     channels: Array<'email' | 'whatsapp'>,
     subject: string,
     message: string,
-    messageHtml?: string | null
+    messageHtml?: string | null,
+    imageUrl?: string | null
   ): Promise<Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }>> {
     const [business, customer] = await Promise.all([
       prisma.business.findUnique({ where: { id: businessId } }),
@@ -561,7 +694,13 @@ class NotificationService {
     if (!customer) throw new Error('Customer not found');
 
     const plainMessage = htmlToPlainText(messageHtml || message);
-    const emailBody = wrapEmailMessage(business.name, messageHtml || message, (v) => this.esc(v));
+    const publicImageUrl = this.absolutePublicUrl(imageUrl || '');
+    const emailBody = wrapEmailMessage(
+      business.name,
+      messageHtml || message,
+      (v) => this.esc(v),
+      publicImageUrl
+    );
     const historyMessage = plainMessage.slice(0, 3000);
 
     const results: Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }> = [];
@@ -585,7 +724,7 @@ class NotificationService {
           await this.sendWhatsApp(
             customer.phone,
             `${business.name}\n\n${plainMessage}${ownerContact}`,
-            { throwOnError: true, business }
+            { throwOnError: true, business, imageUrl: publicImageUrl }
           );
         }
         ok = true;
@@ -622,7 +761,8 @@ class NotificationService {
       attributes?: Record<string, string> | null;
     } | null,
     messageHtml?: string | null,
-    channelsWanted: Array<'email' | 'whatsapp'> = ['email', 'whatsapp']
+    channelsWanted: Array<'email' | 'whatsapp'> = ['email', 'whatsapp'],
+    imageUrl?: string | null
   ): Promise<{
     total: number;
     matched: number;
@@ -703,7 +843,8 @@ class NotificationService {
           channels,
           subject,
           message,
-          messageHtml
+          messageHtml,
+          imageUrl
         );
         const gotEmail = results.some((r) => r.channel === 'email' && r.ok);
         const gotWhatsapp = results.some((r) => r.channel === 'whatsapp' && r.ok);

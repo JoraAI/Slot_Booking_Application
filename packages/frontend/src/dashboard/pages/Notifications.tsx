@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import type { CustomerContact, CustomerNotification } from '../../types'
 import { RichMessageEditor } from '../components/RichMessageEditor'
+import { MediaUploadButton } from '../components/MediaUploadButton'
 
 type BroadcastReport = {
   total: number
@@ -206,6 +207,7 @@ export const Notifications: React.FC = () => {
   const [emailSubject, setEmailSubject] = useState('Message from your salon')
   const [emailPlain, setEmailPlain] = useState('')
   const [emailHtml, setEmailHtml] = useState('')
+  const [emailImageUrl, setEmailImageUrl] = useState('')
   const [emailFilterService, setEmailFilterService] = useState('')
   const [emailFilterAttrs, setEmailFilterAttrs] = useState<Record<string, string>>({})
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -218,6 +220,7 @@ export const Notifications: React.FC = () => {
   const [waName, setWaName] = useState('')
   const [waPhone, setWaPhone] = useState('')
   const [waMessage, setWaMessage] = useState('')
+  const [waImageUrl, setWaImageUrl] = useState('')
   const [waFilterService, setWaFilterService] = useState('')
   const [waFilterAttrs, setWaFilterAttrs] = useState<Record<string, string>>({})
   const [sendingWa, setSendingWa] = useState(false)
@@ -300,6 +303,7 @@ export const Notifications: React.FC = () => {
         subject: emailSubject.trim() || 'Message from your salon',
         message: emailPlain.trim(),
         messageHtml: emailHtml || emailPlain.trim(),
+        imageUrl: emailImageUrl || null,
       })
       const failure = res.results.find((item) => !item.ok)
       if (failure) toast.error(failure.error || 'Email failed')
@@ -307,6 +311,7 @@ export const Notifications: React.FC = () => {
         toast.success('Email sent')
         setEmailPlain('')
         setEmailHtml('')
+        setEmailImageUrl('')
         setEmailSubject('Message from your salon')
       }
       await refreshHistory()
@@ -337,6 +342,7 @@ export const Notifications: React.FC = () => {
         subject: emailSubject.trim() || 'Message from your salon',
         message: emailPlain.trim(),
         messageHtml: emailHtml || emailPlain.trim(),
+        imageUrl: emailImageUrl || null,
         channels: ['email'],
         filters: emailAudience.filterPayload,
       })
@@ -370,12 +376,14 @@ export const Notifications: React.FC = () => {
         channels: ['whatsapp'],
         subject: 'Message from your salon',
         message: waMessage.trim(),
+        imageUrl: waImageUrl || null,
       })
       const failure = res.results.find((item) => !item.ok)
       if (failure) toast.error(failure.error || 'WhatsApp failed')
       else {
         toast.success('WhatsApp sent')
         setWaMessage('')
+        setWaImageUrl('')
       }
       await refreshHistory()
     } catch (err: any) {
@@ -404,6 +412,7 @@ export const Notifications: React.FC = () => {
       const report = await api.sendBroadcastNotification({
         subject: 'Message from your salon',
         message: waMessage.trim(),
+        imageUrl: waImageUrl || null,
         channels: ['whatsapp'],
         filters: waAudience.filterPayload,
       })
@@ -525,6 +534,24 @@ export const Notifications: React.FC = () => {
             }}
           />
         </div>
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">Optional image</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <MediaUploadButton
+              small
+              label={emailImageUrl ? 'Replace image' : 'Attach image'}
+              onUploaded={(url) => setEmailImageUrl(url)}
+            />
+            {emailImageUrl && (
+              <button type="button" onClick={() => setEmailImageUrl('')} className="text-xs text-red-600 underline">
+                Remove
+              </button>
+            )}
+          </div>
+          {emailImageUrl && (
+            <img src={emailImageUrl} alt="" className="max-h-40 rounded-lg border border-gray-200 dark:border-gray-700" />
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {emailMode === 'individual' ? (
             <button onClick={sendOneEmail} disabled={sendingEmail || broadcastingEmail}
@@ -546,7 +573,7 @@ export const Notifications: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-2xl">
         <div>
           <h2 className="text-lg font-semibold">WhatsApp</h2>
-          <p className="text-sm text-gray-500">Send to one person, or switch to a filtered group for bulk WhatsApp. Plain text only.</p>
+          <p className="text-sm text-gray-500">Send to one person, or switch to a filtered group for bulk WhatsApp. You can attach an optional image.</p>
         </div>
         <ModeToggle mode={waMode} onChange={setWaMode} />
 
@@ -595,6 +622,27 @@ export const Notifications: React.FC = () => {
             placeholder="Write the WhatsApp message"
             className={inputCls}
           />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">Optional image</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <MediaUploadButton
+              small
+              label={waImageUrl ? 'Replace image' : 'Attach image'}
+              onUploaded={(url) => setWaImageUrl(url)}
+            />
+            {waImageUrl && (
+              <button type="button" onClick={() => setWaImageUrl('')} className="text-xs text-red-600 underline">
+                Remove
+              </button>
+            )}
+          </div>
+          {waImageUrl && (
+            <img src={waImageUrl} alt="" className="max-h-40 rounded-lg border border-gray-200 dark:border-gray-700" />
+          )}
+          <p className="text-xs text-gray-400">
+            Image sends as a WhatsApp media message when the customer chat window is open. Otherwise the message is sent as text with an image link.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {waMode === 'individual' ? (
