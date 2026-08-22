@@ -26,6 +26,15 @@ export const Settings: React.FC = () => {
     ownerEmailPresent: boolean
     ownerWhatsappPresent: boolean
   } | null>(null)
+  const [waStatus, setWaStatus] = useState<{
+    connectionMode: string
+    status: string
+    displayPhone: string | null
+    configured: boolean
+    platformReady?: boolean
+    optedIn?: boolean
+    wallet: { balancePaise: number; currency: string; lowBalance: boolean; estimatedMessages: number | null }
+  } | null>(null)
   const [geoError, setGeoError] = useState('')
   const [geoLoading, setGeoLoading] = useState(false)
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -63,12 +72,6 @@ export const Settings: React.FC = () => {
     smtpFromName: config?.smtpFromName || '',
     smtpPass: '',
     clearSmtpPass: false,
-    metaWhatsappPhoneNumberId: config?.metaWhatsappPhoneNumberId || '',
-    metaWhatsappBusinessAccountId: config?.metaWhatsappBusinessAccountId || '',
-    metaWhatsappTemplateUtility: config?.metaWhatsappTemplateUtility || '',
-    metaWhatsappTemplateMarketing: config?.metaWhatsappTemplateMarketing || '',
-    metaWhatsappAccessToken: '',
-    clearMetaWhatsappAccessToken: false,
     enableWaitlist: config?.enableWaitlist || false,
     enableRecurring: config?.enableRecurring || false,
     enableMultiStaff: config?.enableMultiStaff || false,
@@ -119,12 +122,6 @@ export const Settings: React.FC = () => {
         smtpFromName: config.smtpFromName || '',
         smtpPass: '',
         clearSmtpPass: false,
-        metaWhatsappPhoneNumberId: config.metaWhatsappPhoneNumberId || '',
-        metaWhatsappBusinessAccountId: config.metaWhatsappBusinessAccountId || '',
-        metaWhatsappTemplateUtility: config.metaWhatsappTemplateUtility || '',
-        metaWhatsappTemplateMarketing: config.metaWhatsappTemplateMarketing || '',
-        metaWhatsappAccessToken: '',
-        clearMetaWhatsappAccessToken: false,
         enableWaitlist: config.enableWaitlist || false,
         enableRecurring: config.enableRecurring || false,
         enableMultiStaff: config.enableMultiStaff || false,
@@ -146,6 +143,9 @@ export const Settings: React.FC = () => {
     api.getOwnerSettingsStatus()
       .then(setProviderStatus)
       .catch(() => setProviderStatus(null))
+    api.getWhatsappStatus()
+      .then((s) => setWaStatus(s))
+      .catch(() => setWaStatus(null))
   }, [])
 
   // Batch 4 — fill lat/lng from the browser when the owner is at the salon.
@@ -199,10 +199,8 @@ export const Settings: React.FC = () => {
       setForm(p => ({
         ...p,
         smtpPass: '',
-        metaWhatsappAccessToken: '',
         razorpayKeySecret: '',
         clearSmtpPass: false,
-        clearMetaWhatsappAccessToken: false,
         clearRazorpayKeySecret: false,
       }))
       api.getOwnerSettingsStatus().then(setProviderStatus).catch(() => {})
@@ -312,13 +310,88 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
             <p className="text-sm text-gray-500">
-              Notifications are sent from <strong>your</strong> mailbox and Meta Cloud API WhatsApp number.
-              Passwords and auth tokens are stored encrypted and are never shown again after you save.
+              Email sends from <strong>your</strong> SMTP mailbox. WhatsApp sends from <strong>Reservly’s</strong> shared
+              Cloud API number — you only enable it and top up prepaid credits. SMTP passwords are encrypted and never shown again.
             </p>
           </div>
           <Link to="/dashboard/setup-guide#notifications" className="text-sm text-primary hover:underline shrink-0">
             Setup guide →
           </Link>
+        </div>
+
+        <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-950/30 p-4 text-sm space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium">
+                WhatsApp:{' '}
+                {waStatus
+                  ? (waStatus.optedIn && waStatus.platformReady
+                      ? `Enabled${waStatus.displayPhone ? ` · via ${waStatus.displayPhone}` : ' · Reservly shared number'}`
+                      : !waStatus.platformReady
+                        ? 'Unavailable (platform offline)'
+                        : 'Not enabled')
+                  : 'Loading…'}
+              </p>
+              <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                Messages go out from Reservly’s WhatsApp number. You do not need a Meta Developer app or API tokens.
+                Add wallet credits, enable WhatsApp, then turn on “WhatsApp customers” below.
+              </p>
+              {waStatus?.wallet && (
+                <p className="text-gray-500 mt-1">
+                  Wallet: ₹{(waStatus.wallet.balancePaise / 100).toFixed(2)}
+                  {waStatus.wallet.lowBalance ? ' · low balance — top up soon' : ''}
+                  {waStatus.wallet.estimatedMessages != null ? ` · ≈ ${waStatus.wallet.estimatedMessages} utility msgs left` : ''}
+                </p>
+              )}
+            </div>
+            <Link to="/dashboard/notifications" className="text-primary hover:underline font-medium shrink-0">
+              Wallet & credits →
+            </Link>
+          </div>
+
+          {waStatus && !waStatus.platformReady && (
+            <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
+              Reservly WhatsApp is not configured on the server yet. Email still works. Contact support if you need WhatsApp.
+            </p>
+          )}
+
+          {waStatus?.platformReady && !waStatus.optedIn && (
+            <button
+              type="button"
+              className="inline-flex justify-center items-center px-4 py-2.5 rounded-lg bg-[#25D366] text-white text-sm font-medium"
+              onClick={async () => {
+                try {
+                  await api.connectWhatsapp()
+                  const next = await api.getWhatsappStatus()
+                  setWaStatus(next)
+                  toast.success('WhatsApp enabled')
+                } catch (e: any) {
+                  toast.error(e?.message || 'Could not enable WhatsApp')
+                }
+              }}
+            >
+              Enable WhatsApp
+            </button>
+          )}
+
+          {waStatus?.optedIn && (
+            <button
+              type="button"
+              className="text-xs text-red-600 underline"
+              onClick={async () => {
+                try {
+                  await api.disconnectWhatsapp()
+                  const next = await api.getWhatsappStatus()
+                  setWaStatus(next)
+                  toast.success('WhatsApp disabled')
+                } catch (e: any) {
+                  toast.error(e?.message || 'Could not disable')
+                }
+              }}
+            >
+              Disable WhatsApp
+            </button>
+          )}
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
@@ -367,49 +440,6 @@ export const Settings: React.FC = () => {
               className="rounded border-gray-300" />
             Use TLS (SMTP secure / port 465)
           </label>
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <div>
-            <label className="block text-sm font-medium mb-1">Meta Phone Number ID</label>
-            <input value={form.metaWhatsappPhoneNumberId} onChange={(e) => setForm(p => ({ ...p, metaWhatsappPhoneNumberId: e.target.value }))}
-              placeholder="e.g. 123456789012345" autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Meta Access Token</label>
-            <input type="password" value={form.metaWhatsappAccessToken} onChange={(e) => setForm(p => ({ ...p, metaWhatsappAccessToken: e.target.value, clearMetaWhatsappAccessToken: false }))}
-              placeholder={config?.metaWhatsappAccessTokenConfigured ? '•••••••• (leave blank to keep)' : 'Permanent/system-user token'}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            <p className="text-xs text-gray-400 mt-1">
-              {config?.metaWhatsappAccessTokenConfigured ? '✓ Token saved (write-only — never shown). ' : 'Not saved yet. '}
-              {config?.metaWhatsappAccessTokenConfigured && (
-                <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, metaWhatsappAccessToken: '', clearMetaWhatsappAccessToken: true }))}>
-                  Remove saved token
-                </button>
-              )}
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Meta Business Account ID (optional)</label>
-            <input value={form.metaWhatsappBusinessAccountId} onChange={(e) => setForm(p => ({ ...p, metaWhatsappBusinessAccountId: e.target.value }))}
-              placeholder="e.g. 112233445566778"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            <p className="text-xs text-gray-400 mt-1">Used for future Meta management APIs.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Utility template name (optional)</label>
-            <input value={form.metaWhatsappTemplateUtility} onChange={(e) => setForm(p => ({ ...p, metaWhatsappTemplateUtility: e.target.value }))}
-              placeholder="booking_update_v1"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Marketing template name (optional)</label>
-            <input value={form.metaWhatsappTemplateMarketing} onChange={(e) => setForm(p => ({ ...p, metaWhatsappTemplateMarketing: e.target.value }))}
-              placeholder="promo_broadcast_v1"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3 pt-2">

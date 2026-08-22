@@ -455,3 +455,27 @@ export interface BookingWizardState {
   paymentOrderId: string | null
   paymentAmount: number | null
 }
+
+export type WalletView = {
+  balancePaise: number
+  currency: string
+  status: string
+  lowBalanceThresholdPaise: number
+  lowBalance: boolean
+  estimatedMessages: number | null
+}
+
+export type WalletTransaction = {
+  id: string
+  businessId: string
+  type: string
+  amountPaise: number
+  balanceBeforePaise: number
+  balanceAfterPaise: number
+  status: string
+  referenceType: string | null
+  referenceId: string | null
+  providerPaymentId: string | null
+  description: string | null
+  createdAt: string
+}

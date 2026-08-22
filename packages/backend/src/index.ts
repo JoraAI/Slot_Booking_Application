@@ -294,4 +294,17 @@ process.on('SIGTERM', () => {
   server.close(() => process.exit(0));
 });
 
+// Neon free-tier / brief network blips throw Prisma P1001. Without this,
+// an uncaught rejection in an async route can take down the whole API
+// (Vite then shows ECONNREFUSED on :3001). Log and keep serving.
+process.on('unhandledRejection', (reason: any) => {
+  const msg = String(reason?.message || reason || '');
+  const code = reason?.code;
+  if (code === 'P1001' || /Can't reach database server|ETIMEDOUT|ECONNREFUSED/i.test(msg)) {
+    console.error('Database temporarily unreachable (keeping process alive):', msg);
+    return;
+  }
+  console.error('Unhandled promise rejection:', reason);
+});
+
 export default app;

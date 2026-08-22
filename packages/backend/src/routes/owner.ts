@@ -13,13 +13,16 @@ import { analyticsService } from '../services/AnalyticsService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
 import { timeService } from '../services/TimeService';
 import { subscriptionService } from '../services/SubscriptionService';
+import { walletService } from '../services/WalletService';
+import { whatsappPricingService } from '../services/WhatsAppPricingService';
 import { validateLocation } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
 import { toOwnerConfig } from '../services/ownerDto';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
-  metaWhatsappConfigured,
+  platformWhatsappConfigured,
   smtpConfigured,
+  tenantWhatsappOptedIn,
 } from '../services/notificationCredentials';
 import {
   customerService,
@@ -747,9 +750,15 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
       'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
-      'metaWhatsappPhoneNumberId', 'metaWhatsappBusinessAccountId',
-      'metaWhatsappTemplateUtility', 'metaWhatsappTemplateMarketing',
+      // Shared-platform WhatsApp: owners do NOT supply Meta Phone Number ID / tokens.
     ];
+    // Explicitly ignore any client-supplied DIY Meta credential fields.
+    delete req.body.metaWhatsappPhoneNumberId;
+    delete req.body.metaWhatsappBusinessAccountId;
+    delete req.body.metaWhatsappTemplateUtility;
+    delete req.body.metaWhatsappTemplateMarketing;
+    delete req.body.metaWhatsappAccessToken;
+    delete req.body.clearMetaWhatsappAccessToken;
 
     const updateData: any = {};
     for (const field of allowedFields) {
@@ -794,10 +803,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'smtpHost',
       'smtpUser',
       'smtpFromName',
-      'metaWhatsappPhoneNumberId',
-      'metaWhatsappBusinessAccountId',
-      'metaWhatsappTemplateUtility',
-      'metaWhatsappTemplateMarketing',
     ] as const) {
       if (updateData[field] !== undefined) {
         const value = String(updateData[field] ?? '').trim();
@@ -825,11 +830,6 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.smtpPassEnc = encryptSecret(req.body.smtpPass.trim());
     } else if (req.body.clearSmtpPass === true) {
       updateData.smtpPassEnc = null;
-    }
-    if (typeof req.body.metaWhatsappAccessToken === 'string' && req.body.metaWhatsappAccessToken.trim() !== '') {
-      updateData.metaWhatsappAccessTokenEnc = encryptSecret(req.body.metaWhatsappAccessToken.trim());
-    } else if (req.body.clearMetaWhatsappAccessToken === true) {
-      updateData.metaWhatsappAccessTokenEnc = null;
     }
 
     // Razorpay secret is WRITE-ONLY: never read back, never echoed.
@@ -917,22 +917,30 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     // settings saves are not blocked; the readiness UI warns about it.
     const merged = { ...existing, ...updateData };
     const smtp = smtpConfigured(merged);
-    const metaWhatsapp = metaWhatsappConfigured(merged);
+    const whatsappConfig = await prisma.whatsAppConfig.findUnique({ where: { businessId: req.owner!.businessId } });
+    const platformWa = platformWhatsappConfigured();
+    const optedIn = tenantWhatsappOptedIn(whatsappConfig);
     const enabling = (field: string) => updateData[field] === true && (existing as any)[field] !== true;
     if (enabling('notifyCustomerEmail') && !smtp) {
       return res.status(400).json({ error: 'Customer email notifications require SMTP credentials in Settings.' });
     }
     if (enabling('notifyCustomerWhatsapp')) {
-      if (!metaWhatsapp) {
-        return res.status(400).json({ error: 'Customer WhatsApp notifications require Meta Cloud API credentials in Settings.' });
+      if (!platformWa) {
+        return res.status(400).json({ error: 'WhatsApp is not available yet — Reservly platform WhatsApp is not configured. Contact support.' });
+      }
+      if (!optedIn) {
+        return res.status(400).json({ error: 'Enable WhatsApp in Settings (Connect) before turning on customer WhatsApp notifications.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Customer WhatsApp notifications require the salon owner WhatsApp number (used as the customer contact).' });
       }
     }
     if (enabling('notifyOwnerWhatsapp')) {
-      if (!metaWhatsapp) {
-        return res.status(400).json({ error: 'Owner WhatsApp notifications require Meta Cloud API credentials in Settings.' });
+      if (!platformWa) {
+        return res.status(400).json({ error: 'WhatsApp is not available yet — Reservly platform WhatsApp is not configured. Contact support.' });
+      }
+      if (!optedIn) {
+        return res.status(400).json({ error: 'Enable WhatsApp in Settings (Connect) before turning on owner WhatsApp notifications.' });
       }
       if (!updateData.ownerWhatsapp && !existing.ownerWhatsapp) {
         return res.status(400).json({ error: 'Owner WhatsApp notifications require an owner WhatsApp number.' });
@@ -1596,19 +1604,277 @@ ownerRouter.post('/notify/test', async (req: AuthRequest, res: Response) => {
  *         description: Readiness flags
  */
 ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
-  const business = await prisma.business.findUnique({ where: { id: req.owner!.businessId } });
-  const frontendUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').trim();
-  const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
-  res.json({
-    smtpConfigured: smtpConfigured(business),
-    metaWhatsappConfigured: metaWhatsappConfigured(business),
-    smtpPassConfigured: !!business?.smtpPassEnc,
-    metaWhatsappAccessTokenConfigured: !!business?.metaWhatsappAccessTokenEnc,
-    frontendUrlConfigured: isHttpsAbsolute,
-    locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),
-    ownerEmailPresent: !!business?.ownerEmail,
-    ownerWhatsappPresent: !!business?.ownerWhatsapp,
-  });
+  try {
+    const businessId = req.owner!.businessId;
+    const [business, whatsappConfig, wallet] = await Promise.all([
+      prisma.business.findUnique({ where: { id: businessId } }),
+      prisma.whatsAppConfig.findUnique({ where: { businessId } }),
+      prisma.wallet.findUnique({ where: { businessId } }),
+    ]);
+    const frontendUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').trim();
+    const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
+    const threshold = wallet?.lowBalanceThresholdPaise ?? 50000;
+    res.json({
+      smtpConfigured: smtpConfigured(business),
+      metaWhatsappConfigured: platformWhatsappConfigured(),
+      smtpPassConfigured: !!business?.smtpPassEnc,
+      metaWhatsappAccessTokenConfigured: false,
+      frontendUrlConfigured: isHttpsAbsolute,
+      locationComplete: !!(business && ((business.latitude != null && business.longitude != null) || (business.address && business.address.trim()))),
+      ownerEmailPresent: !!business?.ownerEmail,
+      ownerWhatsappPresent: !!business?.ownerWhatsapp,
+      whatsappConnected: tenantWhatsappOptedIn(whatsappConfig) && platformWhatsappConfigured(),
+      walletBalancePaise: wallet?.balancePaise ?? 0,
+      walletLowBalance: wallet ? wallet.balancePaise <= threshold : true,
+    });
+  } catch (error: any) {
+    const unreachable = /Can't reach database server|P1001|ECONNREFUSED|ETIMEDOUT/i.test(String(error?.message || error));
+    console.error('settings/status failed:', error?.message || error);
+    res.status(unreachable ? 503 : 500).json({
+      error: unreachable
+        ? 'Database temporarily unavailable. Wait a few seconds and refresh (Neon may be waking up).'
+        : (error?.message || 'Failed to load settings status'),
+    });
+  }
+});
+
+/**
+ * WhatsApp status (shared platform) + wallet summary. Never returns tokens.
+ */
+ownerRouter.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const [config, pricing] = await Promise.all([
+      prisma.whatsAppConfig.findUnique({ where: { businessId } }),
+      whatsappPricingService.list(),
+    ]);
+    const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
+    const wallet = await walletService.getView(businessId, utilityPrice);
+    const platformReady = platformWhatsappConfigured();
+    const optedIn = tenantWhatsappOptedIn(config);
+    res.json({
+      connectionMode: 'SHARED',
+      status: optedIn ? 'CONNECTED' : 'DISCONNECTED',
+      displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || config?.displayPhone || null,
+      configured: platformReady,
+      platformReady,
+      optedIn,
+      wallet,
+      pricing,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/whatsapp/connect — opt in to Reservly's shared Cloud API number.
+ * Owners never supply Phone Number ID or access tokens.
+ */
+ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    if (!platformWhatsappConfigured()) {
+      return res.status(503).json({
+        error: 'Reservly WhatsApp is not configured yet. Contact support — salons do not add their own Meta API credentials.',
+      });
+    }
+    await walletService.getOrCreate(businessId);
+    await prisma.whatsAppConfig.upsert({
+      where: { businessId },
+      create: {
+        businessId,
+        phoneNumberId: null,
+        accessTokenEnc: null,
+        displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || null,
+        connectionMode: 'SHARED',
+        status: 'CONNECTED',
+        enabled: true,
+      },
+      update: {
+        phoneNumberId: null,
+        accessTokenEnc: null,
+        displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || null,
+        connectionMode: 'SHARED',
+        status: 'CONNECTED',
+        enabled: true,
+      },
+    });
+    res.json({ ok: true, connectionMode: 'SHARED', status: 'CONNECTED' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/whatsapp/disconnect — opt out of WhatsApp sends (platform credentials unchanged).
+ */
+ownerRouter.post('/whatsapp/disconnect', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    await prisma.whatsAppConfig.upsert({
+      where: { businessId },
+      create: {
+        businessId,
+        status: 'DISCONNECTED',
+        enabled: false,
+        connectionMode: 'SHARED',
+      },
+      update: { status: 'DISCONNECTED', enabled: false, connectionMode: 'SHARED' },
+    });
+    res.json({ ok: true, status: 'DISCONNECTED' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/whatsapp-wallet — balance + low-balance flag + usage estimate.
+ */
+ownerRouter.get('/whatsapp-wallet', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const pricing = await whatsappPricingService.list();
+    const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
+    const wallet = await walletService.getView(businessId, utilityPrice);
+    res.json({ ...wallet, pricing });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/whatsapp-wallet/transactions — immutable ledger (recent).
+ */
+ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Number(req.query.limit) || 50;
+    const transactions = await walletService.transactions(req.owner!.businessId, limit);
+    res.json({ transactions });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/whatsapp-wallet/recharge — create a Razorpay order using the
+ * platform Razorpay keys (mirror of /subscription/pay). Min recharge ₹100.
+ */
+ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const schema = z.object({ amountPaise: z.number().int().min(10000) }); // ₹100
+    const { amountPaise } = schema.parse(req.body);
+
+    const keyId = process.env.RAZORPAY_KEY_ID || '';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    if (!keyId || !keySecret) {
+      return res.status(500).json({ error: 'Platform payment gateway not configured' });
+    }
+
+    const receipt = `ww_${businessId.slice(0, 8)}_${Date.now()}`;
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt,
+        payment_capture: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const err: any = await response.json().catch(() => ({}));
+      return res.status(502).json({ error: err?.error?.description || 'Failed to create payment order' });
+    }
+
+    const order: any = await response.json();
+    res.json({
+      orderId: order.id,
+      amountPaise: order.amount,
+      currency: order.currency,
+      keyId,
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/whatsapp-wallet/verify — HMAC signature + Razorpay order amount +
+ * idempotent ledger credit keyed on the payment id. Never credits from the
+ * frontend "success" alone.
+ */
+ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const schema = z.object({
+      razorpay_order_id: z.string(),
+      razorpay_payment_id: z.string(),
+      razorpay_signature: z.string(),
+    });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = schema.parse(req.body);
+
+    const keyId = process.env.RAZORPAY_KEY_ID || '';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    if (!keyId || !keySecret) {
+      return res.status(500).json({ error: 'Platform payment gateway not configured' });
+    }
+
+    const crypto = await import('crypto');
+    const expectedSig = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+    if (expectedSig !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed' });
+    }
+
+    // Amount comes from Razorpay (the order we created), never from the client.
+    const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpay_order_id}`, {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+      },
+    });
+    if (!orderRes.ok) {
+      return res.status(502).json({ error: 'Could not confirm order amount with payment provider' });
+    }
+    const order: any = await orderRes.json();
+    const amountPaise = Number(order.amount);
+    if (!Number.isInteger(amountPaise) || amountPaise < 10000) {
+      return res.status(400).json({ error: 'Invalid order amount' });
+    }
+
+    const result = await walletService.creditRecharge(businessId, razorpay_payment_id, amountPaise, {
+      description: `WhatsApp wallet recharge ₹${(amountPaise / 100).toFixed(2)}`,
+      referenceType: 'razorpay_order',
+      referenceId: razorpay_order_id,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/whatsapp/messages — billable WhatsApp usage history (recent).
+ */
+ownerRouter.get('/whatsapp/messages', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const messages = await prisma.whatsAppMessageLog.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    res.json({ messages });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 /**

@@ -2,9 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
-import type { CustomerContact, CustomerNotification } from '../../types'
+import type { CustomerContact, CustomerNotification, WalletTransaction, WalletView } from '../../types'
 import { RichMessageEditor } from '../components/RichMessageEditor'
 import { MediaUploadButton } from '../components/MediaUploadButton'
+
+declare global {
+  interface Window {
+    Razorpay: any
+  }
+}
 
 type BroadcastReport = {
   total: number
@@ -200,6 +206,15 @@ export const Notifications: React.FC = () => {
   const [customers, setCustomers] = useState<CustomerContact[]>([])
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
+  // WhatsApp prepaid wallet
+  const [wallet, setWallet] = useState<(WalletView & { pricing: Array<{ category: string; country: string; pricePaise: number }> }) | null>(null)
+  const [walletTx, setWalletTx] = useState<WalletTransaction[]>([])
+  const [waMessages, setWaMessages] = useState<Array<{
+    id: string; toPhone: string; category: string; costPaise: number; status: string; failureReason: string | null; createdAt: string
+  }>>([])
+  const [rechargeAmount, setRechargeAmount] = useState(50000) // ₹500
+  const [recharging, setRecharging] = useState(false)
+
   const [emailMode, setEmailMode] = useState<AudienceMode>('individual')
   const [emailCustomerId, setEmailCustomerId] = useState('')
   const [emailName, setEmailName] = useState('')
@@ -234,15 +249,73 @@ export const Notifications: React.FC = () => {
       api.getCustomerNotifications(),
       api.getCustomers({ limit: '200' }),
       api.getCustomerFilters(),
+      api.getWhatsappWallet(),
+      api.getWhatsappWalletTransactions(),
+      api.getWhatsappMessages(),
     ])
-      .then(([readiness, notifications, phonebook, filters]) => {
+      .then(([readiness, notifications, phonebook, filters, walletView, txs, msgs]) => {
         setStatus(readiness)
         setHistory(notifications)
         setCustomers(phonebook.customers)
         setFilterOptions(filters)
+        setWallet(walletView)
+        setWalletTx(txs.transactions)
+        setWaMessages(msgs.messages)
       })
       .catch(() => setStatus(null))
   }, [])
+
+  const refreshWallet = async () => {
+    const [walletView, txs, msgs] = await Promise.all([
+      api.getWhatsappWallet(),
+      api.getWhatsappWalletTransactions(),
+      api.getWhatsappMessages(),
+    ])
+    setWallet(walletView)
+    setWalletTx(txs.transactions)
+    setWaMessages(msgs.messages)
+  }
+
+  const handleRecharge = async () => {
+    if (!window.Razorpay) {
+      toast.error('Payment gateway not loaded. Please refresh the page.')
+      return
+    }
+    setRecharging(true)
+    try {
+      const res = await api.createWalletRecharge(rechargeAmount)
+      const options = {
+        key: res.keyId,
+        amount: res.amountPaise,
+        currency: res.currency || 'INR',
+        name: 'Reservly',
+        description: 'WhatsApp wallet credits',
+        order_id: res.orderId,
+        handler: async (response: any) => {
+          try {
+            const v = await api.verifyWalletRecharge({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            })
+            toast.success(v.alreadyCredited
+              ? 'Payment was already credited.'
+              : `Recharged ₹${(res.amountPaise / 100).toFixed(2)} — ${v.balancePaise / 100} credits balance`)
+            await refreshWallet()
+          } catch (e: any) {
+            toast.error(e.message || 'Payment verification failed')
+          }
+        },
+        theme: { color: '#6366f1' },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (e: any) {
+      toast.error(e.message || 'Could not start recharge')
+    } finally {
+      setRecharging(false)
+    }
+  }
 
   const refreshHistory = async () => {
     const [notifications, phonebook] = await Promise.all([
@@ -454,7 +527,7 @@ export const Notifications: React.FC = () => {
         </p>
         <Row ok={status?.smtpConfigured} label="SMTP ready (emails send from your mailbox)" error="add SMTP username and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email present (alerts and Reply-To)" />
-        <Row ok={status?.metaWhatsappConfigured} label="Meta WhatsApp ready (messages send from your Cloud API number)" error="add Phone Number ID and Access Token in Settings" />
+        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp ready (shared Cloud API)" error="platform WhatsApp not configured — contact support" />
         <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />
         <Row ok={status?.frontendUrlConfigured} label="HTTPS frontend URL configured (manage link)" error="FRONTEND_PUBLIC_URL" />
       </div>
@@ -476,6 +549,93 @@ export const Notifications: React.FC = () => {
             </p>
           </div>
         )}
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">WhatsApp Wallet</h2>
+            <p className="text-sm text-gray-500">
+              WhatsApp notifications use prepaid credits. Estimated remaining ≈ balance ÷ current utility price
+              (not a guarantee). Email is unaffected by the wallet.
+            </p>
+          </div>
+          {wallet?.lowBalance && wallet.balancePaise > 0 && (
+            <span className="text-xs font-medium text-amber-700 bg-amber-100 dark:bg-amber-900/30 px-2 py-1 rounded-full">
+              Low balance
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-6">
+          <div>
+            <p className="text-3xl font-bold">₹{((wallet?.balancePaise ?? 0) / 100).toFixed(2)}</p>
+            <p className="text-xs text-gray-500">
+              {wallet?.estimatedMessages != null && wallet.estimatedMessages >= 0
+                ? `≈ ${wallet.estimatedMessages} utility messages left`
+                : 'Prepaid credits balance'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="number" min={100} step={100} value={Math.round((rechargeAmount ?? 0) / 100)}
+              onChange={(e) => setRechargeAmount(Math.max(100, Math.round(Number(e.target.value || 0) * 100)))}
+              className="w-28 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+              placeholder="500" />
+            <button onClick={handleRecharge} disabled={recharging || !wallet}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {recharging ? 'Starting…' : 'Add credits (₹)'}
+            </button>
+          </div>
+        </div>
+
+        {wallet && wallet.status !== 'ACTIVE' && (
+          <p className="text-xs text-red-500">Wallet is {wallet.status}. WhatsApp sends are paused.</p>
+        )}
+
+        <div className="grid sm:grid-cols-2 gap-6">
+          <div>
+            <h3 className="text-sm font-medium mb-2">Recent transactions</h3>
+            {walletTx.length === 0 ? (
+              <p className="text-xs text-gray-500">No transactions yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 text-xs max-h-56 overflow-y-auto">
+                {walletTx.slice(0, 12).map((tx) => (
+                  <li key={tx.id} className="py-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium capitalize">{tx.type.replace(/_/g, ' ').toLowerCase()}</p>
+                      <p className="text-gray-500 truncate">
+                        {tx.description || ''} · {new Date(tx.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 ${tx.amountPaise < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {tx.amountPaise < 0 ? '−' : '+'}₹{Math.abs(tx.amountPaise / 100).toFixed(2)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-medium mb-2">WhatsApp usage</h3>
+            {waMessages.length === 0 ? (
+              <p className="text-xs text-gray-500">No WhatsApp messages logged yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 text-xs max-h-56 overflow-y-auto">
+                {waMessages.slice(0, 12).map((m) => (
+                  <li key={m.id} className="py-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium">+{m.toPhone} · {m.category}</p>
+                      <p className="text-gray-500 truncate">
+                        {m.status}{m.failureReason ? ` — ${m.failureReason}` : ''} · {new Date(m.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-gray-500">₹{(m.costPaise / 100).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-2xl">

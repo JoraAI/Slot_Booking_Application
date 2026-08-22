@@ -61,9 +61,10 @@ export const SetupGuide: React.FC = () => (
           — do not paste your dashboard password or normal mailbox password.
         </li>
         <li>
-          <strong>WhatsApp:</strong> Meta Phone Number ID and Access Token. Optional template names can be
-          saved for utility/marketing campaigns. Meta requires approved templates for business-initiated
-          messages outside the 24-hour customer-service window.
+          <strong>WhatsApp:</strong> messages are sent from <strong>Reservly’s shared</strong> Cloud API number
+          (you never paste Meta Phone Number ID or tokens). Enable WhatsApp in Settings, top up your
+          <Link className="text-primary underline" to="/dashboard/notifications"> WhatsApp Wallet</Link>,
+          then tick “WhatsApp customers”. Empty wallet → <code>INSUFFICIENT_CREDITS</code>; bookings and email keep working.
         </li>
         <li>
           Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),
@@ -85,7 +86,7 @@ export const SetupGuide: React.FC = () => (
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">
         Emails are sent from your SMTP username, with owner email as Reply-To. WhatsApp is sent from
-        your Meta Cloud API number; the owner WhatsApp number is included as the customer contact.
+        Reservly’s shared Meta Cloud API number; your owner WhatsApp is used as the customer contact line.
         Messages outside Meta's customer-service window may require an approved content template.
       </p>
     </GuideSection>

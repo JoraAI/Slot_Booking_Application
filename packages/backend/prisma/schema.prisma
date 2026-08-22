@@ -148,6 +148,10 @@ model Business {
   paymentRefunds          PaymentRefund[]
   managementOtps          BookingManagementOtp[]
   customerContacts        CustomerContact[]
+  whatsappConfig          WhatsAppConfig?
+  wallet                  Wallet?
+  walletTransactions      WalletTransaction[]
+  whatsappMessageLogs     WhatsAppMessageLog[]
   customerNotifications   CustomerNotification[]
   mediaAssets             MediaAsset[]
   createdAt               DateTime  @default(now())
@@ -564,4 +568,93 @@ model BookingManagementSession {
 
   @@index([bookingId])
   @@index([expiresAt])
+}
+
+// ---- WhatsApp multi-tenant prepaid wallet (Batch 5 / wallet migration) ----
+
+model WhatsAppConfig {
+  id                String    @id @default(cuid())
+  businessId        String    @unique
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  phoneNumberId     String?
+  wabaId            String?
+  displayPhone      String?
+  status            String    @default("DISCONNECTED") // 'DISCONNECTED' | 'CONNECTED' | 'ERROR'
+  connectionMode    String    @default("SHARED") // 'SHARED' = Reservly platform Cloud API only
+  accessTokenEnc    String? // unused for SHARED (platform env token); kept nullable for schema stability
+  templateUtility   String?
+  templateMarketing String?
+  enabled           Boolean   @default(false)
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Wallet {
+  id                      String   @id @default(cuid())
+  businessId              String   @unique
+  business                Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  balancePaise            Int      @default(0) // integer paise — never Float
+  currency                String   @default("INR")
+  status                  String   @default("ACTIVE") // 'ACTIVE' | 'FROZEN'
+  version                 Int      @default(0) // incremented on every mutation (optimistic-ish guard)
+  lowBalanceThresholdPaise Int     @default(50000) // ₹500 — dashboard low-balance warning
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id                 String   @id @default(cuid())
+  businessId         String
+  business           Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  // RECHARGE | WHATSAPP_CHARGE | REFUND | REVERSAL | ADJUSTMENT | RESERVATION | RESERVATION_RELEASE
+  type               String
+  amountPaise        Int // signed: -debit, +credit
+  balanceBeforePaise Int
+  balanceAfterPaise  Int
+  status             String   @default("COMPLETED") // 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'FAILED'
+  referenceType      String? // e.g. 'booking' | 'customer' | 'razorpay_order'
+  referenceId        String?
+  providerPaymentId  String?  @unique // Razorpay payment id — idempotency key for RECHARGE
+  description        String?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([businessId, type])
+  @@index([referenceType, referenceId])
+}
+
+model WhatsAppPricing {
+  id            String    @id @default(cuid())
+  country       String    @default("IN")
+  currency      String    @default("INR")
+  category      String // 'UTILITY' | 'MARKETING' | 'SERVICE' | 'AUTHENTICATION'
+  pricePaise    Int
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  @@unique([country, currency, category])
+}
+
+model WhatsAppMessageLog {
+  id                String    @id @default(cuid())
+  businessId        String
+  business          Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookingId         String?
+  customerId        String?
+  toPhone           String
+  category          String    @default("UTILITY")
+  template          String?
+  costPaise         Int       @default(0)
+  reservationTxId   String?
+  providerMessageId String?
+  // 'ACCEPTED' | 'FAILED' | 'INSUFFICIENT_CREDITS' | 'SKIPPED_NOT_CONFIGURED'
+  status            String
+  failureReason     String?
+  createdAt         DateTime  @default(now())
+
+  @@index([businessId, createdAt])
 }

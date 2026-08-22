@@ -5,8 +5,11 @@ import {
   metaWhatsappConfigured,
   resolveMetaWhatsapp,
   resolveSmtp,
+  resolveWhatsappCredentials,
   smtpConfigured,
 } from './notificationCredentials';
+import { walletService } from './WalletService';
+import { whatsappPricingService } from './WhatsAppPricingService';
 import {
   isValidNotifyEmail,
   isValidWhatsappNumber,
@@ -14,7 +17,18 @@ import {
 import { contactMatchesFilters } from './CustomerAttributes';
 import { htmlToPlainText, wrapEmailMessage } from './MessageFormat';
 
-type SendOpts = { replyTo?: string; throwOnError?: boolean; business?: any };
+type SendOpts = {
+  replyTo?: string;
+  throwOnError?: boolean;
+  business?: any;
+  /** Wallet pricing category (defaults to UTILITY). Broadcasts should pass MARKETING. */
+  category?: string;
+  /** Reference context for WhatsAppMessageLog + wallet ledger. */
+  bookingId?: string;
+  customerId?: string;
+  /** When true, insufficient wallet credits throw (async jobs like reminders that must retry). */
+  throwOnInsufficient?: boolean;
+};
 
 class NotificationService {
   /** HTML-escape user-controlled values interpolated into email templates. */
@@ -213,6 +227,47 @@ class NotificationService {
     return null;
   }
 
+  private async logWhatsAppMessage(
+    businessId: string,
+    opts: SendOpts & { imageUrl?: string | null; cta?: { displayText: string; url: string } | null },
+    toDigits: string,
+    category: string,
+    costPaise: number,
+    status: string,
+    failureReason: string | null,
+    reservationTxId?: string | null,
+    providerMessageId?: string | null
+  ): Promise<void> {
+    try {
+      await prisma.whatsAppMessageLog.create({
+        data: {
+          businessId,
+          bookingId: opts.bookingId || null,
+          customerId: opts.customerId || null,
+          toPhone: toDigits,
+          category,
+          costPaise,
+          reservationTxId: reservationTxId || null,
+          providerMessageId: providerMessageId || null,
+          status,
+          failureReason,
+        },
+      });
+    } catch (e: any) {
+      console.error('WhatsApp message log write failed:', e?.message || e);
+    }
+  }
+
+  private parseProviderMessageId(bodyText: string): string | null {
+    try {
+      const parsed = JSON.parse(bodyText);
+      const id = parsed?.messages?.[0]?.id;
+      return typeof id === 'string' && id ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async sendWhatsApp(
     to: string,
     message: string,
@@ -221,19 +276,58 @@ class NotificationService {
       cta?: { displayText: string; url: string } | null;
     } = {}
   ): Promise<void> {
-    try {
-      const meta = resolveMetaWhatsapp(opts.business);
-      if (!meta) {
-        const err = new Error('WhatsApp: Meta Cloud API is not configured. Add Phone Number ID and Access Token in Settings.');
-        console.log(err.message);
-        if (opts.throwOnError) throw err;
-        return;
-      }
-      const toDigits = this.normalizeMetaDestination(to);
-      if (!toDigits) {
-        throw new Error('WhatsApp destination number is invalid');
-      }
+    const business = opts.business;
+    const businessId = business?.id as string | undefined;
+    const category = opts.category || 'UTILITY';
+    const toDigits = this.normalizeMetaDestination(to);
+    if (!toDigits) {
+      if (opts.throwOnError) throw new Error('WhatsApp destination number is invalid');
+      return;
+    }
+    if (!businessId) {
+      console.log('WhatsApp skipped: no business context for message');
+      return;
+    }
 
+    const [tenantConfig, costPaise] = await Promise.all([
+      prisma.whatsAppConfig.findUnique({ where: { businessId } }),
+      whatsappPricingService.getPricePaise(category),
+    ]);
+    const meta = resolveWhatsappCredentials(business, tenantConfig);
+    if (!meta) {
+      await this.logWhatsAppMessage(businessId, opts, toDigits, category, 0, 'SKIPPED_NOT_CONFIGURED',
+        'WhatsApp not available (platform Meta missing or salon has not enabled WhatsApp)');
+      const err = new Error('WhatsApp: enable WhatsApp in Settings, or contact support if Reservly platform WhatsApp is offline.');
+      console.log(err.message);
+      if (opts.throwOnError) throw err;
+      return;
+    }
+    if (costPaise == null) {
+      await this.logWhatsAppMessage(businessId, opts, toDigits, category, 0, 'FAILED',
+        `No active pricing row for category ${category}`);
+      const err = new Error(`WhatsApp: no active pricing for category ${category}`);
+      console.log(err.message);
+      if (opts.throwOnError) throw err;
+      return;
+    }
+
+    // Wallet gate — hard stop on insufficient credits: no Meta call, no debit.
+    const reserve = await walletService.reserve(businessId, costPaise, {
+      description: `WhatsApp ${category} message to +${toDigits}`,
+      referenceType: opts.bookingId ? 'booking' : opts.customerId ? 'customer' : undefined,
+      referenceId: opts.bookingId || opts.customerId || undefined,
+    });
+    if (!reserve.ok) {
+      await this.logWhatsAppMessage(businessId, opts, toDigits, category, 0, 'INSUFFICIENT_CREDITS',
+        `Wallet ${reserve.reason}: ${costPaise} paise needed for ${category}`);
+      console.log(`WhatsApp skipped for ${businessId}: ${reserve.reason} (${costPaise} paise needed)`);
+      if (opts.throwOnInsufficient) {
+        throw new Error('WhatsApp wallet has insufficient credits — please recharge');
+      }
+      return; // booking / flow unaffected
+    }
+
+    try {
       const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
       const ctaUrl = opts.cta?.url && /^https:\/\//i.test(opts.cta.url) ? opts.cta.url : null;
       const ctaText = opts.cta?.displayText || 'View or cancel';
@@ -289,12 +383,26 @@ class NotificationService {
 
       if (!response.ok) {
         const err = new Error(`WhatsApp sending failed: ${bodyText}`);
+        await walletService.releaseReservation(reserve.reservationId, err.message);
+        await this.logWhatsAppMessage(businessId, opts, toDigits, category, costPaise, 'FAILED',
+          bodyText.slice(0, 500), reserve.reservationId);
         console.error(err.message);
         if (opts.throwOnError) throw err;
-      } else {
-        console.log(`WhatsApp sent to ${to}`);
+        return;
       }
-    } catch (error) {
+
+      if (!bodyText) {
+        try { bodyText = await response.text(); } catch { /* provider id optional */ }
+      }
+      const providerMessageId = this.parseProviderMessageId(bodyText);
+      await walletService.finalizeReservation(reserve.reservationId, providerMessageId);
+      await this.logWhatsAppMessage(businessId, opts, toDigits, category, costPaise, 'ACCEPTED',
+        null, reserve.reservationId, providerMessageId);
+      console.log(`WhatsApp sent to ${to}`);
+    } catch (error: any) {
+      await walletService.releaseReservation(reserve.reservationId, error?.message || 'send failed');
+      await this.logWhatsAppMessage(businessId, opts, toDigits, category, costPaise, 'FAILED',
+        (error?.message || 'send failed').slice(0, 500), reserve.reservationId);
       console.error('WhatsApp sending failed:', error);
       if (opts.throwOnError) throw error;
     }
@@ -363,6 +471,7 @@ class NotificationService {
         : null;
       await this.sendWhatsApp(booking.customerPhone, body, {
         business,
+        bookingId: booking.id,
         cta: manageUrl
           ? { displayText: 'Cancel booking', url: manageUrl }
           : null,
@@ -384,7 +493,7 @@ class NotificationService {
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
         `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n💇 ${this.bookingServiceName(booking)}${booking.durationMinutesSnapshot ? ` (${booking.durationMinutesSnapshot} min)` : ''}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
-        { business }
+        { business, bookingId: booking.id }
       );
     }
   }
@@ -420,7 +529,7 @@ class NotificationService {
     if (business.notifyCustomerWhatsapp && booking.customerPhone) {
       await this.sendWhatsApp(booking.customerPhone,
         `❌ Booking cancelled\n\n${business.name}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${refund && refund.amount > 0 ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}`,
-        { business }
+        { business, bookingId: booking.id }
       );
     }
 
@@ -445,7 +554,7 @@ class NotificationService {
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
       await this.sendWhatsApp(business.ownerWhatsapp,
         `❌ Booking cancelled\n\n${booking.customerName}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`,
-        { business }
+        { business, bookingId: booking.id }
       );
     }
   }
@@ -629,7 +738,7 @@ class NotificationService {
         failed
           ? `⚠️ Refund failed for booking ${booking.id} (${booking.customerName}, ₹${amount}). Manual action needed: ${refund?.failureReason || 'Unknown reason'}`
           : `↩️ Refund initiated for booking ${booking.id} (${booking.customerName}, ₹${amount}).`,
-        { business }
+        { business, bookingId: booking.id }
       );
     }
   }
@@ -668,7 +777,7 @@ class NotificationService {
     } else if (channel === 'whatsapp' && booking.customerPhone) {
       await this.sendWhatsApp(booking.customerPhone,
         `🔔 Reminder for your ${serviceName}\n\n${this.esc(business.name)}\n📅 ${booking.dateDisplay}\n🕐 ${line}${booking.staff?.name ? `\n👤 ${this.esc(booking.staff.name)}` : ''}${booking.finalPrice != null ? `\n💰 ₹${booking.finalPrice}` : ''}\n${address}${directions}\n\nBooking Ref: ${this.esc(booking.id)}`,
-        { business }
+        { business, bookingId: booking.id, throwOnInsufficient: true }
       );
     }
   }
@@ -724,7 +833,7 @@ class NotificationService {
           await this.sendWhatsApp(
             customer.phone,
             `${business.name}\n\n${plainMessage}${ownerContact}`,
-            { throwOnError: true, business, imageUrl: publicImageUrl }
+            { throwOnError: true, throwOnInsufficient: true, business, imageUrl: publicImageUrl, customerId: customer.id }
           );
         }
         ok = true;
@@ -931,8 +1040,9 @@ class NotificationService {
       }
     }
 
-    if (!this.metaWhatsappConfigured(business)) {
-      whatsapp.error = 'Meta Cloud API WhatsApp is not configured. Add Phone Number ID and Access Token in Settings.';
+    const whatsappConfig = await prisma.whatsAppConfig.findUnique({ where: { businessId } });
+    if (!resolveWhatsappCredentials(business, whatsappConfig)) {
+      whatsapp.error = 'WhatsApp is not enabled for this salon, or Reservly platform WhatsApp is offline. Use Settings → Enable WhatsApp.';
     } else if (!business.ownerWhatsapp) {
       whatsapp.error = 'Owner WhatsApp number is not set';
     } else {
@@ -940,7 +1050,7 @@ class NotificationService {
         await this.sendWhatsApp(
           business.ownerWhatsapp,
           `✅ Test notification from ${business.name}. Your notification system is working!`,
-          { throwOnError: true, business }
+          { throwOnError: true, throwOnInsufficient: true, business }
         );
         whatsapp.ok = true;
       } catch (e: any) {

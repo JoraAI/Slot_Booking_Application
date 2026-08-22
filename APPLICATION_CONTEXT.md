@@ -229,6 +229,57 @@ when this document differs.
   reported by `GET /owner/settings/status` and surfaced in Settings/Notifications;
   the test-send endpoint now reports real per-channel success/failure.
 
+## Batch 5 — WhatsApp multi-tenant prepaid wallet — COMPLETE
+
+Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migration).
+
+- **New models** (migration `20260901000000_whatsapp_wallet`): `WhatsAppConfig`
+  (1:1, LEGACY/EMBEDDED, encrypted token, never returned by APIs), `Wallet`
+  (1:1, integer paise, never negative, version counter, low-balance threshold),
+  `WalletTransaction` (immutable ledger: RECHARGE / WHATSAPP_CHARGE / REFUND /
+  REVERSAL / ADJUSTMENT / RESERVATION / RESERVATION_RELEASE; balance snapshots),
+  `WhatsAppPricing` (country+currency+category, effective dates, seeded defaults),
+  `WhatsAppMessageLog` (billable history with provider id, status, failure reason).
+- **Backfill**: every Business gets `Wallet` balance 0 (no credits gifted); salons
+  with DIY Meta fields get a LEGACY `WhatsAppConfig` (CONNECTED when phone number
+  + token exist, else DISCONNECTED).
+- **Wallet gate** in `NotificationService.sendWhatsApp` (the single choke point for
+  booking confirm/cancel, reminders, waitlist, custom, broadcast, owner alerts):
+  resolve price from `WhatsAppPricing` → `WalletService.reserve` (atomic
+  `updateMany(balancePaise >= amount)` — hard stop on insufficient, no Meta call,
+  no debit, log `INSUFFICIENT_CREDITS`, never throws into the booking flow) →
+  Meta call → `finalize` (WHATSAPP_CHARGE) on accept with `providerMessageId`, or
+  `release` (credit back) on failure. Reminders pass `throwOnInsufficient` so an
+  empty wallet leaves them PENDING for retry after recharge.
+- **Recharge** mirrors platform subscription pay/verify with **platform** Razorpay
+  keys: `POST /owner/whatsapp-wallet/recharge` (₹100 min, order) → client pays →
+  `POST /owner/whatsapp-wallet/verify` (HMAC signature + order amount fetched from
+  Razorpay — never from the client) → idempotent credit keyed on
+  `providerPaymentId @unique`; cross-tenant replay of a payment id is rejected.
+- **Admin pricing** is DB-configurable without a deploy:
+  `GET/POST /api/internal/whatsapp-pricing` and `POST /api/internal/wallet/adjust`
+  behind `CRON_SECRET`. No hard-coded Meta rates in send logic.
+- **Frontend**: Settings shows WhatsApp connection status + wallet summary with an
+  “Advanced: use your own Meta credentials (LEGACY migration)” accordion;
+  Notifications has a WhatsApp Wallet card (balance, low-balance banner,
+  Razorpay top-up, recent ledger + usage history). Setup guide copy updated.
+- **Prisma transaction budget** raised to 15s default (`transactionOptions` in
+  `lib/prisma.ts`) — the 5s interactive-transaction default flakes on slow/remote
+  Postgres (Neon) under parallel test load (advisory-lock refund flows). Also the
+  local `.env` Neon **pooled** URL now includes `pgbouncer=true` (documented
+  Prisma+Neon requirement so interactive transactions stay pinned to one
+  connection instead of dying with “Transaction not found”).
+- **Tests**: `WhatsAppWallet.test.ts` (8) — parallel reserve concurrency
+  (balance 20, two reserves of 12 → one wins, balance 8), reserve/release,
+  reserve/finalize, idempotent recharge + replay rejection, empty-wallet no-Meta-call
+  hard stop, funded send (mocked Meta) ACCEPTED + charge, owner connect/status/recharge
+  gates + no-token-leak, tenant isolation.
+- **Environment note (Neon free-tier throttle)**: when Neon throttles compute to
+  ~2–3 s/query, `BookingService.createBooking`'s existing 20 s interactive
+  transaction budget is exceeded and booking-creation tests across the suite flake
+  with Prisma transaction timeouts. This is environmental (was 98/98 earlier the
+  same day); re-run once the compute budget resets.
+
 ## Management tokens + optional OTP
 
 - Every new booking gets a 256-bit random management token; only its **SHA-256 hash**
@@ -325,3 +376,17 @@ Razorpay (`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`), Cloudinary
 - **Third-party costs**: WhatsApp/SMS/email (Twilio, SMTP) and payments (Razorpay)
   are real external services with per-message/transaction costs. WhatsApp production
   requires approved templates and an explicit customer opt-in (Batch 4 prerequisites).
+- **Meta Embedded Signup / Tech Provider OAuth is not shipped**: the wallet + send
+  gating + LEGACY migration are live; “Connect WhatsApp” for new salons uses LEGACY
+  credentials (Settings → Advanced). A guided Meta Embedded Signup flow needs Meta
+  app/Tech Provider assets (`META_APP_ID`/`META_APP_SECRET`) and is future work.
+- **Wallet pricing is DB-seeded, not authoritative Meta billing**: `WhatsAppPricing`
+  rows for IN/INR use a **2× markup** over modeled Meta cost (UTILITY 100p / MARKETING 170p /
+  SERVICE 80p / AUTHENTICATION 60p) so the same message volume costs clients 2x. Adjust via
+  admin pricing route without a code change.
+  are editable defaults; update them to Meta's actual per-conversation rates via
+  `POST /api/internal/whatsapp-pricing` (`x-cron-secret`) or a migration. WhatsApp
+  is skipped (logged `FAILED`) when no active pricing row matches a category.
+- **No Meta webhook yet**: `WhatsAppMessageLog` records Meta **acceptance**
+  (`providerMessageId`), not final delivery/read status; no auto-refund on delivery
+  failure (status updates are optional Phase-B webhook work).

@@ -257,12 +257,27 @@ See `packages/backend/.env.example`.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Neon Postgres |
+| `DATABASE_URL` | Neon Postgres. When using Neon's **pooled** host (`-pooler.`), append `?pgbouncer=true` so Prisma interactive transactions (refund/wallet) stay pinned to one connection |
 | `JWT_SECRET` | Owner JWT signing |
-| `CRON_SECRET` | Internal job auth |
+| `CRON_SECRET` | Internal job auth (also protects wallet admin pricing routes) |
 | `PORT` | Set by Render automatically |
 | `FRONTEND_URL` | Vercel origin (CORS) |
 | `FRONTEND_PUBLIC_URL` | Links / QR / manage URLs |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | **Platform** Razorpay — WhatsApp wallet recharges (same keys as subscription) |
+| `META_APP_ID` / `META_APP_SECRET` | Reserved for future Embedded Signup / webhooks (not required today) |
+| `META_WEBHOOK_VERIFY_TOKEN` | Reserved for future Meta webhook (not required today) |
+| `META_API_VERSION` | Meta Graph API version, default `v20.0` (not required today) |
+
+### WhatsApp wallet notes
+
+- Wallet credits are prepaid, integer paise, never negative. Every WhatsApp send reserves the
+  DB-configured price → calls Meta → finalizes (charge) or releases (refund to wallet).
+- Empty wallet → no Meta call, message logged `INSUFFICIENT_CREDITS`; bookings and email keep working.
+- Per-message prices live in the `WhatsAppPricing` table (seeded at **2×** modeled Meta
+  cost so the same y messages cost clients 2x). Update without a code deploy via
+  `POST /api/internal/whatsapp-pricing` with `x-cron-secret: <CRON_SECRET>`.
+- Admin manual wallet adjustment: `POST /api/internal/wallet/adjust` with `x-cron-secret`.
+- Owners top up from Dashboard → Notifications → WhatsApp Wallet (Razorpay, ₹100 min).
 
 ---
 

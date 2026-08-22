@@ -1,4 +1,4 @@
-import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField, CustomerContact, CustomerNotification } from '../types'
+import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField, CustomerContact, CustomerNotification, WalletView, WalletTransaction } from '../types'
 
 // Split-host friendly API base:
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
@@ -388,7 +388,70 @@ class ApiClient {
       locationComplete: boolean
       ownerEmailPresent: boolean
       ownerWhatsappPresent: boolean
+      whatsappConnected?: boolean
+      walletBalancePaise?: number
+      walletLowBalance?: boolean
     }>('/owner/settings/status')
+  }
+
+  getWhatsappStatus() {
+    return this.request<{
+      connectionMode: 'SHARED' | 'LEGACY' | 'EMBEDDED'
+      status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR'
+      displayPhone: string | null
+      configured: boolean
+      platformReady?: boolean
+      optedIn?: boolean
+      wallet: WalletView
+      pricing: Array<{ category: string; country: string; pricePaise: number }>
+    }>('/owner/whatsapp/status')
+  }
+
+  connectWhatsapp() {
+    return this.request<{ ok: boolean; connectionMode: string; status: string }>('/owner/whatsapp/connect', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  }
+
+  disconnectWhatsapp() {
+    return this.request<{ ok: boolean; status: string }>('/owner/whatsapp/disconnect', { method: 'POST', body: JSON.stringify({}) })
+  }
+
+  getWhatsappWallet() {
+    return this.request<WalletView & { pricing: Array<{ category: string; country: string; pricePaise: number }> }>('/owner/whatsapp-wallet')
+  }
+
+  getWhatsappWalletTransactions(limit = 50) {
+    return this.request<{ transactions: WalletTransaction[] }>(`/owner/whatsapp-wallet/transactions?limit=${limit}`)
+  }
+
+  createWalletRecharge(amountPaise: number) {
+    return this.request<{ orderId: string; amountPaise: number; currency: string; keyId: string }>('/owner/whatsapp-wallet/recharge', {
+      method: 'POST',
+      body: JSON.stringify({ amountPaise }),
+    })
+  }
+
+  verifyWalletRecharge(data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+    return this.request<{ ok: boolean; alreadyCredited?: boolean; balancePaise: number; transactionId: string }>('/owner/whatsapp-wallet/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  getWhatsappMessages(limit = 50) {
+    return this.request<{ messages: Array<{
+      id: string
+      toPhone: string
+      category: string
+      template: string | null
+      costPaise: number
+      providerMessageId: string | null
+      status: string
+      failureReason: string | null
+      createdAt: string
+    }> }>(`/owner/whatsapp/messages?limit=${limit}`)
   }
 
   getOwnerSubscription() {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useCountUp } from '../../hooks'
 import { FeatureGate } from '../../widget/FeatureGate'
@@ -7,12 +8,30 @@ import type { Booking } from '../../types'
 export const DashboardHome: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [waAlert, setWaAlert] = useState<{
+    needConnect: boolean
+    lowBalance: boolean
+    balancePaise: number
+  } | null>(null)
 
   useEffect(() => {
     api.getOwnerBookings({ status: 'CONFIRMED' })
       .then((data) => setBookings(data.bookings))
       .catch(() => {})
       .finally(() => setLoading(false))
+
+    Promise.all([api.getOwnerSettingsStatus(), api.getWhatsappStatus().catch(() => null)])
+      .then(([status, wa]) => {
+        const needConnect = status.metaWhatsappConfigured && !status.whatsappConnected
+        const platformDown = !status.metaWhatsappConfigured
+        const lowBalance = !!(status.walletLowBalance || wa?.wallet?.lowBalance)
+        setWaAlert({
+          needConnect: needConnect || platformDown,
+          lowBalance: !needConnect && !platformDown && lowBalance,
+          balancePaise: status.walletBalancePaise ?? wa?.wallet?.balancePaise ?? 0,
+        })
+      })
+      .catch(() => {})
   }, [])
 
   const todayCount = bookings.filter(b => {
@@ -25,6 +44,35 @@ export const DashboardHome: React.FC = () => {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
+
+      {waAlert?.needConnect && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 text-sm text-amber-900 dark:text-amber-100">
+          <p className="font-medium">Enable WhatsApp for booking alerts</p>
+          <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">
+            WhatsApp messages are sent from Reservly’s shared number. Enable WhatsApp in Settings, add wallet credits,
+            then turn on customer WhatsApp notifications. Email still works without WhatsApp.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link to="/dashboard/settings" className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-medium">
+              Open Settings
+            </Link>
+            <Link to="/dashboard/notifications" className="px-3 py-2 rounded-lg border border-amber-400 text-xs font-medium">
+              Add credits
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {waAlert && !waAlert.needConnect && waAlert.lowBalance && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 p-4 text-sm text-amber-900 dark:text-amber-100">
+          <p className="font-medium">WhatsApp credits are running low (₹{(waAlert.balancePaise / 100).toFixed(2)})</p>
+          <p className="mt-1">Top up so confirmations and reminders keep sending.</p>
+          <Link to="/dashboard/notifications" className="inline-block mt-2 text-primary font-medium text-xs underline">
+            Add credits →
+          </Link>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard title="Today's Bookings" value={todayCount} color="bg-primary" />
         <KPICard title="Total Active" value={totalCount} color="bg-blue-500" />

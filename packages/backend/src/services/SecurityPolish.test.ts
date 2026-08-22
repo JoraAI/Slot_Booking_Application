@@ -144,6 +144,7 @@ test('2b. SMTP password and Meta access token are encrypted, write-only, and nev
     body: {
       smtpUser: 'salon@example.com',
       smtpPass: 'smtp-secret-value',
+      // DIY Meta fields must be ignored (shared-platform WhatsApp only).
       metaWhatsappPhoneNumberId: '123456789012345',
       metaWhatsappAccessToken: 'meta-secret-value',
     },
@@ -155,14 +156,13 @@ test('2b. SMTP password and Meta access token are encrypted, write-only, and nev
   assert.ok(!JSON.stringify(write.json).includes('meta-secret-value'));
   assert.strictEqual(write.json.smtpUser, 'salon@example.com');
   assert.strictEqual(write.json.smtpPassConfigured, true);
-  assert.strictEqual(write.json.metaWhatsappAccessTokenConfigured, true);
+  assert.strictEqual(write.json.metaWhatsappAccessTokenConfigured, false);
   assert.strictEqual(write.json.smtpConfigured, true);
-  assert.strictEqual(write.json.metaWhatsappConfigured, true);
 
   const row = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
   assert.ok(row.smtpPassEnc && row.smtpPassEnc.startsWith('enc:v1:'));
   assert.ok(!row.smtpPassEnc.includes('smtp-secret-value'));
-  assert.ok(row.metaWhatsappAccessTokenEnc && row.metaWhatsappAccessTokenEnc.startsWith('enc:v1:'));
+  assert.ok(!row.metaWhatsappAccessTokenEnc, 'tenant Meta tokens must not be stored from Settings');
 
   const me = await req('GET', '/owner/me', { headers: { Authorization: `Bearer ${token}` } });
   assert.ok(!('smtpPassEnc' in me.json));
@@ -178,7 +178,7 @@ test('2b. SMTP password and Meta access token are encrypted, write-only, and nev
 
   const clear = await req('PUT', '/owner/config', {
     headers: { Authorization: `Bearer ${token}` },
-    body: { clearSmtpPass: true, clearMetaWhatsappAccessToken: true },
+    body: { clearSmtpPass: true },
   });
   assert.strictEqual(clear.status, 200);
   assert.strictEqual(clear.json.smtpPassConfigured, false);

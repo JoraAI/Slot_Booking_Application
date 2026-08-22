@@ -1,9 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { reminderService } from '../services/ReminderService';
 import { paymentFlowService } from '../services/PaymentFlowService';
 import { waitlistService } from '../services/WaitlistService';
 import { refundService } from '../services/RefundService';
+import { walletService } from '../services/WalletService';
+import { whatsappPricingService } from '../services/WhatsAppPricingService';
 
 export const internalRouter = Router();
 
@@ -97,3 +100,46 @@ internalRouter.post('/jobs/process-refund-reconciliation', requireCronSecret, as
 });
 
 export default internalRouter;
+
+/**
+ * Admin-managed WhatsApp pricing (DB-configurable; no code change to update
+ * Meta rates). Protected by CRON_SECRET (internal-only).
+ */
+internalRouter.get('/whatsapp-pricing', requireCronSecret, async (_req: Request, res: Response) => {
+  const pricing = await whatsappPricingService.list();
+  res.json({ pricing });
+});
+
+internalRouter.post('/whatsapp-pricing', requireCronSecret, async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      category: z.enum(['UTILITY', 'MARKETING', 'SERVICE', 'AUTHENTICATION']),
+      pricePaise: z.number().int().min(0),
+      country: z.string().trim().min(2).max(2).optional(),
+      currency: z.string().trim().min(3).max(3).optional(),
+    });
+    const body = schema.parse(req.body);
+    const row = await whatsappPricingService.upsert(body);
+    res.json({ ok: true, row });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Admin wallet adjustment (grant/revoke credits). CRON_SECRET protected.
+ */
+internalRouter.post('/wallet/adjust', requireCronSecret, async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({
+      businessId: z.string().min(1),
+      amountPaise: z.number().int().refine((n) => n !== 0, 'amount must be non-zero'),
+      description: z.string().trim().min(1).max(500),
+    });
+    const body = schema.parse(req.body);
+    const tx = await walletService.adjust(body.businessId, body.amountPaise, body.description);
+    res.json({ ok: true, transaction: tx });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
