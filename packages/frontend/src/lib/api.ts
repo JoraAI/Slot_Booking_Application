@@ -183,10 +183,66 @@ class ApiClient {
     })
   }
 
-  ownerSignup(data: { name: string; ownerEmail: string; ownerPassword: string; timezone?: string }) {
+  ownerSignup(data: { signupToken: string; name: string; ownerPassword: string; timezone?: string }) {
     return this.request<{ token: string; business: { id: string; name: string; slug: string; publicCode: string; email: string } }>('/signup', {
       method: 'POST',
       body: JSON.stringify(data),
+    })
+  }
+
+  ownerSignupRequestOtp(email: string) {
+    return this.request<{ ok: boolean }>('/auth/signup/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  ownerSignupVerifyOtp(email: string, code: string) {
+    return this.request<{ ok: boolean; signupToken: string }>('/auth/signup/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    })
+  }
+
+  ownerForgotRequestOtp(email: string) {
+    return this.request<{ ok: boolean }>('/auth/forgot/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  ownerForgotVerifyOtp(email: string, code: string) {
+    return this.request<{ ok: boolean; resetToken: string }>('/auth/forgot/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    })
+  }
+
+  ownerForgotReset(resetToken: string, newPassword: string) {
+    return this.request<{ ok: boolean }>('/auth/forgot/reset', {
+      method: 'POST',
+      body: JSON.stringify({ resetToken, newPassword }),
+    })
+  }
+
+  ownerGoogleAuth(credential: string) {
+    return this.request<{
+      needsSignupCompletion: boolean
+      token?: string
+      business?: { id: string; name: string; slug: string; email: string }
+      googleSignupToken?: string
+      email?: string
+      name?: string
+    }>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    })
+  }
+
+  ownerGoogleComplete(googleSignupToken: string, name: string, timezone: string) {
+    return this.request<{ token: string; business: { id: string; name: string; slug: string; publicCode: string; email: string } }>('/auth/google/complete', {
+      method: 'POST',
+      body: JSON.stringify({ googleSignupToken, name, timezone }),
     })
   }
 
@@ -198,6 +254,13 @@ class ApiClient {
     return this.request<{ success: boolean }>('/owner/password', {
       method: 'PUT',
       body: JSON.stringify(data),
+    })
+  }
+
+  setOwnerPassword(newPassword: string) {
+    return this.request<{ success: boolean }>('/owner/password/set', {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
     })
   }
 

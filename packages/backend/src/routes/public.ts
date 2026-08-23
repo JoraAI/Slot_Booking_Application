@@ -21,6 +21,8 @@ import { bookingManagementService } from '../services/BookingManagementService';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import { subscriptionService } from '../services/SubscriptionService';
 import { serveMediaAsset } from '../services/MediaService';
+import { ownerAuthOtpService } from '../services/OwnerAuthOtpService';
+import { googleTokenVerifier } from '../services/GoogleTokenVerifier';
 
 export const publicRouter = Router();
 
@@ -42,7 +44,7 @@ async function embedOriginGuard(req: Request, res: Response, next: NextFunction)
     // `router.use` middleware sees no `:identifier` param yet; parse it from the path.
     const segments = req.path.split('/').filter(Boolean);
     const identifier = segments[0];
-    if (!identifier || identifier === 'signup' || identifier === 'media' || identifier.startsWith('owner') || identifier.startsWith('internal')) {
+    if (!identifier || identifier === 'signup' || identifier === 'auth' || identifier === 'media' || identifier.startsWith('owner') || identifier.startsWith('internal')) {
       return next();
     }
     const business = await businessResolver.resolve(identifier);
@@ -67,8 +69,8 @@ publicRouter.use(embedOriginGuard);
 // ---------- Zod validation schemas ----------
 
 const signupSchema = z.object({
+  signupToken: z.string().min(1),
   name: z.string().trim().min(2).max(120),
-  ownerEmail: z.string().trim().email(),
   ownerPassword: z.string().min(8).max(72),
   timezone: z.string().optional(),
   ownerWhatsapp: z.string().optional().nullable(),
@@ -161,16 +163,143 @@ const paymentVerifySchema = z.object({
 
 // ---------- Signup (public) ----------
 
+/** Sign an owner JWT (same shape as before — { businessId, email }). */
+function issueOwnerJwt(business: { id: string; ownerEmail: string }): string {
+  return jwt.sign(
+    { businessId: business.id, email: business.ownerEmail },
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
+  );
+}
+
 /**
+ * Create a business workspace with the same defaults as the legacy signup
+ * (slug, public code, working hours, form fields). Used by OTP-verified signup
+ * and Google completion.
+ */
+async function createOwnerWorkspace(input: {
+  name: string;
+  email: string;
+  timezone: string;
+  password?: string;
+  googleSub?: string;
+  emailVerifiedAt: Date;
+}) {
+  // Unique slug
+  let base = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  if (!base) base = 'business';
+  let slug = base;
+  let suffix = 2;
+  while (await prisma.business.findUnique({ where: { slug } })) {
+    slug = `${base}-${suffix++}`;
+  }
+
+  // Opaque public code (96+ bits entropy, URL-safe)
+  let publicCode = '';
+  for (let i = 0; i < 10; i++) {
+    const candidate = require('crypto').randomBytes(16).toString('base64url');
+    if (!(await prisma.business.findUnique({ where: { publicCode: candidate } }))) {
+      publicCode = candidate;
+      break;
+    }
+  }
+  if (!publicCode) {
+    const err: any = new Error('Could not generate a unique public code');
+    err.status = 500;
+    throw err;
+  }
+
+  const hashedPassword = input.password ? await hashOwnerPassword(input.password) : null;
+
+  return prisma.business.create({
+    data: {
+      name: input.name.trim(),
+      slug,
+      publicCode,
+      timezone: input.timezone,
+      ownerEmail: input.email,
+      ownerPassword: hashedPassword,
+      ...(input.googleSub ? { googleSub: input.googleSub } : {}),
+      emailVerifiedAt: input.emailVerifiedAt,
+      slotGranularityMinutes: 15,
+      workingHours: {
+        create: [
+          { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
+          { dayOfWeek: 1, openTime: '09:00', closeTime: '20:00', isOpen: true },
+          { dayOfWeek: 2, openTime: '09:00', closeTime: '20:00', isOpen: true },
+          { dayOfWeek: 3, openTime: '09:00', closeTime: '20:00', isOpen: true },
+          { dayOfWeek: 4, openTime: '09:00', closeTime: '20:00', isOpen: true },
+          { dayOfWeek: 5, openTime: '09:00', closeTime: '20:00', isOpen: true },
+          { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
+        ],
+      },
+      formFields: {
+        create: [
+          { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
+          { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
+          { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
+          { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Any special requests?' },
+        ],
+      },
+    },
+  });
+}
+
+/** Map a service error (may carry .status) to an HTTP response. */
+function mapAuthError(error: any, res: Response) {
+  const status = typeof error?.status === 'number' ? error.status : 400;
+  res.status(status).json({ error: error?.message || 'Request failed' });
+}
+
+/**
+ * POST /auth/signup/request-otp { email } — starts verified signup
+ * (email → OTP). 409 if the email is already registered.
+ */
+publicRouter.post('/auth/signup/request-otp', async (req: Request, res: Response) => {
+  try {
+    const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
+    const existing = await prisma.business.findFirst({
+      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+    }
+    await ownerAuthOtpService.requestOtp(email, 'SIGNUP', req.ip || null);
+    res.json({ ok: true });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid email is required' });
+    mapAuthError(error, res);
+  }
+});
+
+/**
+ * POST /auth/signup/verify-otp { email, code } → { signupToken }
+ */
+publicRouter.post('/auth/signup/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const { email, code } = z.object({ email: z.string().trim().email(), code: z.string().trim().min(1).max(10) }).parse(req.body);
+    await ownerAuthOtpService.verifyOtp(email, 'SIGNUP', code);
+    const signupToken = ownerAuthOtpService.issueToken('SIGNUP', email);
+    res.json({ ok: true, signupToken });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid email and code are required' });
+    mapAuthError(error, res);
+  }
+});
+
+/**
+
  * Create a new business workspace. Generates a unique slug and an opaque
  * public code. The owner receives a JWT immediately.
  */
 publicRouter.post('/signup', async (req: Request, res: Response) => {
   try {
     const parsed = signupSchema.parse(req.body);
+    const email = ownerAuthOtpService.verifyToken(parsed.signupToken, 'owner_signup');
 
     const existing = await prisma.business.findFirst({
-      where: { ownerEmail: parsed.ownerEmail },
+      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
     });
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
@@ -181,68 +310,16 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid timezone' });
     }
 
-    // Unique slug
-    let base = parsed.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-    if (!base) base = 'business';
-    let slug = base;
-    let suffix = 2;
-    while (await prisma.business.findUnique({ where: { slug } })) {
-      slug = `${base}-${suffix++}`;
-    }
-
-    // Opaque public code (96+ bits entropy, URL-safe)
-    let publicCode = '';
-    for (let i = 0; i < 10; i++) {
-      const candidate = require('crypto').randomBytes(16).toString('base64url');
-      if (!(await prisma.business.findUnique({ where: { publicCode: candidate } }))) {
-        publicCode = candidate;
-        break;
-      }
-    }
-    if (!publicCode) return res.status(500).json({ error: 'Could not generate a unique public code' });
-
-    const hashedPassword = await hashOwnerPassword(parsed.ownerPassword);
-
-    const business = await prisma.business.create({
-      data: {
-        name: parsed.name.trim(),
-        slug,
-        publicCode,
-        timezone: tz,
-        ownerEmail: parsed.ownerEmail,
-        ownerWhatsapp: parsed.ownerWhatsapp || null,
-        ownerPassword: hashedPassword,
-        slotGranularityMinutes: 15,
-        workingHours: {
-          create: [
-            { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
-            { dayOfWeek: 1, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 2, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 3, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 4, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 5, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
-          ],
-        },
-        formFields: {
-          create: [
-            { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-            { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
-            { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
-            { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Any special requests?' },
-          ],
-        },
-      },
+    const business = await createOwnerWorkspace({
+      name: parsed.name,
+      email,
+      timezone: tz,
+      password: parsed.ownerPassword,
+      emailVerifiedAt: new Date(),
     });
 
-    const token = jwt.sign(
-      { businessId: business.id, email: business.ownerEmail },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
-    );
-
     res.status(201).json({
-      token,
+      token: issueOwnerJwt(business),
       business: {
         id: business.id,
         name: business.name,
@@ -255,7 +332,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
     }
-    res.status(400).json({ error: error.message });
+    mapAuthError(error, res);
   }
 });
 
@@ -406,6 +483,202 @@ publicRouter.get('/:identifier/availability', async (req: Request, res: Response
     res.status(error.status || 400).json({ error: error.message });
   }
 });
+
+/**
+ * POST /auth/forgot/request-otp { email } — generic response either way
+ * (no account enumeration). OTP is only sent when an account exists.
+ */
+publicRouter.post('/auth/forgot/request-otp', async (req: Request, res: Response) => {
+  try {
+    const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
+    const existing = await prisma.business.findFirst({
+      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existing) {
+      try {
+        await ownerAuthOtpService.requestOtp(email, 'PASSWORD_RESET', req.ip || null);
+      } catch (e: any) {
+        if (e?.status === 429) return res.status(429).json({ error: e.message });
+      }
+    }
+    res.json({ ok: true });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid email is required' });
+    mapAuthError(error, res);
+  }
+});
+
+/**
+ * POST /auth/forgot/verify-otp { email, code } → { resetToken }
+ */
+publicRouter.post('/auth/forgot/verify-otp', async (req: Request, res: Response) => {
+  try {
+    const { email, code } = z.object({ email: z.string().trim().email(), code: z.string().trim().min(1).max(10) }).parse(req.body);
+    await ownerAuthOtpService.verifyOtp(email, 'PASSWORD_RESET', code);
+    const resetToken = ownerAuthOtpService.issueToken('PASSWORD_RESET', email);
+    res.json({ ok: true, resetToken });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid email and code are required' });
+    mapAuthError(error, res);
+  }
+});
+
+/**
+ * POST /auth/forgot/reset { resetToken, newPassword } — set a new password
+ * (works for Google-linked accounts too).
+ */
+publicRouter.post('/auth/forgot/reset', async (req: Request, res: Response) => {
+  try {
+    const { resetToken, newPassword } = z.object({
+      resetToken: z.string().min(1),
+      newPassword: z.string().min(8).max(72),
+    }).parse(req.body);
+    const email = ownerAuthOtpService.verifyToken(resetToken, 'owner_password_reset');
+    const business = await prisma.business.findFirst({
+      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (!business) {
+      return res.status(400).json({ error: 'Account not found' });
+    }
+    await prisma.business.update({
+      where: { id: business.id },
+      data: { ownerPassword: await hashOwnerPassword(newPassword) },
+    });
+    res.json({ ok: true });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid token and new password are required' });
+    mapAuthError(error, res);
+  }
+});
+
+
+/**
+ * POST /auth/google { credential } — verify the GIS ID token server-side.
+ * Existing same-email account → auto-link + owner JWT.
+ * New email → { needsSignupCompletion: true, googleSignupToken }.
+ */
+publicRouter.post('/auth/google', async (req: Request, res: Response) => {
+  try {
+    const { credential } = z.object({ credential: z.string().min(1) }).parse(req.body);
+    const user = await googleTokenVerifier.verifyCredential(credential);
+
+    const existing = await prisma.business.findFirst({
+      where: { ownerEmail: { equals: user.email, mode: 'insensitive' } },
+    });
+    if (existing) {
+      // Auto-link: record the Google subject if it isn't linked already.
+      if (!existing.googleSub) {
+        await prisma.business.update({
+          where: { id: existing.id },
+          data: { googleSub: user.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() },
+        });
+      } else if (existing.googleSub !== user.sub) {
+        return res.status(409).json({
+          error: 'This email is already linked to a different Google account. Sign in with email and password, or use Forgot password.',
+        });
+      }
+      return res.json({
+        needsSignupCompletion: false,
+        token: issueOwnerJwt(existing),
+        business: {
+          id: existing.id,
+          name: existing.name,
+          slug: existing.slug,
+          email: existing.ownerEmail,
+        },
+      });
+    }
+
+    const googleSignupToken = jwt.sign(
+      { typ: 'owner_google_signup', email: user.email, sub: user.sub },
+      process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: 30 * 60 } as any
+    );
+    res.json({
+      needsSignupCompletion: true,
+      googleSignupToken,
+      email: user.email,
+      name: user.name || '',
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'Missing Google credential' });
+    const status = /not configured/i.test(error?.message || '') ? 503 : 400;
+    res.status(status).json({ error: error?.message || 'Google sign-in failed' });
+  }
+});
+
+/**
+ * POST /auth/google/complete { googleSignupToken, name, timezone } — finish a
+ * new Google signup (no password required; ownerPassword stays null until the
+ * owner sets one in Settings).
+ */
+publicRouter.post('/auth/google/complete', async (req: Request, res: Response) => {
+  try {
+    const parsed = z.object({
+      googleSignupToken: z.string().min(1),
+      name: z.string().trim().min(2).max(120),
+      timezone: z.string().optional(),
+    }).parse(req.body);
+
+    const decoded = jwt.verify(parsed.googleSignupToken, process.env.JWT_SECRET || 'fallback-secret') as any;
+    if (decoded?.typ !== 'owner_google_signup' || !decoded?.email || !decoded?.sub) {
+      return res.status(400).json({ error: 'Invalid or expired Google signup token' });
+    }
+    const email: string = String(decoded.email).trim().toLowerCase();
+
+    const tz = parsed.timezone || 'Asia/Kolkata';
+    if (!timeService.isValidTimezone(tz)) {
+      return res.status(400).json({ error: 'Invalid timezone' });
+    }
+
+    const existing = await prisma.business.findFirst({
+      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+    });
+    if (existing) {
+      // Race: the workspace appeared after the Google step — auto-link instead.
+      if (!existing.googleSub) {
+        await prisma.business.update({
+          where: { id: existing.id },
+          data: { googleSub: decoded.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() },
+        });
+      }
+      return res.json({
+        token: issueOwnerJwt(existing),
+        business: { id: existing.id, name: existing.name, slug: existing.slug, email: existing.ownerEmail },
+      });
+    }
+
+    const business = await createOwnerWorkspace({
+      name: parsed.name,
+      email,
+      timezone: tz,
+      googleSub: decoded.sub,
+      emailVerifiedAt: new Date(),
+    });
+
+    res.status(201).json({
+      token: issueOwnerJwt(business),
+      business: {
+        id: business.id,
+        name: business.name,
+        slug: business.slug,
+        publicCode: business.publicCode,
+        email: business.ownerEmail,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(400).json({ error: 'Invalid or expired Google signup token' });
+    }
+    mapAuthError(error, res);
+  }
+});
+
 
 // ---------- Bookings ----------
 

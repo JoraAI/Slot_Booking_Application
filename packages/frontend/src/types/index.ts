@@ -46,6 +46,8 @@ export interface BusinessConfig {
   metaWhatsappTemplateMarketing: string | null
   metaWhatsappAccessTokenConfigured?: boolean
   metaWhatsappConfigured?: boolean
+  passwordSet?: boolean
+  googleLinked?: boolean
   subscriptionPlan: 'COMMISSION' | 'MONTHLY_799'
   subscriptionCommissionPercent: number | null
   subscriptionMonthlyInr: number

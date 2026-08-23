@@ -21,6 +21,7 @@ import { toOwnerConfig } from '../services/ownerDto';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
   platformWhatsappConfigured,
+  platformWhatsappDisplayPhone,
   smtpConfigured,
   tenantWhatsappOptedIn,
 } from '../services/notificationCredentials';
@@ -97,6 +98,13 @@ ownerRouter.post('/login', async (req, res: Response) => {
 
     if (!business) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!business.ownerPassword) {
+      return res.status(401).json({
+        error: 'No password is set for this account. Sign in with Google, or use “Forgot password” to set one.',
+        code: 'NO_PASSWORD',
+      });
     }
 
     const isValid = await verifyOwnerPassword(business.ownerPassword, password);
@@ -219,10 +227,47 @@ ownerRouter.put('/password', async (req: AuthRequest, res: Response) => {
     });
     if (!business) return res.status(404).json({ error: 'Business not found' });
 
+    if (!business.ownerPassword) {
+      return res.status(400).json({ error: 'No password is set yet. Use “Set password” to add one.' });
+    }
+
     const matches = await verifyOwnerPassword(business.ownerPassword, input.currentPassword);
     if (!matches) return res.status(401).json({ error: 'Current password is incorrect' });
     if (input.currentPassword === input.newPassword) {
       return res.status(400).json({ error: 'Choose a different new password' });
+    }
+
+    await prisma.business.update({
+      where: { id: business.id },
+      data: { ownerPassword: await hashOwnerPassword(input.newPassword) },
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.issues[0]?.message || 'Invalid password' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/password/set — set a password for a Google-only account that has
+ * none yet (no current password required). Owners who already have a password
+ * must keep using PUT /owner/password (current password required).
+ */
+ownerRouter.post('/password/set', async (req: AuthRequest, res: Response) => {
+  try {
+    const input = z.object({
+      newPassword: z.string().min(8, 'New password must be at least 8 characters').max(72),
+    }).parse(req.body);
+
+    const business = await prisma.business.findUnique({
+      where: { id: req.owner!.businessId },
+      select: { id: true, ownerPassword: true },
+    });
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+    if (business.ownerPassword) {
+      return res.status(400).json({ error: 'A password is already set. Use “Change password” instead.' });
     }
 
     await prisma.business.update({
@@ -1649,18 +1694,21 @@ ownerRouter.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
       whatsappPricingService.list(),
     ]);
     const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
+    const marketingPrice = pricing.find((p) => p.category === 'MARKETING')?.pricePaise ?? null;
     const wallet = await walletService.getView(businessId, utilityPrice);
     const platformReady = platformWhatsappConfigured();
     const optedIn = tenantWhatsappOptedIn(config);
     res.json({
       connectionMode: 'SHARED',
       status: optedIn ? 'CONNECTED' : 'DISCONNECTED',
-      displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || config?.displayPhone || null,
+      displayPhone: platformWhatsappDisplayPhone() || config?.displayPhone || null,
       configured: platformReady,
       platformReady,
       optedIn,
       wallet,
       pricing,
+      utilityPricePaise: utilityPrice,
+      marketingPricePaise: marketingPrice,
     });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -1676,9 +1724,10 @@ ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) =>
     const businessId = req.owner!.businessId;
     if (!platformWhatsappConfigured()) {
       return res.status(503).json({
-        error: 'Reservly WhatsApp is not configured yet. Contact support — salons do not add their own Meta API credentials.',
+        error: 'Reservly WhatsApp is not configured yet. Contact support — salons do not add their own WhatsApp API credentials.',
       });
     }
+    const displayPhone = platformWhatsappDisplayPhone();
     await walletService.getOrCreate(businessId);
     await prisma.whatsAppConfig.upsert({
       where: { businessId },
@@ -1686,7 +1735,7 @@ ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) =>
         businessId,
         phoneNumberId: null,
         accessTokenEnc: null,
-        displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || null,
+        displayPhone,
         connectionMode: 'SHARED',
         status: 'CONNECTED',
         enabled: true,
@@ -1694,7 +1743,7 @@ ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) =>
       update: {
         phoneNumberId: null,
         accessTokenEnc: null,
-        displayPhone: process.env.META_WHATSAPP_DISPLAY_PHONE || null,
+        displayPhone,
         connectionMode: 'SHARED',
         status: 'CONNECTED',
         enabled: true,
@@ -1736,8 +1785,9 @@ ownerRouter.get('/whatsapp-wallet', async (req: AuthRequest, res: Response) => {
     const businessId = req.owner!.businessId;
     const pricing = await whatsappPricingService.list();
     const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
+    const marketingPrice = pricing.find((p) => p.category === 'MARKETING')?.pricePaise ?? null;
     const wallet = await walletService.getView(businessId, utilityPrice);
-    res.json({ ...wallet, pricing });
+    res.json({ ...wallet, pricing, utilityPricePaise: utilityPrice, marketingPricePaise: marketingPrice });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

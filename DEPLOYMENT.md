@@ -267,6 +267,9 @@ See `packages/backend/.env.example`.
 | `META_APP_ID` / `META_APP_SECRET` | Reserved for future Embedded Signup / webhooks (not required today) |
 | `META_WEBHOOK_VERIFY_TOKEN` | Reserved for future Meta webhook (not required today) |
 | `META_API_VERSION` | Meta Graph API version, default `v20.0` (not required today) |
+| `GOOGLE_CLIENT_ID` | Owner Google Sign-In (ID-token verify). Optional; button hidden when unset. Must match `VITE_GOOGLE_CLIENT_ID` (frontend) for the same OAuth client |
+| `GOOGLE_CLIENT_SECRET` | Optional, only for a future server-side redirect flow — not required for GIS |
+| `SMTP_USER` / `SMTP_PASS` | Also required for **owner auth OTP emails** (signup + forgot password) — these use platform SMTP from env only, never salon SMTP |
 
 ### WhatsApp wallet notes
 

@@ -3,10 +3,12 @@ import prisma from '../lib/prisma';
 import { locationInfo } from './LocationService';
 import {
   metaWhatsappConfigured,
-  resolveMetaWhatsapp,
   resolveSmtp,
   resolveWhatsappCredentials,
   smtpConfigured,
+  type MetaWhatsappConfig,
+  type TwilioWhatsappConfig,
+  type WhatsappPlatformConfig,
 } from './notificationCredentials';
 import { walletService } from './WalletService';
 import { whatsappPricingService } from './WhatsAppPricingService';
@@ -106,11 +108,25 @@ class NotificationService {
     }
   }
 
-  private normalizeMetaDestination(value: string): string {
+  private normalizeWhatsappDestination(value: string): string {
     return String(value || '').replace(/\D/g, '');
   }
 
-  private async sendMetaWhatsappText(meta: { phoneNumberId: string; accessToken: string }, toDigits: string, message: string): Promise<Response> {
+  private outsideSessionError(bodyText: string): boolean {
+    return /customer service window|outside.*24|template|63016|63049/i.test(bodyText);
+  }
+
+  private metaTemplateName(meta: MetaWhatsappConfig, category: string): string | null {
+    if (category === 'MARKETING') return meta.marketingTemplate || meta.utilityTemplate || null;
+    return meta.utilityTemplate || null;
+  }
+
+  private twilioContentSid(twilio: TwilioWhatsappConfig, category: string): string | null {
+    if (category === 'MARKETING') return twilio.marketingContentSid || twilio.utilityContentSid || null;
+    return twilio.utilityContentSid || null;
+  }
+
+  private async sendMetaWhatsappText(meta: MetaWhatsappConfig, toDigits: string, message: string): Promise<Response> {
     const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
     return fetch(url, {
       method: 'POST',
@@ -128,7 +144,12 @@ class NotificationService {
     });
   }
 
-  private async sendMetaWhatsappTemplate(meta: { phoneNumberId: string; accessToken: string; utilityTemplate: string }, toDigits: string, message: string): Promise<Response> {
+  private async sendMetaWhatsappTemplate(
+    meta: MetaWhatsappConfig,
+    toDigits: string,
+    templateName: string,
+    message: string
+  ): Promise<Response> {
     const url = `https://graph.facebook.com/v20.0/${meta.phoneNumberId}/messages`;
     return fetch(url, {
       method: 'POST',
@@ -142,7 +163,7 @@ class NotificationService {
         to: toDigits,
         type: 'template',
         template: {
-          name: meta.utilityTemplate,
+          name: templateName,
           language: { code: 'en' },
           components: [
             {
@@ -156,7 +177,7 @@ class NotificationService {
   }
 
   private async sendMetaWhatsappImage(
-    meta: { phoneNumberId: string; accessToken: string },
+    meta: MetaWhatsappConfig,
     toDigits: string,
     imageUrl: string,
     caption: string
@@ -182,7 +203,7 @@ class NotificationService {
   }
 
   private async sendMetaWhatsappCta(
-    meta: { phoneNumberId: string; accessToken: string },
+    meta: MetaWhatsappConfig,
     toDigits: string,
     body: string,
     displayText: string,
@@ -213,6 +234,168 @@ class NotificationService {
         },
       }),
     });
+  }
+
+  private twilioAuthHeader(twilio: TwilioWhatsappConfig): string {
+    return `Basic ${Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64')}`;
+  }
+
+  private async sendTwilioWhatsappForm(
+    twilio: TwilioWhatsappConfig,
+    fields: Record<string, string>
+  ): Promise<Response> {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(twilio.accountSid)}/Messages.json`;
+    const body = new URLSearchParams(fields);
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: this.twilioAuthHeader(twilio),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+  }
+
+  private async sendTwilioWhatsappText(
+    twilio: TwilioWhatsappConfig,
+    toDigits: string,
+    message: string
+  ): Promise<Response> {
+    return this.sendTwilioWhatsappForm(twilio, {
+      From: twilio.from,
+      To: `whatsapp:+${toDigits}`,
+      Body: message.slice(0, 1600),
+    });
+  }
+
+  private async sendTwilioWhatsappImage(
+    twilio: TwilioWhatsappConfig,
+    toDigits: string,
+    imageUrl: string,
+    caption: string
+  ): Promise<Response> {
+    return this.sendTwilioWhatsappForm(twilio, {
+      From: twilio.from,
+      To: `whatsapp:+${toDigits}`,
+      MediaUrl: imageUrl,
+      ...(caption ? { Body: caption.slice(0, 1600) } : {}),
+    });
+  }
+
+  private async sendTwilioWhatsappTemplate(
+    twilio: TwilioWhatsappConfig,
+    toDigits: string,
+    contentSid: string,
+    message: string
+  ): Promise<Response> {
+    return this.sendTwilioWhatsappForm(twilio, {
+      From: twilio.from,
+      To: `whatsapp:+${toDigits}`,
+      ContentSid: contentSid,
+      ContentVariables: JSON.stringify({ '1': message.slice(0, 1024) }),
+    });
+  }
+
+  private async dispatchWhatsapp(
+    platform: WhatsappPlatformConfig,
+    toDigits: string,
+    message: string,
+    category: string,
+    opts: { imageUrl?: string | null; cta?: { displayText: string; url: string } | null }
+  ): Promise<{ response: Response; bodyText: string }> {
+    const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
+    const ctaUrl = opts.cta?.url && /^https:\/\//i.test(opts.cta.url) ? opts.cta.url : null;
+    const ctaText = opts.cta?.displayText || 'View or cancel';
+
+    if (platform.provider === 'twilio') {
+      return this.dispatchTwilioWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
+    }
+    return this.dispatchMetaWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
+  }
+
+  private async dispatchMetaWhatsapp(
+    meta: MetaWhatsappConfig,
+    toDigits: string,
+    message: string,
+    category: string,
+    imageUrl: string | null,
+    ctaUrl: string | null,
+    ctaText: string
+  ): Promise<{ response: Response; bodyText: string }> {
+    const templateName = this.metaTemplateName(meta, category);
+    let response: Response;
+    let bodyText = '';
+
+    const tryTemplate = async (text: string) => {
+      if (!templateName) return;
+      response = await this.sendMetaWhatsappTemplate(meta, toDigits, templateName, text);
+      bodyText = response.ok ? '' : await response.text();
+    };
+
+    if (imageUrl) {
+      response = await this.sendMetaWhatsappImage(meta, toDigits, imageUrl, message);
+      bodyText = response.ok ? '' : await response.text();
+      if (!response.ok && this.outsideSessionError(bodyText)) {
+        const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
+        response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
+        bodyText = response.ok ? '' : await response.text();
+        if (!response.ok && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      }
+    } else if (ctaUrl) {
+      response = await this.sendMetaWhatsappCta(meta, toDigits, message, ctaText, ctaUrl);
+      bodyText = response.ok ? '' : await response.text();
+      if (!response.ok) {
+        const withLink = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
+        response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
+        bodyText = response.ok ? '' : await response.text();
+        if (!response.ok && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      }
+    } else {
+      response = await this.sendMetaWhatsappText(meta, toDigits, message);
+      bodyText = response.ok ? '' : await response.text();
+      if (!response.ok && this.outsideSessionError(bodyText)) await tryTemplate(message);
+    }
+
+    return { response: response!, bodyText };
+  }
+
+  private async dispatchTwilioWhatsapp(
+    twilio: TwilioWhatsappConfig,
+    toDigits: string,
+    message: string,
+    category: string,
+    imageUrl: string | null,
+    ctaUrl: string | null,
+    ctaText: string
+  ): Promise<{ response: Response; bodyText: string }> {
+    const contentSid = this.twilioContentSid(twilio, category);
+    let response: Response;
+    let bodyText = '';
+
+    const tryTemplate = async (text: string) => {
+      if (!contentSid) return;
+      response = await this.sendTwilioWhatsappTemplate(twilio, toDigits, contentSid, text);
+      bodyText = response.ok ? '' : await response.text();
+    };
+
+    const textBody = ctaUrl ? `${message}\n\n${ctaText}: ${ctaUrl}`.trim() : message;
+
+    if (imageUrl) {
+      response = await this.sendTwilioWhatsappImage(twilio, toDigits, imageUrl, textBody);
+      bodyText = response.ok ? '' : await response.text();
+      if (!response.ok && this.outsideSessionError(bodyText)) {
+        const withLink = `${textBody}\n\nImage: ${imageUrl}`.trim();
+        response = await this.sendTwilioWhatsappText(twilio, toDigits, withLink);
+        bodyText = response.ok ? '' : await response.text();
+        if (!response.ok && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      }
+    } else {
+      response = await this.sendTwilioWhatsappText(twilio, toDigits, textBody);
+      bodyText = response.ok ? '' : await response.text();
+      if (!response.ok && this.outsideSessionError(bodyText)) await tryTemplate(textBody);
+    }
+
+    return { response: response!, bodyText };
   }
 
   private absolutePublicUrl(url: string): string | null {
@@ -261,8 +444,11 @@ class NotificationService {
   private parseProviderMessageId(bodyText: string): string | null {
     try {
       const parsed = JSON.parse(bodyText);
-      const id = parsed?.messages?.[0]?.id;
-      return typeof id === 'string' && id ? id : null;
+      const metaId = parsed?.messages?.[0]?.id;
+      if (typeof metaId === 'string' && metaId) return metaId;
+      const twilioSid = parsed?.sid;
+      if (typeof twilioSid === 'string' && twilioSid) return twilioSid;
+      return null;
     } catch {
       return null;
     }
@@ -279,7 +465,7 @@ class NotificationService {
     const business = opts.business;
     const businessId = business?.id as string | undefined;
     const category = opts.category || 'UTILITY';
-    const toDigits = this.normalizeMetaDestination(to);
+    const toDigits = this.normalizeWhatsappDestination(to);
     if (!toDigits) {
       if (opts.throwOnError) throw new Error('WhatsApp destination number is invalid');
       return;
@@ -293,10 +479,10 @@ class NotificationService {
       prisma.whatsAppConfig.findUnique({ where: { businessId } }),
       whatsappPricingService.getPricePaise(category),
     ]);
-    const meta = resolveWhatsappCredentials(business, tenantConfig);
-    if (!meta) {
+    const platform = resolveWhatsappCredentials(business, tenantConfig);
+    if (!platform) {
       await this.logWhatsAppMessage(businessId, opts, toDigits, category, 0, 'SKIPPED_NOT_CONFIGURED',
-        'WhatsApp not available (platform Meta missing or salon has not enabled WhatsApp)');
+        'WhatsApp not available (platform WhatsApp missing or salon has not enabled WhatsApp)');
       const err = new Error('WhatsApp: enable WhatsApp in Settings, or contact support if Reservly platform WhatsApp is offline.');
       console.log(err.message);
       if (opts.throwOnError) throw err;
@@ -311,7 +497,7 @@ class NotificationService {
       return;
     }
 
-    // Wallet gate — hard stop on insufficient credits: no Meta call, no debit.
+    // Wallet gate — hard stop on insufficient credits: no provider call, no debit.
     const reserve = await walletService.reserve(businessId, costPaise, {
       description: `WhatsApp ${category} message to +${toDigits}`,
       referenceType: opts.bookingId ? 'booking' : opts.customerId ? 'customer' : undefined,
@@ -328,58 +514,8 @@ class NotificationService {
     }
 
     try {
-      const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
-      const ctaUrl = opts.cta?.url && /^https:\/\//i.test(opts.cta.url) ? opts.cta.url : null;
-      const ctaText = opts.cta?.displayText || 'View or cancel';
-      let response: Response;
-      let bodyText = '';
-
-      if (imageUrl) {
-        response = await this.sendMetaWhatsappImage(meta, toDigits, imageUrl, message);
-        bodyText = response.ok ? '' : await response.text();
-        if (!response.ok && /customer service window|outside.*24|template/i.test(bodyText)) {
-          const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
-          response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
-          bodyText = response.ok ? '' : await response.text();
-          if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
-            response = await this.sendMetaWhatsappTemplate(
-              { ...meta, utilityTemplate: meta.utilityTemplate },
-              toDigits,
-              withLink
-            );
-            bodyText = response.ok ? '' : await response.text();
-          }
-        }
-      } else if (ctaUrl) {
-        // Prefer a WhatsApp CTA button for manage/cancel. Outside the 24h window
-        // Meta rejects interactive messages — fall back to text/template with the URL.
-        response = await this.sendMetaWhatsappCta(meta, toDigits, message, ctaText, ctaUrl);
-        bodyText = response.ok ? '' : await response.text();
-        if (!response.ok) {
-          const withLink = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
-          response = await this.sendMetaWhatsappText(meta, toDigits, withLink);
-          bodyText = response.ok ? '' : await response.text();
-          if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
-            response = await this.sendMetaWhatsappTemplate(
-              { ...meta, utilityTemplate: meta.utilityTemplate },
-              toDigits,
-              withLink
-            );
-            bodyText = response.ok ? '' : await response.text();
-          }
-        }
-      } else {
-        response = await this.sendMetaWhatsappText(meta, toDigits, message);
-        bodyText = response.ok ? '' : await response.text();
-        if (!response.ok && meta.utilityTemplate && /customer service window|outside.*24|template/i.test(bodyText)) {
-          response = await this.sendMetaWhatsappTemplate(
-            { ...meta, utilityTemplate: meta.utilityTemplate },
-            toDigits,
-            message
-          );
-          bodyText = response.ok ? '' : await response.text();
-        }
-      }
+      const { response, bodyText: initialBody } = await this.dispatchWhatsapp(platform, toDigits, message, category, opts);
+      let bodyText = initialBody;
 
       if (!response.ok) {
         const err = new Error(`WhatsApp sending failed: ${bodyText}`);
@@ -408,11 +544,16 @@ class NotificationService {
     }
   }
 
-  /** Send a booking-management OTP by email. Throws on delivery failure. */
+  /** Send an OTP by email. Throws on delivery failure. When `business` is omitted, uses platform SMTP (owner auth). */
   async sendOtpEmail(to: string, code: string, businessName: string, business?: any): Promise<void> {
+    const forOwnerAuth = business == null;
+    const heading = forOwnerAuth ? 'Verify your email' : 'Verify your booking';
+    const intro = forOwnerAuth
+      ? `Your one-time verification code for <strong>${this.esc(businessName)}</strong> is:`
+      : `Your one-time verification code for <strong>${this.esc(businessName)}</strong> is:`;
     await this.sendEmail(to, `Your verification code - ${businessName}`,
-      `<h2>Verify your booking</h2>
-      <p>Your one-time verification code for <strong>${businessName}</strong> is:</p>
+      `<h2>${heading}</h2>
+      <p>${intro}</p>
       <p style="font-size:24px; font-weight:700; letter-spacing:4px;">${code}</p>
       <p style="color:#6B7280; font-size:13px;">This code expires in 10 minutes. Never share it.</p>`,
       { throwOnError: true, business }
@@ -784,7 +925,7 @@ class NotificationService {
 
   /**
    * Owner-authored message to one phonebook contact. Delivery uses the owner's
-   * SMTP / Meta WhatsApp credentials stored on the business.
+   * SMTP credentials and Reservly's shared WhatsApp (wallet billed as MARKETING).
    */
   async sendCustomCustomerNotification(
     businessId: string,
@@ -833,7 +974,14 @@ class NotificationService {
           await this.sendWhatsApp(
             customer.phone,
             `${business.name}\n\n${plainMessage}${ownerContact}`,
-            { throwOnError: true, throwOnInsufficient: true, business, imageUrl: publicImageUrl, customerId: customer.id }
+            {
+              throwOnError: true,
+              throwOnInsufficient: true,
+              business,
+              imageUrl: publicImageUrl,
+              customerId: customer.id,
+              category: 'MARKETING',
+            }
           );
         }
         ok = true;
@@ -927,7 +1075,7 @@ class NotificationService {
         if (wanted.includes('whatsapp')) {
           if (canWhatsapp) {
             if (whatsappReady) channels.push('whatsapp');
-            else reasons.push('WhatsApp not sent — Meta Cloud API is not configured');
+            else reasons.push('WhatsApp not sent — platform WhatsApp is not configured');
           } else if (customer.phone) {
             reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
           } else {

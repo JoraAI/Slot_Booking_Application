@@ -38,6 +38,8 @@ export const Settings: React.FC = () => {
   const [geoError, setGeoError] = useState('')
   const [geoLoading, setGeoLoading] = useState(false)
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [newPasswordForm, setNewPasswordForm] = useState({ newPassword: '', confirmPassword: '' })
+  const [savingSetPassword, setSavingSetPassword] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [form, setForm] = useState({
     name: config?.name || '',
@@ -236,6 +238,29 @@ export const Settings: React.FC = () => {
     }
   }
 
+  // Google-only accounts (ownerPassword null) set a password without a current one.
+  const handleSetPassword = async () => {
+    if (newPasswordForm.newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters')
+      return
+    }
+    if (newPasswordForm.newPassword !== newPasswordForm.confirmPassword) {
+      toast.error('New password and confirmation do not match')
+      return
+    }
+    setSavingSetPassword(true)
+    try {
+      await api.setOwnerPassword(newPasswordForm.newPassword)
+      setNewPasswordForm({ newPassword: '', confirmPassword: '' })
+      if (config) setConfig({ ...(config as any), passwordSet: true } as any)
+      toast.success('Password set — you can now sign in with email + password too')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not set password')
+    } finally {
+      setSavingSetPassword(false)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
@@ -252,7 +277,7 @@ export const Settings: React.FC = () => {
           <p className="text-sm text-gray-500">
             Owner alerts are delivered here. Customer emails are sent from your SMTP
             username below, with this address as Reply-To. WhatsApp messages are sent
-            from your Meta WhatsApp number and include this number as the customer contact.
+            from Reservly’s shared number and include this number as the customer contact.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -276,33 +301,59 @@ export const Settings: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold">Dashboard password</h2>
           <p className="text-sm text-gray-500">
-            Change the password used to sign in. It is stored as a one-way hash in the database and is never shown again.
+            {config?.passwordSet === false
+              ? 'You signed in with Google and do not have a password yet. Set one to also sign in with email + password.'
+              : 'Change the password used to sign in. It is stored as a one-way hash in the database and is never shown again.'}
           </p>
         </div>
-        <div className="grid sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Current password</label>
-            <input type="password" value={passwordForm.currentPassword} autoComplete="current-password"
-              onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        {config?.passwordSet === false ? (
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">New password</label>
+              <input type="password" value={newPasswordForm.newPassword} autoComplete="new-password"
+                onChange={(e) => setNewPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirm new password</label>
+              <input type="password" value={newPasswordForm.confirmPassword} autoComplete="new-password"
+                onChange={(e) => setNewPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">New password</label>
-            <input type="password" value={passwordForm.newPassword} autoComplete="new-password"
-              onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+        ) : (
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Current password</label>
+              <input type="password" value={passwordForm.currentPassword} autoComplete="current-password"
+                onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">New password</label>
+              <input type="password" value={passwordForm.newPassword} autoComplete="new-password"
+                onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirm new password</label>
+              <input type="password" value={passwordForm.confirmPassword} autoComplete="new-password"
+                onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Confirm new password</label>
-            <input type="password" value={passwordForm.confirmPassword} autoComplete="new-password"
-              onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-        </div>
-        <button onClick={handleUpdatePassword} disabled={savingPassword}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {savingPassword ? 'Updating…' : 'Update password'}
-        </button>
+        )}
+        {config?.passwordSet === false ? (
+          <button onClick={handleSetPassword} disabled={savingSetPassword}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+            {savingSetPassword ? 'Setting…' : 'Set password'}
+          </button>
+        ) : (
+          <button onClick={handleUpdatePassword} disabled={savingPassword}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+            {savingPassword ? 'Updating…' : 'Update password'}
+          </button>
+        )}
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
@@ -311,7 +362,7 @@ export const Settings: React.FC = () => {
             <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
             <p className="text-sm text-gray-500">
               Email sends from <strong>your</strong> SMTP mailbox. WhatsApp sends from <strong>Reservly’s</strong> shared
-              Cloud API number — you only enable it and top up prepaid credits. SMTP passwords are encrypted and never shown again.
+              number — you only enable it and top up prepaid credits. SMTP passwords are encrypted and never shown again.
             </p>
           </div>
           <Link to="/dashboard/setup-guide#notifications" className="text-sm text-primary hover:underline shrink-0">
@@ -333,8 +384,9 @@ export const Settings: React.FC = () => {
                   : 'Loading…'}
               </p>
               <p className="text-gray-600 dark:text-gray-400 mt-0.5">
-                Messages go out from Reservly’s WhatsApp number. You do not need a Meta Developer app or API tokens.
+                Messages go out from Reservly’s WhatsApp number. You do not need your own WhatsApp Business API setup.
                 Add wallet credits, enable WhatsApp, then turn on “WhatsApp customers” below.
+                Custom / promo WhatsApps cost more per message than booking alerts — see Notifications for rates.
               </p>
               {waStatus?.wallet && (
                 <p className="text-gray-500 mt-1">

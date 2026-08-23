@@ -95,7 +95,9 @@ model Business {
   notifyCustomerWhatsapp  Boolean   @default(false)
   ownerEmail              String
   ownerWhatsapp           String?
-  ownerPassword           String
+  ownerPassword           String?
+  googleSub               String?   @unique // Google subject id (auto-linked / Google-only signup)
+  emailVerifiedAt         DateTime? // set on OTP-verified signup or Google email verify (null = legacy trusted)
 
   // Per-owner delivery credentials (secrets encrypted at rest)
   smtpHost                String?
@@ -570,6 +572,24 @@ model BookingManagementSession {
   @@index([expiresAt])
 }
 
+// Owner auth email OTP (signup + forgot-password only). Deliberately NOT tied
+// to a business row — email verification happens before a workspace exists.
+// Code is stored SHA-256 hashed, never plaintext (mirrors BookingManagementOtp).
+model OwnerAuthOtp {
+  id          String    @id @default(cuid())
+  email       String
+  purpose     String // 'SIGNUP' | 'PASSWORD_RESET'
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  consumedAt  DateTime?
+  requesterIp String?
+  createdAt   DateTime  @default(now())
+
+  @@index([email, purpose, createdAt])
+}
+
 // ---- WhatsApp multi-tenant prepaid wallet (Batch 5 / wallet migration) ----
 
 model WhatsAppConfig {
@@ -629,6 +649,8 @@ model WhatsAppPricing {
   id            String    @id @default(cuid())
   country       String    @default("IN")
   currency      String    @default("INR")
+  /// Active platform transport this row applies to: 'meta' | 'twilio'
+  provider      String    @default("meta")
   category      String // 'UTILITY' | 'MARKETING' | 'SERVICE' | 'AUTHENTICATION'
   pricePaise    Int
   effectiveFrom DateTime  @default(now())
@@ -636,7 +658,7 @@ model WhatsAppPricing {
   active        Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
-  @@unique([country, currency, category])
+  @@unique([country, currency, category, provider])
 }
 
 model WhatsAppMessageLog {

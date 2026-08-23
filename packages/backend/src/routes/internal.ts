@@ -117,6 +117,7 @@ internalRouter.post('/whatsapp-pricing', requireCronSecret, async (req: Request,
       pricePaise: z.number().int().min(0),
       country: z.string().trim().min(2).max(2).optional(),
       currency: z.string().trim().min(3).max(3).optional(),
+      provider: z.enum(['meta', 'twilio']).optional(),
     });
     const body = schema.parse(req.body);
     const row = await whatsappPricingService.upsert(body);

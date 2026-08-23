@@ -1,17 +1,24 @@
 import prisma from '../lib/prisma';
+import { getWhatsappProvider, type WhatsappProvider } from './notificationCredentials';
 
 /**
- * DB-configurable per-message pricing (integer paise). No hard-coded Meta rates in
- * send logic — getPricePaise returns null when no active row matches, which makes
- * the send path skip WhatsApp (booking flows are unaffected).
+ * DB-configurable per-message pricing (integer paise), keyed by active WhatsApp provider.
+ * Markup target ≈ 1.6× modeled wholesale (Meta fee, or Meta + Twilio $0.005 when on Twilio).
  */
 class WhatsAppPricingService {
-  async getPricePaise(category: string, country = 'IN', currency = 'INR', now: Date = new Date()): Promise<number | null> {
+  async getPricePaise(
+    category: string,
+    country = 'IN',
+    currency = 'INR',
+    now: Date = new Date(),
+    provider: WhatsappProvider = getWhatsappProvider()
+  ): Promise<number | null> {
     const row = await prisma.whatsAppPricing.findFirst({
       where: {
         country,
         currency,
         category,
+        provider,
         active: true,
         effectiveFrom: { lte: now },
         OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
@@ -21,36 +28,50 @@ class WhatsAppPricingService {
     return row ? row.pricePaise : null;
   }
 
-  async list(now: Date = new Date()): Promise<Array<{ category: string; country: string; pricePaise: number }>> {
+  async list(
+    now: Date = new Date(),
+    provider: WhatsappProvider = getWhatsappProvider()
+  ): Promise<Array<{ category: string; country: string; provider: string; pricePaise: number }>> {
     const rows = await prisma.whatsAppPricing.findMany({
       where: {
+        provider,
         active: true,
         effectiveFrom: { lte: now },
         OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
       },
       orderBy: [{ country: 'asc' }, { category: 'asc' }],
     });
-    return rows.map((r) => ({ category: r.category, country: r.country, pricePaise: r.pricePaise }));
+    return rows.map((r) => ({
+      category: r.category,
+      country: r.country,
+      provider: r.provider,
+      pricePaise: r.pricePaise,
+    }));
   }
 
   async upsert(row: {
     category: string;
     country?: string;
     currency?: string;
+    provider?: WhatsappProvider;
     pricePaise: number;
     effectiveTo?: Date | null;
     active?: boolean;
   }) {
     const country = row.country || 'IN';
     const currency = row.currency || 'INR';
+    const provider = row.provider || getWhatsappProvider();
     if (!Number.isInteger(row.pricePaise) || row.pricePaise < 0) {
       throw new Error('Invalid price (integer paise required)');
     }
     return prisma.whatsAppPricing.upsert({
-      where: { country_currency_category: { country, currency, category: row.category } },
+      where: {
+        country_currency_category_provider: { country, currency, category: row.category, provider },
+      },
       create: {
         country,
         currency,
+        provider,
         category: row.category,
         pricePaise: row.pricePaise,
         effectiveTo: row.effectiveTo,

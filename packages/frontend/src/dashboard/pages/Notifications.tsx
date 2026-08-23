@@ -207,7 +207,11 @@ export const Notifications: React.FC = () => {
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null)
 
   // WhatsApp prepaid wallet
-  const [wallet, setWallet] = useState<(WalletView & { pricing: Array<{ category: string; country: string; pricePaise: number }> }) | null>(null)
+  const [wallet, setWallet] = useState<(WalletView & {
+    pricing: Array<{ category: string; country: string; pricePaise: number }>
+    utilityPricePaise?: number | null
+    marketingPricePaise?: number | null
+  }) | null>(null)
   const [walletTx, setWalletTx] = useState<WalletTransaction[]>([])
   const [waMessages, setWaMessages] = useState<Array<{
     id: string; toPhone: string; category: string; costPaise: number; status: string; failureReason: string | null; createdAt: string
@@ -521,13 +525,13 @@ export const Notifications: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
         <h2 className="text-lg font-semibold">Channel Readiness</h2>
         <p className="text-sm text-gray-500">
-          Customer email and WhatsApp are sent from the SMTP and Meta Cloud API credentials you save in
-          Settings. Channels whose credentials are missing cannot be enabled.
+          Customer email is sent from your SMTP mailbox in Settings. WhatsApp uses Reservly’s shared number
+          after you enable it and top up the wallet. Channels that are not ready cannot be used.
           Need help? Contact <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
         <Row ok={status?.smtpConfigured} label="SMTP ready (emails send from your mailbox)" error="add SMTP username and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email present (alerts and Reply-To)" />
-        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp ready (shared Cloud API)" error="platform WhatsApp not configured — contact support" />
+        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp ready (shared number)" error="platform WhatsApp not configured — contact support" />
         <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />
         <Row ok={status?.frontendUrlConfigured} label="HTTPS frontend URL configured (manage link)" error="FRONTEND_PUBLIC_URL" />
       </div>
@@ -556,8 +560,9 @@ export const Notifications: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">WhatsApp Wallet</h2>
             <p className="text-sm text-gray-500">
-              WhatsApp notifications use prepaid credits. Estimated remaining ≈ balance ÷ current utility price
-              (not a guarantee). Email is unaffected by the wallet.
+              WhatsApp notifications use prepaid credits. Booking alerts use the normal (utility) rate.
+              Custom / promo WhatsApp messages cost more — see the WhatsApp section below.
+              Estimated remaining ≈ balance ÷ utility price (not a guarantee). Email is unaffected by the wallet.
             </p>
           </div>
           {wallet?.lowBalance && wallet.balancePaise > 0 && (
@@ -590,6 +595,20 @@ export const Notifications: React.FC = () => {
 
         {wallet && wallet.status !== 'ACTIVE' && (
           <p className="text-xs text-red-500">Wallet is {wallet.status}. WhatsApp sends are paused.</p>
+        )}
+
+        {wallet && (
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+            <p>
+              <span className="font-medium text-gray-800 dark:text-gray-100">Normal (booking / reminder):</span>{' '}
+              ₹{(((wallet.utilityPricePaise ?? wallet.pricing?.find((p) => p.category === 'UTILITY')?.pricePaise) ?? 0) / 100).toFixed(2)} per message
+            </p>
+            <p>
+              <span className="font-medium text-amber-800 dark:text-amber-200">Promo / custom WhatsApp:</span>{' '}
+              ₹{(((wallet.marketingPricePaise ?? wallet.pricing?.find((p) => p.category === 'MARKETING')?.pricePaise) ?? 0) / 100).toFixed(2)} per message
+              {' '}— higher than normal alerts
+            </p>
+          </div>
         )}
 
         <div className="grid sm:grid-cols-2 gap-6">
@@ -734,6 +753,21 @@ export const Notifications: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold">WhatsApp</h2>
           <p className="text-sm text-gray-500">Send to one person, or switch to a filtered group for bulk WhatsApp. You can attach an optional image.</p>
+          <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+            <p className="font-medium">Promo / custom messages cost more</p>
+            <p className="mt-0.5 opacity-90">
+              Messages you write here (including bulk) are billed at the{' '}
+              <strong>marketing</strong> rate
+              {wallet
+                ? ` (₹${(((wallet.marketingPricePaise ?? wallet.pricing?.find((p) => p.category === 'MARKETING')?.pricePaise) ?? 0) / 100).toFixed(2)} each)`
+                : ''}
+              , which is higher than normal booking and reminder WhatsApps
+              {wallet
+                ? ` (₹${(((wallet.utilityPricePaise ?? wallet.pricing?.find((p) => p.category === 'UTILITY')?.pricePaise) ?? 0) / 100).toFixed(2)} each)`
+                : ''}
+              . Your wallet is charged per successful send.
+            </p>
+          </div>
         </div>
         <ModeToggle mode={waMode} onChange={setWaMode} />
 

@@ -21,6 +21,8 @@ export function toOwnerConfig(business: Record<string, any>) {
   delete safe.metaWhatsappTemplateMarketing;
   return {
     ...safe,
+    passwordSet: !!business.ownerPassword,
+    googleLinked: !!business.googleSub,
     razorpayKeySecretConfigured: !!business.razorpayKeySecret,
     smtpPassConfigured: !!business.smtpPassEnc,
     metaWhatsappAccessTokenConfigured: false,

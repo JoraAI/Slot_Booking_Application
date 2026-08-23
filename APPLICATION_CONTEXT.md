@@ -280,6 +280,44 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   with Prisma transaction timeouts. This is environmental (was 98/98 earlier the
   same day); re-run once the compute budget resets.
 
+## Batch 6 — Owner Google Sign-In + email OTP signup / forgot-password — COMPLETE
+
+- **Schema** (migration `20260902000000_owner_google_otp`, non-breaking): `Business.ownerPassword`
+  is now nullable (Google-only accounts; existing rows keep their hashes), `Business.googleSub`
+  `@unique` (Google subject, set on auto-link/Google signup), `Business.emailVerifiedAt` (set on
+  OTP-verified signup or Google email verify; null = legacy trusted). New `OwnerAuthOtp` table
+  (email + purpose SIGNUP/PASSWORD_RESET, SHA-256 code hash, TTL 10 min, attempts 5, consume-once,
+  per-email/per-IP rate limits + 60s resend cooldown) — deliberately not tied to a Business row.
+- **Locked behaviors** (per `docs/DEEPSEEK_OWNER_AUTH_GOOGLE_OTP_PROMPT.md`):
+  - OTP only for signup + forgot-password; **normal login stays password-only**, existing accounts
+    unchanged. `POST /api/owner/login` returns `{ code: 'NO_PASSWORD' }` for Google-only accounts.
+  - Signup order: email → OTP → name/timezone/password → workspace. `POST /api/signup` now
+    requires a verified `signupToken` (no unverified email account creation).
+  - Forgot password: `POST /api/auth/forgot/request-otp` (generic response, no enumeration) →
+    verify → `resetToken` → `POST /api/auth/forgot/reset` sets a new password (works for
+    Google-linked accounts too).
+  - Google: `POST /api/auth/google` verifies the GIS ID token **server-side** (Node crypto +
+    Google JWKS, cached 1h; fails closed on missing `GOOGLE_CLIENT_ID`, bad signature, wrong
+    audience/issuer, unverified email). Same email → auto-link (`googleSub` recorded) + owner JWT;
+    new email → `googleSignupToken` → `POST /api/auth/google/complete` (name + timezone) creates
+    the workspace with `ownerPassword: null`.
+  - Google-only owners set a password via `POST /api/owner/password/set` (Settings shows the
+    set-password form when `passwordSet === false`); existing owners keep `PUT /owner/password`
+    (current password required). `GET /owner/me` exposes `passwordSet` / `googleLinked`.
+  - Auth OTP emails use **platform SMTP from env only** (`resolveSmtp` with no business);
+    salon SMTP is untouched. Missing SMTP → 503, never a false "sent".
+- **Frontend**: `LoginPage.tsx` multi-step signup (email → OTP → details), forgot-password flow,
+  and a Google Identity Services button (rendered only when `VITE_GOOGLE_CLIENT_ID` is set; GIS
+  script loaded lazily; if GIS is blocked locally the button hides but the backend verify path is
+  wired). `Settings.tsx` set-password for Google-only. `api.ts` + types extended.
+- **Tests**: `OwnerAuthOtp.test.ts` (9) — hash-at-rest (no plaintext), verify consume-once, wrong
+  code attempts + lockout, resend cooldown, full signup flow + duplicate rejection + unverified
+  signup blocked, forgot flow, no-enumeration, Google auto-link, Google new-user + password/set.
+  `GoogleTokenVerifier.test.ts` (3) — self-signed RS256 JWT + injected JWKS: valid token verifies;
+  wrong audience / unverified email / bad signature / missing kid / expired rejected; fails closed
+  without `GOOGLE_CLIENT_ID`.
+
+
 ## Management tokens + optional OTP
 
 - Every new booking gets a 256-bit random management token; only its **SHA-256 hash**
