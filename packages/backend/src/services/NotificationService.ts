@@ -3,7 +3,10 @@ import prisma from '../lib/prisma';
 import { locationInfo } from './LocationService';
 import {
   metaWhatsappConfigured,
-  resolveSmtp,
+  platformEmailConfigured,
+  resolveBusinessSmtp,
+  resolveEnvSmtp,
+  resolveResend,
   resolveWhatsappCredentials,
   smtpConfigured,
   type MetaWhatsappConfig,
@@ -75,33 +78,81 @@ class NotificationService {
     };
   }
 
+  private async sendViaResend(to: string, subject: string, html: string, opts: SendOpts): Promise<void> {
+    const resend = resolveResend();
+    if (!resend) throw new Error('Email: Resend is not configured (RESEND_API_KEY).');
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resend.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: resend.from,
+        to: [to],
+        subject,
+        html,
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Email: Resend send failed (${res.status}): ${body.slice(0, 300)}`);
+    }
+    console.log(`Email sent via Resend to ${to}: ${subject}`);
+  }
+
+  private async sendViaSmtp(
+    smtp: NonNullable<ReturnType<typeof resolveEnvSmtp>>,
+    to: string,
+    subject: string,
+    html: string,
+    opts: SendOpts
+  ): Promise<void> {
+    const transporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
+    await transporter.sendMail({
+      from: `"${smtp.fromName}" <${smtp.user}>`,
+      to,
+      subject,
+      html,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+    });
+    console.log(`Email sent to ${to}: ${subject}`);
+  }
+
   private async sendEmail(to: string, subject: string, html: string, opts: SendOpts = {}): Promise<void> {
-    const smtp = resolveSmtp(opts.business);
-    if (!smtp) {
-      const err = new Error('Email: SMTP is not configured. Add your SMTP username and password in Settings.');
+    // Priority: salon SMTP → Resend (HTTPS, works on Render free) → env SMTP (local/dev).
+    const businessSmtp = resolveBusinessSmtp(opts.business);
+    const resend = resolveResend();
+    const envSmtp = resolveEnvSmtp();
+
+    if (!businessSmtp && !resend && !envSmtp) {
+      const err = new Error(
+        'Email: not configured. Set RESEND_API_KEY (recommended on Render) or SMTP_USER/SMTP_PASS, or salon SMTP in Settings.'
+      );
       console.log(err.message);
       if (opts.throwOnError) throw err;
       return;
     }
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host,
-        port: smtp.port,
-        secure: smtp.secure,
-        auth: { user: smtp.user, pass: smtp.pass },
-        connectionTimeout: 10_000,
-        greetingTimeout: 10_000,
-        socketTimeout: 15_000,
-      });
-      await transporter.sendMail({
-        from: `"${smtp.fromName}" <${smtp.user}>`,
-        to,
-        subject,
-        html,
-        ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
-      });
-      console.log(`Email sent to ${to}: ${subject}`);
+      if (businessSmtp) {
+        await this.sendViaSmtp(businessSmtp, to, subject, html, opts);
+        return;
+      }
+      if (resend) {
+        await this.sendViaResend(to, subject, html, opts);
+        return;
+      }
+      await this.sendViaSmtp(envSmtp!, to, subject, html, opts);
     } catch (error) {
       console.error('Email sending failed:', error);
       if (opts.throwOnError) throw error;

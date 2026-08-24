@@ -9,6 +9,11 @@ export type SmtpConfig = {
   fromName: string;
 };
 
+export type ResendConfig = {
+  apiKey: string;
+  from: string;
+};
+
 export type WhatsappProvider = 'meta' | 'twilio';
 
 export type MetaWhatsappConfig = {
@@ -32,6 +37,12 @@ export type TwilioWhatsappConfig = {
 };
 
 export type WhatsappPlatformConfig = MetaWhatsappConfig | TwilioWhatsappConfig;
+
+export type TenantWhatsAppConfig = {
+  status?: string | null;
+  enabled?: boolean | null;
+  connectionMode?: string | null;
+} | null | undefined;
 
 type DeliveryBusiness = {
   name?: string | null;
@@ -112,30 +123,64 @@ export function resolveMetaWhatsapp(_business?: DeliveryBusiness): WhatsappPlatf
   return resolvePlatformWhatsapp();
 }
 
-export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
-  const user = String(business?.smtpUser || process.env.SMTP_USER || '').trim();
-  // Gmail App Passwords are often pasted with spaces; strip for SMTP auth.
-  // Prefer env platform pass when no business secret is set.
-  const businessPass = decryptSecret(business?.smtpPassEnc);
-  const envPass = String(process.env.SMTP_PASS || '').replace(/\s+/g, '').trim();
-  const pass = String(businessPass || envPass || '').replace(/\s+/g, '').trim();
+function envSmtpPass(): string {
+  return String(process.env.SMTP_PASS || '').replace(/\s+/g, '').trim();
+}
+
+/** Salon-only SMTP (Settings). Does not fall back to platform env. */
+export function resolveBusinessSmtp(business?: DeliveryBusiness): SmtpConfig | null {
+  if (!business) return null;
+  const user = String(business.smtpUser || '').trim();
+  const pass = String(decryptSecret(business.smtpPassEnc) || '').replace(/\s+/g, '').trim();
   if (!user || !pass) return null;
-  const port = Number(business?.smtpPort || process.env.SMTP_PORT || 587);
+  const port = Number(business.smtpPort || 587);
   return {
-    host: String(business?.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com').trim() || 'smtp.gmail.com',
+    host: String(business.smtpHost || 'smtp.gmail.com').trim() || 'smtp.gmail.com',
     port: Number.isFinite(port) && port > 0 ? port : 587,
-    secure: business?.smtpSecure === true || process.env.SMTP_SECURE === 'true',
+    secure: business.smtpSecure === true,
     user,
     pass,
-    fromName: String(business?.smtpFromName || process.env.SMTP_FROM_NAME || business?.name || 'Reservly').trim() || 'Reservly',
+    fromName: String(business.smtpFromName || business.name || 'Reservly').trim() || 'Reservly',
   };
 }
 
-export type TenantWhatsAppConfig = {
-  status?: string | null;
-  enabled?: boolean | null;
-  connectionMode?: string | null;
-} | null | undefined;
+/** Platform env SMTP (local/dev). Prefer Resend on Render free tier (SMTP ports blocked). */
+export function resolveEnvSmtp(): SmtpConfig | null {
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = envSmtpPass();
+  if (!user || !pass) return null;
+  const port = Number(process.env.SMTP_PORT || 587);
+  return {
+    host: String(process.env.SMTP_HOST || 'smtp.gmail.com').trim() || 'smtp.gmail.com',
+    port: Number.isFinite(port) && port > 0 ? port : 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user,
+    pass,
+    fromName: String(process.env.SMTP_FROM_NAME || 'Reservly').trim() || 'Reservly',
+  };
+}
+
+/**
+ * Legacy helper: business SMTP with env fallback.
+ * Prefer resolveBusinessSmtp / resolveEnvSmtp / resolveResend in new code.
+ */
+export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
+  return resolveBusinessSmtp(business) || resolveEnvSmtp();
+}
+
+/** Resend HTTP API — works on Render free (HTTPS/443; SMTP 587 is blocked). */
+export function resolveResend(): ResendConfig | null {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) return null;
+  const from = String(process.env.RESEND_FROM || 'Reservly <beth.t@example.com>').trim()
+    || 'Reservly <beth.t@example.com>';
+  return { apiKey, from };
+}
+
+/** True when platform can send auth OTP / fallback mail (Resend preferred, else env SMTP). */
+export function platformEmailConfigured(): boolean {
+  return !!resolveResend() || !!resolveEnvSmtp();
+}
 
 /**
  * Credentials for a send: active platform provider only, and only if the salon opted in
@@ -152,7 +197,7 @@ export function resolveWhatsappCredentials(
 }
 
 export function smtpConfigured(business?: DeliveryBusiness): boolean {
-  return !!resolveSmtp(business);
+  return !!resolveBusinessSmtp(business) || platformEmailConfigured();
 }
 
 /** True when Reservly's shared WhatsApp (active provider) is configured in env. */

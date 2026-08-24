@@ -276,7 +276,9 @@ See `packages/backend/.env.example`.
 | `META_API_VERSION` | Meta Graph API version, default `v20.0` (not required today) |
 | `GOOGLE_CLIENT_ID` | Owner Google Sign-In (ID-token verify). Optional; button hidden when unset. Must match `VITE_GOOGLE_CLIENT_ID` (frontend) for the same OAuth client |
 | `GOOGLE_CLIENT_SECRET` | Optional, only for a future server-side redirect flow — not required for GIS |
-| `SMTP_USER` / `SMTP_PASS` | Also required for **owner auth OTP emails** (signup + forgot password) — these use platform SMTP from env only, never salon SMTP |
+| `RESEND_API_KEY` | **Recommended on Render free** — platform email (signup/forgot OTP) via HTTPS. Free Render blocks SMTP ports 25/465/587 |
+| `RESEND_FROM` | Sender, e.g. `Reservly <beth.t@example.com>` (test) or a verified domain address |
+| `SMTP_USER` / `SMTP_PASS` | Optional local/dev SMTP; **does not work on Render free** (connection timeout) |
 
 ### WhatsApp wallet notes
 

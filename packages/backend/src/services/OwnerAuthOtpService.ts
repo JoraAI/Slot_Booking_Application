@@ -83,15 +83,21 @@ class OwnerAuthOtpService {
       const msg = String(err?.message || err || '');
       console.error('Owner auth OTP email failed:', msg);
       // Fail closed — never claim delivery succeeded. Distinguish misconfig vs provider reject.
-      if (/SMTP is not configured/i.test(msg)) {
+      if (/not configured|RESEND_API_KEY|SMTP_USER/i.test(msg)) {
         throw this.httpError(
           503,
-          'Platform email is not configured. Set SMTP_USER and SMTP_PASS on the API host (Render) and redeploy.'
+          'Platform email is not configured. Set RESEND_API_KEY on Render (recommended), or SMTP_USER/SMTP_PASS on a host that allows outbound SMTP, then redeploy.'
+        );
+      }
+      if (/ETIMEDOUT|ECONNREFUSED|Connection timeout/i.test(msg)) {
+        throw this.httpError(
+          503,
+          'Email send timed out. On Render free tier, Gmail SMTP is blocked — use RESEND_API_KEY instead.'
         );
       }
       throw this.httpError(
         503,
-        'Unable to deliver the verification code. Check SMTP credentials on the API host and try again.'
+        'Unable to deliver the verification code. Check RESEND_API_KEY / SMTP credentials and try again.'
       );
     }
 

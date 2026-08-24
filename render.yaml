@@ -15,6 +15,10 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: CRON_SECRET
