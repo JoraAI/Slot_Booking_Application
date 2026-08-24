@@ -27,5 +27,5 @@ ENV PORT=10000
 EXPOSE 10000
 
 WORKDIR /app/packages/backend
-# Migrate on boot, then start the API.
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/index.js"]
+# Migrate on boot (retry briefly — Neon cold start / advisory-lock races), then start API.
+CMD ["sh", "-c", "i=0; until pnpm exec prisma migrate deploy; do i=$((i+1)); [ \"$i\" -ge 5 ] && exit 1; echo \"migrate deploy failed (attempt $i), retrying...\"; sleep 5; done; node dist/index.js"]

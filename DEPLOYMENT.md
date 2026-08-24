@@ -37,22 +37,26 @@ Push this repo to **GitHub** if it is not already there (Render + Vercel deploy 
 
 That string is `DATABASE_URL`. Never commit it.
 
-### Use the direct (non-pooled) host
+### Use pooled + direct URLs (Neon)
 
 Neon offers a pooled host (`...-pooler...`) and a direct host (same name without
-`-pooler`). Use the **direct** host for `DATABASE_URL`.
+`-pooler`). Set **both** on Render:
 
-The container runs `prisma migrate deploy` on boot, and Prisma guards migrations
-with a session-level advisory lock. PgBouncer (the pooler) can keep that session
-open after the migration finishes, so the lock is never released and later
-deploys fail with:
+| Env var | Value |
+|---|---|
+| `DATABASE_URL` | Pooled URL + `?sslmode=require&pgbouncer=true` (app / wallet transactions) |
+| `DIRECT_URL` | Direct URL + `?sslmode=require` (Prisma migrations only) |
+
+`schema.prisma` uses `directUrl = env("DIRECT_URL")` so `migrate deploy` never
+goes through PgBouncer. That avoids:
 
 ```text
 Error: P1002 ... Timed out trying to acquire a postgres advisory lock
 (SELECT pg_advisory_lock(72707369))
 ```
 
-If that happens, release the stale lock once, then switch to the direct host:
+If that still happens (stale lock from a crashed deploy), release it once in the
+Neon SQL editor, then redeploy:
 
 ```sql
 -- Neon SQL editor. Confirm the holder first:
@@ -66,6 +70,8 @@ select pg_terminate_backend(<pid>);
 ```
 
 Restarting the Neon compute from the console clears it too.
+
+For local Docker Postgres, set `DIRECT_URL` to the same value as `DATABASE_URL`.
 
 ---
 
@@ -112,7 +118,8 @@ openssl rand -hex 32   # CRON_SECRET
 
 | Key | Value |
 |---|---|
-| `DATABASE_URL` | Neon connection string (`?sslmode=require`) |
+| `DATABASE_URL` | Neon connection string — **pooled** host + `?sslmode=require&pgbouncer=true` |
+| `DIRECT_URL` | Neon **direct** host (no `-pooler`) + `?sslmode=require` — required for migrate on boot |
 | `JWT_SECRET` | long random string |
 | `CRON_SECRET` | long random string |
 | `FRONTEND_URL` | `https://placeholder.vercel.app` (update after Step 5) |
