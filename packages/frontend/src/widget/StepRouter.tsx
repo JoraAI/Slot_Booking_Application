@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store'
 import { api } from '../lib/api'
-import { usePostMessage } from '../hooks'
+import { usePostMessage, useEmbedMode } from '../hooks'
 import { ServiceSelection } from './steps/ServiceSelection'
 import { StaffSelection } from './steps/StaffSelection'
 import { DateTimePicker } from './steps/DateTimePicker'
@@ -76,6 +76,7 @@ export const StepRouter: React.FC = () => {
   const { publicConfig, wizard, setWizard, resetWizard } = useStore()
   const config = publicConfig
   const postMessage = usePostMessage()
+  const isEmbedded = useEmbedMode()
   const [booking, setBooking] = useState<Booking | null>(null)
   const [showWaitlist, setShowWaitlist] = useState(false)
   const [waitlistTime, setWaitlistTime] = useState('')
@@ -279,8 +280,17 @@ export const StepRouter: React.FC = () => {
     <div className="relative max-w-md mx-auto p-6 space-y-6">
       <BusyOverlay show={submitting} message="Confirming your booking…" />
 
-      {/* Branding header */}
+      {/* Branding header — cover shows here only in embed (standalone uses full-bleed above). */}
       <div className="text-center pt-2">
+        {isEmbedded && config.business.branding.coverImageUrl && (
+          <div className="mb-4 -mx-6 sm:mx-0 overflow-hidden sm:rounded-xl">
+            <img
+              src={config.business.branding.coverImageUrl}
+              alt=""
+              className="w-full h-36 object-cover"
+            />
+          </div>
+        )}
         {config.business.branding.logoUrl && (
           <img src={config.business.branding.logoUrl} alt={config.business.name} className="w-14 h-14 rounded-full object-cover mx-auto mb-2" />
         )}

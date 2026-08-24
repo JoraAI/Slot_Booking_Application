@@ -525,11 +525,11 @@ export const Notifications: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
         <h2 className="text-lg font-semibold">Channel Readiness</h2>
         <p className="text-sm text-gray-500">
-          Customer email is sent from your SMTP mailbox in Settings. WhatsApp uses Reservly’s shared number
+          Customer email is sent from the mailbox you connected in Settings. WhatsApp uses Reservly’s shared number
           after you enable it and top up the wallet. Channels that are not ready cannot be used.
           Need help? Contact <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
-        <Row ok={status?.smtpConfigured} label="SMTP ready (emails send from your mailbox)" error="add SMTP username and password in Settings" />
+        <Row ok={status?.smtpConfigured} label="Email ready (mailbox connected in Settings)" error="add email address and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email present (alerts and Reply-To)" />
         <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp ready (shared number)" error="platform WhatsApp not configured — contact support" />
         <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />

@@ -119,6 +119,16 @@ function BookingWidget() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary-light to-white dark:from-gray-900 dark:to-gray-950">
+      {/* Full-bleed cover on the standalone booking page (hidden in embed). */}
+      {!isEmbedded && publicConfig?.business.branding.coverImageUrl && (
+        <div className="w-full overflow-hidden bg-gray-200 dark:bg-gray-800">
+          <img
+            src={publicConfig.business.branding.coverImageUrl}
+            alt=""
+            className="w-full h-48 sm:h-64 object-cover"
+          />
+        </div>
+      )}
       <StepRouter />
       {/* Standalone public page shows the owner-configured PageSections;
           embed mode stays compact (booking only) and omits them. */}

@@ -196,7 +196,14 @@ export const Settings: React.FC = () => {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updated = await api.updateConfig(form)
+      // Owners only enter email + password; host/port/TLS stay as Gmail-friendly defaults.
+      const payload = {
+        ...form,
+        smtpHost: form.smtpUser.trim() ? (form.smtpHost.trim() || 'smtp.gmail.com') : form.smtpHost,
+        smtpPort: form.smtpUser.trim() ? (form.smtpPort ?? 587) : form.smtpPort,
+        smtpSecure: false,
+      }
+      const updated = await api.updateConfig(payload)
       setConfig({ ...(config as any), ...updated })
       setForm(p => ({
         ...p,
@@ -275,9 +282,8 @@ export const Settings: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold">Owner Contact</h2>
           <p className="text-sm text-gray-500">
-            Owner alerts are delivered here. Customer emails are sent from your SMTP
-            username below, with this address as Reply-To. WhatsApp messages are sent
-            from Reservly’s shared number and include this number as the customer contact.
+            Owner alerts are delivered here. Customer emails use the mailbox you set below (this address is Reply-To).
+            WhatsApp messages are sent from Reservly’s shared number and can include your Owner WhatsApp as the contact line.
           </p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -361,8 +367,8 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
             <p className="text-sm text-gray-500">
-              Email sends from <strong>your</strong> SMTP mailbox. WhatsApp sends from <strong>Reservly’s</strong> shared
-              number — you only enable it and top up prepaid credits. SMTP passwords are encrypted and never shown again.
+              Connect a Gmail (or similar) mailbox to email customers. WhatsApp uses Reservly’s shared number —
+              enable it below and keep wallet credits topped up. Mailbox passwords are encrypted and never shown again.
             </p>
           </div>
           <Link to="/dashboard/setup-guide#notifications" className="text-sm text-primary hover:underline shrink-0">
@@ -448,32 +454,24 @@ export const Settings: React.FC = () => {
 
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">SMTP host</label>
-            <input value={form.smtpHost} onChange={(e) => setForm(p => ({ ...p, smtpHost: e.target.value }))}
-              placeholder="smtp.gmail.com" autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">SMTP port</label>
-            <input type="number" value={form.smtpPort ?? ''} onChange={(e) => setForm(p => ({ ...p, smtpPort: e.target.value === '' ? null : parseInt(e.target.value, 10) }))}
-              placeholder="587"
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">SMTP username (From email)</label>
+            <label className="block text-sm font-medium mb-1">Email address (From)</label>
             <input type="email" value={form.smtpUser} onChange={(e) => setForm(p => ({ ...p, smtpUser: e.target.value }))}
-              placeholder="you@yourdomain.com" autoComplete="off"
+              placeholder="you@gmail.com" autoComplete="off"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">SMTP password</label>
+            <label className="block text-sm font-medium mb-1">Email password</label>
             <input type="password" value={form.smtpPass} onChange={(e) => setForm(p => ({ ...p, smtpPass: e.target.value, clearSmtpPass: false }))}
-              placeholder={config?.smtpPassConfigured ? '•••••••• (leave blank to keep)' : 'App password, not your login password'}
+              placeholder={config?.smtpPassConfigured ? '•••••••• (leave blank to keep)' : 'Gmail App Password'}
               autoComplete="new-password"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">
-              {config?.smtpPassConfigured ? '✓ Password saved (write-only — never shown). ' : 'Not saved yet. '}
-              For Gmail, use an App Password.
+              {config?.smtpPassConfigured ? '✓ Password saved. ' : 'Not saved yet. '}
+              For Gmail, use an{' '}
+              <a className="text-primary underline" href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer">
+                App Password
+              </a>
+              — not your normal login password.
               {config?.smtpPassConfigured && (
                 <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, smtpPass: '', clearSmtpPass: true }))}>
                   Remove saved password
@@ -481,17 +479,13 @@ export const Settings: React.FC = () => {
               )}
             </p>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className="block text-sm font-medium mb-1">From name</label>
             <input value={form.smtpFromName} onChange={(e) => setForm(p => ({ ...p, smtpFromName: e.target.value }))}
               placeholder={config?.name || 'Your salon'}
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Shown as the sender name on customer emails (e.g. your salon name).</p>
           </div>
-          <label className="flex items-center gap-2 text-sm mt-6">
-            <input type="checkbox" checked={form.smtpSecure} onChange={(e) => setForm(p => ({ ...p, smtpSecure: e.target.checked }))}
-              className="rounded border-gray-300" />
-            Use TLS (SMTP secure / port 465)
-          </label>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3 pt-2">
@@ -755,11 +749,15 @@ export const Settings: React.FC = () => {
             {form.logoUrl && <img src={form.logoUrl} alt="Logo preview" className="mt-2 w-14 h-14 rounded-lg object-cover" />}
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Cover Image URL</label>
+            <label className="block text-sm font-medium mb-1">Cover image</label>
             <div className="flex gap-2">
-              <input value={form.coverImageUrl} onChange={(e) => setForm(p => ({ ...p, coverImageUrl: e.target.value }))} placeholder="https://..." className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-              <MediaUploadButton onUploaded={(url) => setForm(p => ({ ...p, coverImageUrl: url }))} label="⬆ Upload" />
+              <input value={form.coverImageUrl} onChange={(e) => setForm(p => ({ ...p, coverImageUrl: e.target.value }))} placeholder="Upload or paste image link" className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <MediaUploadButton
+                onUploaded={(url) => setForm(p => ({ ...p, coverImageUrl: url }))}
+                label="⬆ Upload"
+              />
             </div>
+            <p className="text-xs text-gray-400 mt-1">Shown at the top of your public booking page.</p>
             {form.coverImageUrl && <img src={form.coverImageUrl} alt="Cover preview" className="mt-2 w-full h-20 rounded-lg object-cover" />}
           </div>
         </div>
@@ -794,7 +792,7 @@ export const Settings: React.FC = () => {
         <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
           <div>
             <p className="text-sm font-medium">Require OTP for booking management</p>
-            <p className="text-xs text-gray-500">Adds an email verification step (sent via your SMTP settings).</p>
+            <p className="text-xs text-gray-500">Adds an email verification step before customers can manage a booking.</p>
           </div>
           <button onClick={() => setForm(p => ({ ...p, bookingManagementOtpEnabled: !p.bookingManagementOtpEnabled, bookingManagementOtpChannel: 'EMAIL' }))}
             className={`relative w-12 h-6 rounded-full transition-colors ${form.bookingManagementOtpEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'}`}>
@@ -805,11 +803,13 @@ export const Settings: React.FC = () => {
         {form.bookingManagementOtpEnabled && (
           <div className="space-y-3">
             <p className={`text-xs ${providerStatus?.smtpConfigured ? 'text-green-600' : 'text-amber-600'}`}>
-              {providerStatus?.smtpConfigured ? '✓ SMTP configured — OTP emails can be sent' : '⚠ SMTP not configured — Email OTP will be unavailable'}
+              {providerStatus?.smtpConfigured
+                ? '✓ Email is ready — verification codes can be sent'
+                : '⚠ Add your email address and password above first'}
             </p>
             {!providerStatus?.smtpConfigured && (
               <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
-                Enable Email OTP only after saving SMTP username and password above.
+                Save your email address and password in Email & WhatsApp delivery before turning this on.
               </p>
             )}
           </div>

@@ -49,33 +49,27 @@ export const SetupGuide: React.FC = () => (
           changes the dashboard login email.
         </li>
         <li>
-          On the same page, open <strong>Email &amp; WhatsApp delivery</strong>. These are <em>your</em>
-          mailbox and Meta Cloud API account — they are stored in the database, encrypted, and never shown
-          again after save. Leave a password/token field blank to keep the saved value.
+          On the same page, open <strong>Email &amp; WhatsApp delivery</strong>.
         </li>
         <li>
-          <strong>Email:</strong> SMTP host (Gmail: <code>smtp.gmail.com</code>), port <code>587</code>
-          (leave TLS/port 465 unchecked unless your provider requires it), SMTP username (the From
-          address), SMTP password, and From name (usually the salon name). For Gmail, create an
-          <a className="text-primary underline" href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer"> App Password</a>
-          — do not paste your dashboard password or normal mailbox password.
+          <strong>Email:</strong> enter your Gmail address, a Gmail{' '}
+          <a className="text-primary underline" href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer">App Password</a>
+          (not your normal password), and a From name (usually the salon name). Server details are handled for you.
         </li>
         <li>
           <strong>WhatsApp:</strong> messages are sent from <strong>Reservly’s shared</strong> number
           (you never paste API credentials). Enable WhatsApp in Settings, top up your
           <Link className="text-primary underline" to="/dashboard/notifications"> WhatsApp Wallet</Link>,
           then tick “WhatsApp customers”. Booking alerts use the normal rate; custom / promo WhatsApps cost more
-          (shown on the Notifications page). Empty wallet → <code>INSUFFICIENT_CREDITS</code>; bookings and email keep working.
+          (shown on the Notifications page). Empty wallet → WhatsApp skips; bookings and email keep working.
         </li>
         <li>
           Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),
           then Save All.
         </li>
         <li>
-          Open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link>,
-          confirm Channel Readiness is green, and send a test. The test email goes to the owner email
-          from your SMTP username; the test WhatsApp goes to the owner WhatsApp number from your
-          Meta Cloud API number.
+          Open <Link className="text-primary underline" to="/dashboard/notifications">Notifications</Link>
+          and send a test. The test email goes to your owner email; the test WhatsApp goes to your Owner WhatsApp number.
         </li>
         <li>
           To message a customer, use <strong>Send a custom message</strong> on that same page: pick a
@@ -86,9 +80,8 @@ export const SetupGuide: React.FC = () => (
         </li>
       </ol>
       <p className="text-amber-700 dark:text-amber-300 mt-3">
-        Emails are sent from your SMTP username, with owner email as Reply-To. WhatsApp is sent from
-        Reservly’s shared number; your owner WhatsApp is used as the customer contact line.
-        Messages outside Meta's customer-service window may require an approved content template.
+        Customer emails come from your connected mailbox (owner email as Reply-To). WhatsApp is sent from
+        Reservly’s shared number; your Owner WhatsApp is used as the customer contact line.
       </p>
     </GuideSection>
 

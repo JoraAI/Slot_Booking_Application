@@ -31,7 +31,7 @@ import {
   normalizeCustomerPhone,
 } from '../services/CustomerService';
 import { hashOwnerPassword, isHashedOwnerPassword, verifyOwnerPassword } from '../services/OwnerPassword';
-import { createMediaAsset, decodeImageBase64 } from '../services/MediaService';
+import { createMediaAsset, decodeImageBase64, publicMediaUrl } from '../services/MediaService';
 import { attributeKeyFromLabel, attributesFromFormData, contactMatchesFilters } from '../services/CustomerAttributes';
 
 export const ownerRouter = Router();
@@ -3058,12 +3058,8 @@ ownerRouter.post('/media/upload', async (req: AuthRequest, res: Response) => {
     }
 
     const asset = await createMediaAsset(req.owner!.businessId, bytes);
-    const row = await prisma.mediaAsset.findUniqueOrThrow({
-      where: { id: asset.id },
-      select: { mimeType: true, data: true },
-    });
     res.status(201).json({
-      url: `data:${row.mimeType};base64,${Buffer.from(row.data).toString('base64')}`,
+      url: publicMediaUrl(asset.id, req),
       publicId: asset.id,
     });
   } catch (error: any) {
