@@ -570,13 +570,6 @@ class ApiClient {
     })
   }
 
-  markSubscriptionPaid() {
-    return this.request<{ ok: boolean; dueInr: number; plan: string }>('/owner/subscription/mark-paid', {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-  }
-
   getWaitlist(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<{ entries: WaitlistEntry[]; total: number; page: number; totalPages: number }>(`/owner/waitlist${qs}`)

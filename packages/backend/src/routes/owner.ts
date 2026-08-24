@@ -17,6 +17,11 @@ import { walletService } from '../services/WalletService';
 import { whatsappPricingService } from '../services/WhatsAppPricingService';
 import { validateLocation } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
+import {
+  orderBelongsToBusiness,
+  platformOrderNotes,
+  verifyRazorpayPaymentSignature,
+} from '../services/razorpaySecurity';
 import { toOwnerConfig } from '../services/ownerDto';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
@@ -908,7 +913,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     // - blank/null is ignored (keeps the existing secret)
     // - clearRazorpayKeySecret === true is the explicit intentional clear
     if (typeof req.body.razorpayKeySecret === 'string' && req.body.razorpayKeySecret.trim() !== '') {
-      updateData.razorpayKeySecret = req.body.razorpayKeySecret.trim();
+      updateData.razorpayKeySecret = encryptSecret(req.body.razorpayKeySecret.trim());
     } else if (req.body.clearRazorpayKeySecret === true) {
       updateData.razorpayKeySecret = null;
     }
@@ -1904,6 +1909,7 @@ ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: R
 /**
  * POST /owner/whatsapp-wallet/recharge — create a Razorpay order using the
  * platform Razorpay keys (mirror of /subscription/pay). Min recharge ₹100.
+ * Order notes bind the payment to this business (anti cross-tenant credit).
  */
 ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Response) => {
   try {
@@ -1929,6 +1935,7 @@ ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Resp
         currency: 'INR',
         receipt,
         payment_capture: 1,
+        notes: platformOrderNotes(businessId, 'whatsapp_wallet'),
       }),
     });
 
@@ -1951,16 +1958,16 @@ ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Resp
 
 /**
  * POST /owner/whatsapp-wallet/verify — HMAC signature + Razorpay order amount +
- * idempotent ledger credit keyed on the payment id. Never credits from the
+ * businessId notes binding + idempotent ledger credit. Never credits from the
  * frontend "success" alone.
  */
 ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
     const schema = z.object({
-      razorpay_order_id: z.string(),
-      razorpay_payment_id: z.string(),
-      razorpay_signature: z.string(),
+      razorpay_order_id: z.string().min(1),
+      razorpay_payment_id: z.string().min(1),
+      razorpay_signature: z.string().min(1),
     });
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = schema.parse(req.body);
 
@@ -1970,16 +1977,11 @@ ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Respon
       return res.status(500).json({ error: 'Platform payment gateway not configured' });
     }
 
-    const crypto = await import('crypto');
-    const expectedSig = crypto
-      .createHmac('sha256', keySecret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-    if (expectedSig !== razorpay_signature) {
+    if (!verifyRazorpayPaymentSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, keySecret)) {
       return res.status(400).json({ error: 'Payment verification failed' });
     }
 
-    // Amount comes from Razorpay (the order we created), never from the client.
+    // Amount + tenant binding come from Razorpay (the order we created), never from the client.
     const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpay_order_id}`, {
       headers: {
         'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
@@ -1989,6 +1991,9 @@ ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Respon
       return res.status(502).json({ error: 'Could not confirm order amount with payment provider' });
     }
     const order: any = await orderRes.json();
+    if (!orderBelongsToBusiness(order, businessId, 'whatsapp_wallet')) {
+      return res.status(400).json({ error: 'Payment order does not belong to this account' });
+    }
     const amountPaise = Number(order.amount);
     if (!Number.isInteger(amountPaise) || amountPaise < 10000) {
       return res.status(400).json({ error: 'Invalid order amount' });
@@ -2074,6 +2079,7 @@ ownerRouter.post('/subscription/pay', async (req: AuthRequest, res: Response) =>
         currency: 'INR',
         receipt,
         payment_capture: 1,
+        notes: platformOrderNotes(businessId, 'subscription'),
       }),
     });
 
@@ -2098,39 +2104,52 @@ ownerRouter.post('/subscription/pay', async (req: AuthRequest, res: Response) =>
 
 ownerRouter.post('/subscription/verify', async (req: AuthRequest, res: Response) => {
   try {
+    const businessId = req.owner!.businessId;
     const schema = z.object({
-      razorpay_order_id: z.string(),
-      razorpay_payment_id: z.string(),
-      razorpay_signature: z.string(),
+      razorpay_order_id: z.string().min(1),
+      razorpay_payment_id: z.string().min(1),
+      razorpay_signature: z.string().min(1),
     });
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = schema.parse(req.body);
 
+    const keyId = process.env.RAZORPAY_KEY_ID || '';
     const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
-    if (!keySecret) {
+    if (!keyId || !keySecret) {
       return res.status(500).json({ error: 'Platform payment gateway not configured' });
     }
 
-    const crypto = await import('crypto');
-    const expectedSig = crypto
-      .createHmac('sha256', keySecret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-
-    if (expectedSig !== razorpay_signature) {
+    if (!verifyRazorpayPaymentSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, keySecret)) {
       return res.status(400).json({ error: 'Payment verification failed' });
     }
 
-    const businessId = req.owner!.businessId;
-    const r = await subscriptionService.markPaid(businessId);
-    res.json({ ok: true, ...r });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
+    const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${razorpay_order_id}`, {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+      },
+    });
+    if (!orderRes.ok) {
+      return res.status(502).json({ error: 'Could not confirm order with payment provider' });
+    }
+    const order: any = await orderRes.json();
+    if (!orderBelongsToBusiness(order, businessId, 'subscription')) {
+      return res.status(400).json({ error: 'Payment order does not belong to this account' });
+    }
 
-ownerRouter.post('/subscription/mark-paid', async (req: AuthRequest, res: Response) => {
-  try {
-    const businessId = req.owner!.businessId;
+    const view = await subscriptionService.getSubscriptionView(businessId);
+    const expectedPaise = Math.round(view.dueInr * 100);
+    const orderPaise = Number(order.amount);
+    if (!Number.isInteger(orderPaise) || orderPaise <= 0) {
+      return res.status(400).json({ error: 'Invalid order amount' });
+    }
+    // Allow verify when already paid this period (dueInr === 0) only if order amount matches a prior due;
+    // otherwise require order amount to match current due.
+    if (view.dueInr > 0 && orderPaise !== expectedPaise) {
+      return res.status(400).json({ error: 'Payment amount does not match subscription due' });
+    }
+    if (view.dueInr <= 0) {
+      return res.json({ ok: true, dueInr: 0, plan: view.plan, alreadyPaid: true });
+    }
+
     const r = await subscriptionService.markPaid(businessId);
     res.json({ ok: true, ...r });
   } catch (error: any) {

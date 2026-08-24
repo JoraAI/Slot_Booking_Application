@@ -94,7 +94,7 @@ test('1. embed origin: allowlisted origin passes, disallowed origin is 403, empt
   assert.strictEqual(permissive.status, 200, 'empty allowlist is permissive');
 });
 
-test('2. razorpay secret is write-only and never returned', async () => {
+test('2. razorpay secret is encrypted at rest, write-only, and never returned', async () => {
   const token = jwt.sign({ businessId: business.id, email: business.ownerEmail }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '1h' } as any);
 
   // /me never returns the secret, only the configured flag
@@ -113,7 +113,8 @@ test('2. razorpay secret is write-only and never returned', async () => {
   assert.strictEqual(write.json.razorpayKeySecretConfigured, true);
 
   const row = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
-  assert.strictEqual(row.razorpayKeySecret, 'sh_secret_xyz');
+  assert.ok(row.razorpayKeySecret && row.razorpayKeySecret.startsWith('enc:v1:'), 'secret stored encrypted');
+  assert.ok(!row.razorpayKeySecret.includes('sh_secret_xyz'), 'plaintext secret not in DB');
 
   // Blank update keeps the existing secret
   const blank = await req('PUT', '/owner/config', {
@@ -123,7 +124,8 @@ test('2. razorpay secret is write-only and never returned', async () => {
   assert.strictEqual(blank.status, 200);
   assert.strictEqual(blank.json.razorpayKeySecretConfigured, true);
   const afterBlank = await prisma.business.findUniqueOrThrow({ where: { id: business.id } });
-  assert.strictEqual(afterBlank.razorpayKeySecret, 'sh_secret_xyz', 'blank does not wipe the secret');
+  assert.ok(afterBlank.razorpayKeySecret && afterBlank.razorpayKeySecret.startsWith('enc:v1:'), 'blank does not wipe the secret');
+  assert.strictEqual(afterBlank.razorpayKeySecret, row.razorpayKeySecret, 'blank leaves ciphertext unchanged');
 
   // Explicit clear
   const clear = await req('PUT', '/owner/config', {

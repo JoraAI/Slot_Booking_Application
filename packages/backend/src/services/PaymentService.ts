@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
+import { decryptSecret } from './secretCrypto';
+import { verifyRazorpayPaymentSignature } from './razorpaySecurity';
 
 /** Razorpay refund notes key (written on create / retry). */
 export const REFUND_NOTES_KEY = 'reservly_idempotency_key';
@@ -37,6 +39,10 @@ class PaymentService {
     return business?.razorpayTestMode ?? true;
   }
 
+  private resolveKeySecret(stored: string | null | undefined): string {
+    return decryptSecret(stored) || process.env.RAZORPAY_KEY_SECRET || '';
+  }
+
   /**
    * Get Razorpay auth headers using business-specific or env keys
    */
@@ -47,7 +53,7 @@ class PaymentService {
     });
 
     const keyId = business?.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
-    const keySecret = business?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '';
+    const keySecret = this.resolveKeySecret(business?.razorpayKeySecret);
 
     return {
       'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
@@ -118,7 +124,7 @@ class PaymentService {
       return true;
     }
 
-    // Live mode: verify HMAC
+    // Live mode: verify HMAC with salon secret (decrypted) or platform secret
     const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
 
     const business = businessId
@@ -128,14 +134,8 @@ class PaymentService {
         })
       : null;
 
-    const secret = business?.razorpayKeySecret || keySecret;
-
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(`${orderId}|${paymentId}`)
-      .digest('hex');
-
-    return expectedSignature === signature;
+    const secret = this.resolveKeySecret(business?.razorpayKeySecret) || keySecret;
+    return verifyRazorpayPaymentSignature(orderId, paymentId, signature, secret);
   }
 
   /**
