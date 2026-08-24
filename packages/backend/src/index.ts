@@ -10,6 +10,7 @@ import { publicRouter } from './routes/public';
 import { ownerRouter } from './routes/owner';
 import { internalRouter } from './routes/internal';
 import { serveMediaAsset } from './services/MediaService';
+import { smtpConfigured } from './services/notificationCredentials';
 
 const app = express();
 // Render/Fly inject PORT (often 10000). Local default stays 3001.
@@ -277,6 +278,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 // Bind 0.0.0.0 so container hosts (Fly.io, Docker) can reach the process.
 const server = app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Platform SMTP (signup/forgot OTP): ${smtpConfigured() ? 'configured' : 'MISSING — set SMTP_USER + SMTP_PASS'}`);
 });
 
 server.on('error', (err: any) => {

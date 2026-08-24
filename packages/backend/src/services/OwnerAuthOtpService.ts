@@ -79,9 +79,20 @@ class OwnerAuthOtpService {
     try {
       // Platform SMTP only: no business is passed, so resolveSmtp uses env.
       await notificationService.sendOtpEmail(normalized, code, 'Reservly', undefined);
-    } catch {
-      // Fail closed — never claim delivery succeeded.
-      throw this.httpError(503, 'Unable to deliver the verification code. Please try again later.');
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      console.error('Owner auth OTP email failed:', msg);
+      // Fail closed — never claim delivery succeeded. Distinguish misconfig vs provider reject.
+      if (/SMTP is not configured/i.test(msg)) {
+        throw this.httpError(
+          503,
+          'Platform email is not configured. Set SMTP_USER and SMTP_PASS on the API host (Render) and redeploy.'
+        );
+      }
+      throw this.httpError(
+        503,
+        'Unable to deliver the verification code. Check SMTP credentials on the API host and try again.'
+      );
     }
 
     await prisma.ownerAuthOtp.create({

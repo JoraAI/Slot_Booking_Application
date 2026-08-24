@@ -114,7 +114,11 @@ export function resolveMetaWhatsapp(_business?: DeliveryBusiness): WhatsappPlatf
 
 export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
   const user = String(business?.smtpUser || process.env.SMTP_USER || '').trim();
-  const pass = String(decryptSecret(business?.smtpPassEnc) || process.env.SMTP_PASS || '').trim();
+  // Gmail App Passwords are often pasted with spaces; strip for SMTP auth.
+  // Prefer env platform pass when no business secret is set.
+  const businessPass = decryptSecret(business?.smtpPassEnc);
+  const envPass = String(process.env.SMTP_PASS || '').replace(/\s+/g, '').trim();
+  const pass = String(businessPass || envPass || '').replace(/\s+/g, '').trim();
   if (!user || !pass) return null;
   const port = Number(business?.smtpPort || process.env.SMTP_PORT || 587);
   return {
