@@ -653,7 +653,7 @@ model WhatsAppPricing {
   id            String    @id @default(cuid())
   country       String    @default("IN")
   currency      String    @default("INR")
-  /// Active platform transport this row applies to: 'meta' | 'twilio'
+  /// Active platform transport this row applies to: 'meta' | 'twilio' | 'gupshup'
   provider      String    @default("meta")
   category      String // 'UTILITY' | 'MARKETING' | 'SERVICE' | 'AUTHENTICATION'
   pricePaise    Int

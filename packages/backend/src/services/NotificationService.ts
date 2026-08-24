@@ -9,6 +9,7 @@ import {
   resolveResend,
   resolveWhatsappCredentials,
   smtpConfigured,
+  type GupshupWhatsappConfig,
   type MetaWhatsappConfig,
   type TwilioWhatsappConfig,
   type WhatsappPlatformConfig,
@@ -164,7 +165,7 @@ class NotificationService {
   }
 
   private outsideSessionError(bodyText: string): boolean {
-    return /customer service window|outside.*24|template|63016|63049/i.test(bodyText);
+    return /customer service window|outside.*24|template|63016|63049|session.*expired|not in.*session/i.test(bodyText);
   }
 
   private metaTemplateName(meta: MetaWhatsappConfig, category: string): string | null {
@@ -175,6 +176,22 @@ class NotificationService {
   private twilioContentSid(twilio: TwilioWhatsappConfig, category: string): string | null {
     if (category === 'MARKETING') return twilio.marketingContentSid || twilio.utilityContentSid || null;
     return twilio.utilityContentSid || null;
+  }
+
+  private gupshupTemplateId(gupshup: GupshupWhatsappConfig, category: string): string | null {
+    if (category === 'MARKETING') return gupshup.marketingTemplate || gupshup.utilityTemplate || null;
+    return gupshup.utilityTemplate || null;
+  }
+
+  private gupshupResponseOk(response: Response, bodyText: string): boolean {
+    if (!response.ok) return false;
+    try {
+      const parsed = JSON.parse(bodyText || '{}');
+      if (parsed?.status === 'error') return false;
+    } catch {
+      /* non-JSON body — rely on HTTP status */
+    }
+    return true;
   }
 
   private async sendMetaWhatsappText(meta: MetaWhatsappConfig, toDigits: string, message: string): Promise<Response> {
@@ -347,6 +364,88 @@ class NotificationService {
     });
   }
 
+  private async sendGupshupForm(
+    gupshup: GupshupWhatsappConfig,
+    path: '/wa/api/v1/msg' | '/wa/api/v1/template/msg',
+    fields: Record<string, string>
+  ): Promise<Response> {
+    const body = new URLSearchParams({
+      channel: 'whatsapp',
+      source: gupshup.source,
+      'src.name': gupshup.appName,
+      ...fields,
+    });
+    return fetch(`https://api.gupshup.io${path}`, {
+      method: 'POST',
+      headers: {
+        apikey: gupshup.apiKey,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+  }
+
+  private async sendGupshupWhatsappText(
+    gupshup: GupshupWhatsappConfig,
+    toDigits: string,
+    message: string
+  ): Promise<Response> {
+    return this.sendGupshupForm(gupshup, '/wa/api/v1/msg', {
+      destination: toDigits,
+      message: JSON.stringify({ type: 'text', text: message.slice(0, 4096) }),
+    });
+  }
+
+  private async sendGupshupWhatsappImage(
+    gupshup: GupshupWhatsappConfig,
+    toDigits: string,
+    imageUrl: string,
+    caption: string
+  ): Promise<Response> {
+    return this.sendGupshupForm(gupshup, '/wa/api/v1/msg', {
+      destination: toDigits,
+      message: JSON.stringify({
+        type: 'image',
+        originalUrl: imageUrl,
+        previewUrl: imageUrl,
+        ...(caption ? { caption: caption.slice(0, 1024) } : {}),
+      }),
+    });
+  }
+
+  private async sendGupshupWhatsappCta(
+    gupshup: GupshupWhatsappConfig,
+    toDigits: string,
+    body: string,
+    displayText: string,
+    buttonUrl: string
+  ): Promise<Response> {
+    return this.sendGupshupForm(gupshup, '/wa/api/v1/msg', {
+      destination: toDigits,
+      message: JSON.stringify({
+        type: 'cta_url',
+        body: body.slice(0, 1024),
+        display_text: displayText.slice(0, 20),
+        url: buttonUrl,
+      }),
+    });
+  }
+
+  private async sendGupshupWhatsappTemplate(
+    gupshup: GupshupWhatsappConfig,
+    toDigits: string,
+    templateId: string,
+    message: string
+  ): Promise<Response> {
+    return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', {
+      destination: toDigits,
+      template: JSON.stringify({
+        id: templateId,
+        params: [message.slice(0, 1024)],
+      }),
+    });
+  }
+
   private async dispatchWhatsapp(
     platform: WhatsappPlatformConfig,
     toDigits: string,
@@ -360,6 +459,9 @@ class NotificationService {
 
     if (platform.provider === 'twilio') {
       return this.dispatchTwilioWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
+    }
+    if (platform.provider === 'gupshup') {
+      return this.dispatchGupshupWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
     }
     return this.dispatchMetaWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
   }
@@ -449,6 +551,65 @@ class NotificationService {
     return { response: response!, bodyText };
   }
 
+  private async dispatchGupshupWhatsapp(
+    gupshup: GupshupWhatsappConfig,
+    toDigits: string,
+    message: string,
+    category: string,
+    imageUrl: string | null,
+    ctaUrl: string | null,
+    ctaText: string
+  ): Promise<{ response: Response; bodyText: string }> {
+    const templateId = this.gupshupTemplateId(gupshup, category);
+    let response: Response;
+    let bodyText = '';
+
+    const readBody = async (res: Response) => {
+      response = res;
+      bodyText = await res.text();
+    };
+
+    const tryTemplate = async (text: string) => {
+      if (!templateId) return;
+      await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, text));
+    };
+
+    const failed = () => !this.gupshupResponseOk(response!, bodyText);
+
+    if (imageUrl) {
+      await readBody(await this.sendGupshupWhatsappImage(gupshup, toDigits, imageUrl, message));
+      if (failed() && this.outsideSessionError(bodyText)) {
+        const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
+        await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
+        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      } else if (failed()) {
+        const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
+        await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
+        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      }
+    } else if (ctaUrl) {
+      await readBody(await this.sendGupshupWhatsappCta(gupshup, toDigits, message, ctaText, ctaUrl));
+      if (failed()) {
+        const withLink = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
+        await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
+        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
+      }
+    } else {
+      await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, message));
+      if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(message);
+    }
+
+    // Normalize so callers treating !response.ok as failure also catch Gupshup JSON errors.
+    if (failed() && response!.ok) {
+      return {
+        response: new Response(bodyText, { status: 400, statusText: 'Gupshup error' }),
+        bodyText,
+      };
+    }
+
+    return { response: response!, bodyText };
+  }
+
   private absolutePublicUrl(url: string): string | null {
     const raw = String(url || '').trim();
     if (!raw) return null;
@@ -499,6 +660,8 @@ class NotificationService {
       if (typeof metaId === 'string' && metaId) return metaId;
       const twilioSid = parsed?.sid;
       if (typeof twilioSid === 'string' && twilioSid) return twilioSid;
+      const gupshupId = parsed?.messageId;
+      if (typeof gupshupId === 'string' && gupshupId) return gupshupId;
       return null;
     } catch {
       return null;

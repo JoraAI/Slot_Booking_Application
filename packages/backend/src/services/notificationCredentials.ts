@@ -14,7 +14,7 @@ export type ResendConfig = {
   from: string;
 };
 
-export type WhatsappProvider = 'meta' | 'twilio';
+export type WhatsappProvider = 'meta' | 'twilio' | 'gupshup';
 
 export type MetaWhatsappConfig = {
   provider: 'meta';
@@ -36,7 +36,23 @@ export type TwilioWhatsappConfig = {
   displayPhone?: string;
 };
 
-export type WhatsappPlatformConfig = MetaWhatsappConfig | TwilioWhatsappConfig;
+export type GupshupWhatsappConfig = {
+  provider: 'gupshup';
+  apiKey: string;
+  /** Gupshup app name for `src.name` (not the UUID). */
+  appName: string;
+  /** App UUID — list templates / ops; send uses appName. */
+  appId: string;
+  /** Source WhatsApp number digits (country code, no +). */
+  source: string;
+  /** Approved template UUID for utility / booking alerts. */
+  utilityTemplate?: string;
+  /** Approved template UUID for marketing / broadcasts. */
+  marketingTemplate?: string;
+  displayPhone?: string;
+};
+
+export type WhatsappPlatformConfig = MetaWhatsappConfig | TwilioWhatsappConfig | GupshupWhatsappConfig;
 
 export type TenantWhatsAppConfig = {
   status?: string | null;
@@ -54,10 +70,12 @@ type DeliveryBusiness = {
   smtpFromName?: string | null;
 } | null | undefined;
 
-/** Active WhatsApp transport. Default `meta`. Switch with WHATSAPP_PROVIDER=twilio. */
+/** Active WhatsApp transport. Default `meta`. Switch with WHATSAPP_PROVIDER=twilio|gupshup. */
 export function getWhatsappProvider(): WhatsappProvider {
   const raw = String(process.env.WHATSAPP_PROVIDER || 'meta').trim().toLowerCase();
-  return raw === 'twilio' ? 'twilio' : 'meta';
+  if (raw === 'twilio') return 'twilio';
+  if (raw === 'gupshup') return 'gupshup';
+  return 'meta';
 }
 
 function normalizeWhatsappFrom(value: string): string {
@@ -108,14 +126,38 @@ export function resolvePlatformTwilioWhatsapp(): TwilioWhatsappConfig | null {
   };
 }
 
+export function resolvePlatformGupshupWhatsapp(): GupshupWhatsappConfig | null {
+  const apiKey = String(process.env.GUPSHUP_API_KEY || '').trim();
+  const appName = String(process.env.GUPSHUP_APP_NAME || '').trim();
+  const appId = String(
+    process.env.GUPSHUP_APP_ID || 'bf9b2544-1967-469e-be55-79f478e2ae57'
+  ).trim();
+  const source = String(process.env.GUPSHUP_SOURCE || '').replace(/\D/g, '');
+  const utilityTemplate = String(process.env.GUPSHUP_TEMPLATE_UTILITY || '').trim();
+  const marketingTemplate = String(process.env.GUPSHUP_TEMPLATE_MARKETING || '').trim();
+  const displayPhone = String(process.env.GUPSHUP_DISPLAY_PHONE || '').trim();
+  if (!apiKey || !appName || !source) return null;
+  return {
+    provider: 'gupshup',
+    apiKey,
+    appName,
+    appId,
+    source,
+    ...(utilityTemplate ? { utilityTemplate } : {}),
+    ...(marketingTemplate ? { marketingTemplate } : {}),
+    ...(displayPhone ? { displayPhone } : {}),
+  };
+}
+
 /**
  * Shared-platform WhatsApp for the active provider only.
- * Salons never paste Phone Number ID / tokens / Twilio creds.
+ * Salons never paste Phone Number ID / tokens / Twilio / Gupshup creds.
  */
 export function resolvePlatformWhatsapp(): WhatsappPlatformConfig | null {
-  return getWhatsappProvider() === 'twilio'
-    ? resolvePlatformTwilioWhatsapp()
-    : resolvePlatformMetaWhatsapp();
+  const provider = getWhatsappProvider();
+  if (provider === 'twilio') return resolvePlatformTwilioWhatsapp();
+  if (provider === 'gupshup') return resolvePlatformGupshupWhatsapp();
+  return resolvePlatformMetaWhatsapp();
 }
 
 /** @deprecated Use resolvePlatformWhatsapp — kept for older call sites. */
@@ -222,6 +264,10 @@ export function platformWhatsappDisplayPhone(): string | null {
   const platform = resolvePlatformWhatsapp();
   if (!platform) return null;
   if (platform.provider === 'meta') return platform.displayPhone || null;
+  if (platform.provider === 'gupshup') {
+    if (platform.displayPhone) return platform.displayPhone;
+    return platform.source ? `+${platform.source}` : null;
+  }
   const raw = platform.displayPhone || platform.from;
   const digits = String(raw || '').replace(/^whatsapp:/i, '').replace(/\D/g, '');
   return digits ? `+${digits}` : (raw || null);

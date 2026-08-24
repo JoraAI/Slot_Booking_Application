@@ -128,8 +128,8 @@ openssl rand -hex 32   # CRON_SECRET
 
 Do **not** set `PORT=3001` on Render. Leave `PORT` unset so Render injects it (usually `10000`), or set `PORT=10000` explicitly. Listening on `3001` makes the service look live in logs but return `Not Found` on the public URL.
 
-Optional later (Cloudinary media, or a platform-wide SMTP/Meta WhatsApp fallback) — see `packages/backend/.env.example`.
-Owners enter their own SMTP and Meta WhatsApp credentials in Dashboard → Settings; those are stored encrypted in the database.
+Optional later (Cloudinary media, or platform WhatsApp via `WHATSAPP_PROVIDER`) — see `packages/backend/.env.example`.
+Owners configure their own SMTP in Dashboard → Settings (encrypted). WhatsApp uses Reservly’s shared Gupshup/Meta/Twilio number + prepaid wallet.
 
 - `CLOUDINARY_*`
 
@@ -253,7 +253,7 @@ DATABASE_URL="your-neon-url" pnpm --filter backend db:seed
 - ~750 free instance hours / month per workspace
 - Neon free may suspend compute → first DB query after idle can be slow
 - Do **not** use Render free Postgres for long-term data (expires ~30 days) — use Neon/Supabase
-- Meta WhatsApp / Razorpay are paid third parties when you enable them
+- Meta WhatsApp / Gupshup / Razorpay are paid third parties when you enable them
 - No in-process timers — external cron (Step 6) is required
 
 ---
@@ -271,6 +271,13 @@ See `packages/backend/.env.example`.
 | `FRONTEND_URL` | Vercel origin (CORS) |
 | `FRONTEND_PUBLIC_URL` | Links / QR / manage URLs |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | **Platform** Razorpay — WhatsApp wallet recharges (same keys as subscription) |
+| `WHATSAPP_PROVIDER` | Active WhatsApp transport: `meta` (default), `twilio`, or `gupshup` |
+| `META_WHATSAPP_PHONE_NUMBER_ID` / `META_WHATSAPP_ACCESS_TOKEN` | Meta Cloud API (when `WHATSAPP_PROVIDER=meta`) |
+| `META_WHATSAPP_DISPLAY_PHONE` / `META_WHATSAPP_TEMPLATE_*` | Display number + optional template names for outside-session fallback |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Twilio WhatsApp (when `WHATSAPP_PROVIDER=twilio`) |
+| `GUPSHUP_API_KEY` / `GUPSHUP_APP_NAME` / `GUPSHUP_SOURCE` | Gupshup Self-Serve WhatsApp (when `WHATSAPP_PROVIDER=gupshup`) |
+| `GUPSHUP_APP_ID` | Gupshup app UUID (default `bf9b2544-1967-469e-be55-79f478e2ae57`) |
+| `GUPSHUP_TEMPLATE_UTILITY` / `GUPSHUP_TEMPLATE_MARKETING` | Approved Gupshup template UUIDs (single `{{1}}` body recommended) |
 | `META_APP_ID` / `META_APP_SECRET` | Reserved for future Embedded Signup / webhooks (not required today) |
 | `META_WEBHOOK_VERIFY_TOKEN` | Reserved for future Meta webhook (not required today) |
 | `META_API_VERSION` | Meta Graph API version, default `v20.0` (not required today) |
@@ -282,12 +289,15 @@ See `packages/backend/.env.example`.
 
 ### WhatsApp wallet notes
 
+- Shared platform WhatsApp only — owners Enable WhatsApp + top up wallet; they never paste provider secrets.
 - Wallet credits are prepaid, integer paise, never negative. Every WhatsApp send reserves the
-  DB-configured price → calls Meta → finalizes (charge) or releases (refund to wallet).
-- Empty wallet → no Meta call, message logged `INSUFFICIENT_CREDITS`; bookings and email keep working.
-- Per-message prices live in the `WhatsAppPricing` table (seeded at **2×** modeled Meta
-  cost so the same y messages cost clients 2x). Update without a code deploy via
-  `POST /api/internal/whatsapp-pricing` with `x-cron-secret: <CRON_SECRET>`.
+  DB-configured price for the active `WHATSAPP_PROVIDER` → calls Meta/Twilio/Gupshup → finalizes (charge) or releases (refund to wallet).
+- Empty wallet → no provider call, message logged `INSUFFICIENT_CREDITS`; bookings and email keep working.
+- Per-message prices live in the `WhatsAppPricing` table (provider-aware, ≈**1.6×** modeled wholesale).
+  Update without a code deploy via `POST /api/internal/whatsapp-pricing` with `x-cron-secret: <CRON_SECRET>`
+  (`provider`: `meta` \| `twilio` \| `gupshup`).
+- Gupshup templates: create or reuse APPROVED TEXT templates with body `{{1}}` (utility + marketing),
+  then set `GUPSHUP_TEMPLATE_*`. See `docs/whatsapp-wallet-architecture.md`.
 - Admin manual wallet adjustment: `POST /api/internal/wallet/adjust` with `x-cron-secret`.
 - Owners top up from Dashboard → Notifications → WhatsApp Wallet (Razorpay, ₹100 min).
 

@@ -10,7 +10,7 @@ import { publicRouter } from './routes/public';
 import { ownerRouter } from './routes/owner';
 import { internalRouter } from './routes/internal';
 import { serveMediaAsset } from './services/MediaService';
-import { platformEmailConfigured, resolveResend } from './services/notificationCredentials';
+import { platformEmailConfigured, platformWhatsappConfigured, getWhatsappProvider, resolveResend } from './services/notificationCredentials';
 
 const app = express();
 // Render/Fly inject PORT (often 10000). Local default stays 3001.
@@ -281,6 +281,17 @@ const server = app.listen(Number(PORT), '0.0.0.0', () => {
   const emailVia = resolveResend() ? 'Resend' : platformEmailConfigured() ? 'SMTP' : 'MISSING';
   console.log(
     `Platform email (signup/forgot OTP): ${emailVia === 'MISSING' ? 'MISSING — set RESEND_API_KEY (Render free) or SMTP_USER/SMTP_PASS' : emailVia}`
+  );
+  const waProvider = getWhatsappProvider();
+  const waVia = platformWhatsappConfigured()
+    ? waProvider === 'gupshup'
+      ? 'Gupshup'
+      : waProvider === 'twilio'
+        ? 'Twilio'
+        : 'Meta'
+    : 'MISSING';
+  console.log(
+    `Platform WhatsApp: ${waVia === 'MISSING' ? `MISSING — set WHATSAPP_PROVIDER=${waProvider} credentials` : waVia}`
   );
 });
 

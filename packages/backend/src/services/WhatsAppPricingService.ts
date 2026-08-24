@@ -3,7 +3,8 @@ import { getWhatsappProvider, type WhatsappProvider } from './notificationCreden
 
 /**
  * DB-configurable per-message pricing (integer paise), keyed by active WhatsApp provider.
- * Markup target ≈ 1.6× modeled wholesale (Meta fee, or Meta + Twilio $0.005 when on Twilio).
+ * Markup target ≈ 1.6× modeled wholesale (Meta fee; + Twilio $0.005 when on Twilio;
+ * Gupshup defaults to Meta rates).
  */
 class WhatsAppPricingService {
   async getPricePaise(
