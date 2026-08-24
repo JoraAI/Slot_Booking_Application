@@ -300,3 +300,8 @@ See `packages/backend/.env.example`.
 | `.dockerignore` | Keeps image small / excludes secrets |
 | `packages/frontend/vercel.json` | SPA rewrites for deep links |
 | `fly.toml` | Leftover Fly config — ignore if you use Render |
+
+### Analytics export
+- `GET /api/owner/analytics/export?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` returns a CSV
+  attachment (opens in Excel) of that business's bookings in the range (max 5000 rows;
+  `dateFrom` must be ≤ `dateTo`). No extra env vars.

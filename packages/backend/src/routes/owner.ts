@@ -363,7 +363,7 @@ ownerRouter.get('/bookings/:id', async (req: AuthRequest, res: Response) => {
   try {
     const booking = await prisma.booking.findFirst({
       where: { id: req.params.id, businessId: req.owner!.businessId },
-      include: { staff: true },
+      include: { staff: true, service: true },
     });
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     res.json(booking);
@@ -1613,6 +1613,75 @@ ownerRouter.get('/analytics', async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /owner/analytics/export?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD
+ *
+ * Server-generated CSV (opens in Excel) of bookings in [dateFrom, dateTo] keyed
+ * on the appointment date, scoped to the authenticated business. Capped at 5000
+ * rows. Same date-window semantics as AnalyticsService (UTC day bounds).
+ */
+ownerRouter.get('/analytics/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const { dateFrom, dateTo } = req.query as any;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ error: 'dateFrom and dateTo are required (YYYY-MM-DD)' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+      return res.status(400).json({ error: 'Invalid date format (expected YYYY-MM-DD)' });
+    }
+    if (dateFrom > dateTo) {
+      return res.status(400).json({ error: 'dateFrom must be on or before dateTo' });
+    }
+
+    const from = new Date(dateFrom + 'T00:00:00Z');
+    const to = new Date(dateTo + 'T23:59:59Z');
+
+    const bookings = await prisma.booking.findMany({
+      where: { businessId: req.owner!.businessId, date: { gte: from, lte: to } },
+      include: { service: true, staff: true },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      take: 5001, // one past the cap so we can reject oversized exports
+    });
+
+    if (bookings.length > 5000) {
+      return res.status(400).json({ error: 'Too many bookings for this range (max 5000). Narrow the date range.' });
+    }
+
+    const esc = (value: unknown): string => {
+      const text = value == null ? '' : String(value);
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const header = [
+      'date', 'startTime', 'endTime', 'status', 'customerName', 'customerPhone',
+      'customerEmail', 'service', 'staff', 'finalPrice', 'paymentStatus', 'source', 'bookingId',
+    ];
+    const rows = bookings.map((b) => [
+      b.date.toISOString().split('T')[0],
+      b.startTime,
+      b.endTime,
+      b.status,
+      b.customerName,
+      b.customerPhone,
+      b.customerEmail || '',
+      b.serviceNameSnapshot || b.service?.name || '',
+      b.staff?.name || '',
+      b.finalPrice != null ? b.finalPrice : '',
+      b.paymentStatus || '',
+      b.source || '',
+      b.id,
+    ].map(esc));
+
+    const csv = [header.map(esc).join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const filename = `bookings_${dateFrom}_${dateTo}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
  * @openapi
  * /owner/notify/test:
  *   post:
@@ -2196,19 +2265,31 @@ ownerRouter.get('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthRequ
  */
 ownerRouter.post('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
+    const parsed = z.object({
+      name: z.string().trim().min(1).max(120),
+      role: z.string().trim().max(120).nullable().optional(),
+      phone: z.string().trim().max(40).nullable().optional(),
+      email: z.string().trim().email().max(254).nullable().optional(),
+      color: z.string().trim().max(20).optional(),
+      isActive: z.boolean().optional(),
+      salary: z.number().min(0).max(1_000_000_000).nullable().optional(),
+    }).parse(req.body);
+
     const staff = await prisma.staff.create({
       data: {
         businessId: req.owner!.businessId,
-        name: req.body.name,
-        role: req.body.role || null,
-        phone: req.body.phone || null,
-        email: req.body.email || null,
-        color: req.body.color || '#7C3AED',
-        isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+        name: parsed.name,
+        role: parsed.role || null,
+        phone: parsed.phone || null,
+        email: parsed.email || null,
+        color: parsed.color || '#7C3AED',
+        isActive: parsed.isActive !== undefined ? parsed.isActive : true,
+        salary: parsed.salary ?? null,
       },
     });
     res.status(201).json(staff);
   } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message || 'Invalid staff data' });
     res.status(400).json({ error: error.message });
   }
 });
@@ -2251,9 +2332,26 @@ ownerRouter.put('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: Auth
       where: { id: req.params.id, businessId: req.owner!.businessId },
     });
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
-    const updated = await prisma.staff.update({ where: { id: staff.id }, data: req.body });
+
+    const parsed = z.object({
+      name: z.string().trim().min(1).max(120).optional(),
+      role: z.string().trim().max(120).nullable().optional(),
+      phone: z.string().trim().max(40).nullable().optional(),
+      email: z.string().trim().email().max(254).nullable().optional(),
+      color: z.string().trim().max(20).optional(),
+      isActive: z.boolean().optional(),
+      salary: z.number().min(0).max(1_000_000_000).nullable().optional(),
+    }).parse(req.body);
+
+    // Pass explicit null for salary to clear it.
+    const data: any = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value !== undefined) data[key] = value;
+    }
+    const updated = await prisma.staff.update({ where: { id: staff.id }, data });
     res.json(updated);
   } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message || 'Invalid staff data' });
     res.status(error.status || 400).json({ error: error.message });
   }
 });

@@ -188,6 +188,7 @@ export interface Staff {
   email: string | null
   color: string
   isActive: boolean
+  salary?: number | null
 }
 
 export interface ServiceCategory {

@@ -259,6 +259,7 @@ model Staff {
   email        String?
   color        String         @default("#7C3AED") // hex color for calendar display
   isActive     Boolean        @default(true)
+  salary       Float?         // optional monthly/lump salary (INR); owner-only, never exposed publicly
   bookings     Booking[]
   blockedSlots BlockedSlot[]
   services     StaffService[]

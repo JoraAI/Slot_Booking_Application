@@ -318,6 +318,36 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   without `GOOGLE_CLIENT_ID`.
 
 
+## Batch 7 — Booking detail, Analytics Excel export, Staff salary — COMPLETE
+
+- **Booking detail**: `Bookings.tsx` rows are clickable (except the action cell) → in-page
+  detail view with Back to list (status filter preserved). Detail shows customer
+  name/phone/email, service, staff, date, start/end, status, price fields
+  (original/discount/final), payment status + amount, source, form answers (readable),
+  booking id, created at, and the same Complete / No Show / Cancel actions.
+  `GET /api/owner/bookings/:id` now includes `service: true` alongside `staff` (auth-scoped).
+- **Analytics date range + export**: `Analytics.tsx` keeps preset ranges and adds From/To
+  `<input type="date">` pickers (custom range overrides presets; selecting a preset clears
+  the pickers). New `GET /api/owner/analytics/export?dateFrom&dateTo` returns a server-generated
+  CSV attachment (`bookings_YYYY-MM-DD_YYYY-MM-DD.csv`, `text/csv`) scoped to the authenticated
+  business: columns date, startTime, endTime, status, customerName, customerPhone,
+  customerEmail, service, staff, finalPrice, paymentStatus, source, bookingId. Validates
+  date format + `dateFrom <= dateTo`, caps at 5000 rows (400 beyond). Day bounds match the
+  existing `AnalyticsService` convention. The Download button fetches the CSV with the owner
+  token (never in a URL) and triggers a client-side file save.
+- **Staff salary**: `Staff.salary Float?` (migration `20260905000000_staff_salary`, nullable;
+  matches the `finalPrice` INR-float style). Owner `POST/GET/PUT /staff` accept/set/clear
+  `salary` (whitelisted + validated; explicit `null` clears). `Staff.tsx` add-form has an
+  optional salary field and each card shows salary with an inline Set / Edit / Clear editor.
+  **Never exposed publicly**: the public config `staff` array is selected without `salary`
+  (the only place staff is returned publicly); `assignedStaffIds` in services already strips
+  staff objects.
+- **Tests**: `BookingAnalyticsStaff.test.ts` (5) — staff salary create/update/clear via owner
+  routes, public config has no salary key, booking detail returns service/staff/formData/
+  pricing, CSV export contains header + booking + service + staff rows, and range validation
+  (`from > to` → 400).
+
+
 ## Management tokens + optional OTP
 
 - Every new booking gets a 256-bit random management token; only its **SHA-256 hash**

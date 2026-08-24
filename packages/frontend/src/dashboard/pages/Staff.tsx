@@ -15,6 +15,8 @@ export const StaffPage: React.FC = () => {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [color, setColor] = useState(COLORS[0])
+  const [salary, setSalary] = useState('')
+  const [editingSalary, setEditingSalary] = useState<{ id: string; name: string; value: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [hoursEditor, setHoursEditor] = useState<{ id: string; name: string } | null>(null)
 
@@ -28,13 +30,36 @@ export const StaffPage: React.FC = () => {
     if (!name) return
     setLoading(true)
     try {
-      const s = await api.createStaff({ name, role, phone, email, color })
+      const s = await api.createStaff({
+        name, role, phone, email, color,
+        salary: salary.trim() === '' ? null : Number(salary),
+      })
       setStaffList([...staffList, s])
       setShowForm(false)
-      setName(''); setRole(''); setPhone(''); setEmail('')
+      setName(''); setRole(''); setPhone(''); setEmail(''); setSalary('')
       toast.success('Staff added')
     } catch (err: any) {
       toast.error(err.message || 'Failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveSalary = async (id: string) => {
+    if (!editingSalary) return
+    const next = editingSalary.value.trim() === '' ? null : Number(editingSalary.value)
+    if (next !== null && (!Number.isFinite(next) || next < 0)) {
+      toast.error('Enter a valid salary (₹) or clear the field')
+      return
+    }
+    setLoading(true)
+    try {
+      const updated = await api.updateStaff(id, { salary: next })
+      setStaffList((list) => list.map((s) => (s.id === id ? { ...s, ...updated } : s)))
+      setEditingSalary(null)
+      toast.success(next === null ? 'Salary cleared' : 'Salary saved')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not save salary')
     } finally {
       setLoading(false)
     }
@@ -70,6 +95,12 @@ export const StaffPage: React.FC = () => {
             </div>
           </div>
           <div>
+            <label className="block text-sm font-medium mb-1">Salary (₹/month, optional)</label>
+            <input value={salary} onChange={(e) => setSalary(e.target.value)} type="number" min={0} step={100} placeholder="e.g. 25000 — leave blank for none"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Owner-only field — never shown on the public booking page.</p>
+          </div>
+          <div>
             <label className="block text-sm font-medium mb-1">Color</label>
             <div className="flex gap-2">
               {COLORS.map(c => (
@@ -103,6 +134,26 @@ export const StaffPage: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <p className="font-medium">{s.name}</p>
                 {s.role && <p className="text-xs text-gray-500">{s.role}</p>}
+                {s.salary != null && (
+                  <p className="text-xs text-gray-400 mt-0.5">Salary: ₹{Number(s.salary).toLocaleString('en-IN')}/mo</p>
+                )}
+                {editingSalary && editingSalary.id === s.id ? (
+                  <div className="mt-2 space-y-1.5">
+                    <input type="number" min={0} step={100} value={editingSalary.value} autoFocus
+                      onChange={(e) => setEditingSalary((p) => p ? { ...p, value: e.target.value } : p)}
+                      placeholder="e.g. 25000 — empty clears" className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
+                    <div className="flex gap-1.5">
+                      <button onClick={() => void saveSalary(s.id)} disabled={loading} className="px-2 py-1 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50">Save</button>
+                      <button onClick={() => setEditingSalary({ id: s.id, name: s.name, value: '' })} disabled={loading} className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
+                      <button onClick={() => setEditingSalary(null)} className="px-2 py-1 text-xs text-gray-500 hover:underline">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setEditingSalary({ id: s.id, name: s.name, value: s.salary != null ? String(s.salary) : '' })}
+                    className="mt-1 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800" title="Set / edit / clear salary">
+                    {s.salary != null ? '✎ Edit salary' : '+ Set salary'}
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => setHoursEditor({ id: s.id, name: s.name })}

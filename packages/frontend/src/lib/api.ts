@@ -337,6 +337,21 @@ class ApiClient {
     return this.request<AnalyticsData>(`/owner/analytics${qs}`)
   }
 
+  exportAnalyticsCsv(params: { dateFrom: string; dateTo: string }) {
+    const qs = new URLSearchParams(params).toString()
+    return fetch(`${API_BASE}/owner/analytics/export?${qs}`, {
+      headers: { Authorization: `Bearer ${this.getToken()}` },
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        let message = 'Export failed'
+        try { message = JSON.parse(body).error || message } catch { /* plain body */ }
+        throw new Error(message)
+      }
+      return res.blob()
+    })
+  }
+
   getCustomers(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return this.request<{ customers: CustomerContact[]; total: number; page: number; totalPages: number }>(`/owner/customers${qs}`)

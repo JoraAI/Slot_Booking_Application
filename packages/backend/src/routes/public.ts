@@ -370,6 +370,10 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
       }),
       prisma.staff.findMany({
         where: { businessId: business.id, isActive: true },
+        select: {
+          id: true, name: true, role: true, phone: true, email: true, color: true, isActive: true,
+          // salary intentionally excluded — never exposed publicly.
+        },
       }),
       prisma.formField.findMany({
         where: { businessId: business.id },

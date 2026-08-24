@@ -37,11 +37,16 @@ export const Analytics: React.FC = () => {
   const { config } = useStore()
   const upcomingDays = config?.bookingWindowDays || 30
   const [range, setRange] = useState('past-upcoming')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { dateFrom, dateTo } = rangeDays(range, upcomingDays)
+  const preset = rangeDays(range, upcomingDays)
+  const dateFrom = customFrom || preset.dateFrom
+  const dateTo = customTo || preset.dateTo
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -57,6 +62,27 @@ export const Analytics: React.FC = () => {
 
   useEffect(() => { load() }, [load])
 
+  const downloadCsv = async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      if (dateFrom > dateTo) throw new Error('From date must be on or before To date')
+      const blob = await api.exportAnalyticsCsv({ dateFrom, dateTo })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `bookings_${dateFrom}_${dateTo}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setError(e.message || 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const maxHeat = data ? Math.max(1, ...Object.values(data.heatmap).flatMap((d) => Object.values(d))) : 1
   const maxTrend = data && data.sparkline?.length ? Math.max(1, ...data.sparkline) : 1
 
@@ -69,13 +95,25 @@ export const Analytics: React.FC = () => {
             By appointment date · {dateFrom} to {dateTo}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={range} onChange={(e) => setRange(e.target.value)}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={range} onChange={(e) => { setRange(e.target.value); setCustomFrom(''); setCustomTo('') }}
             className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
             {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
+          <span className="text-xs text-gray-400">or custom range:</span>
+          <input type="date" value={customFrom} max={customTo || undefined}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800" />
+          <span className="text-xs text-gray-400">→</span>
+          <input type="date" value={customTo} min={customFrom || undefined}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800" />
           <button onClick={load} disabled={loading} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">
             Refresh
+          </button>
+          <button onClick={() => void downloadCsv()} disabled={exporting || !data}
+            className="text-sm px-3 py-1.5 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
+            {exporting ? 'Downloading…' : 'Download Excel (.csv)'}
           </button>
         </div>
       </div>
