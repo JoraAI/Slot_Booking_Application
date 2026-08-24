@@ -6,12 +6,10 @@ function fmtDate(d: string | Date) {
   return String(d).split('T')[0]
 }
 
-function formatFormData(data: unknown): Array<{ label: string; value: string }> {
-  if (!data || typeof data !== 'object') return []
-  return Object.entries(data as Record<string, unknown>).map(([label, value]) => ({
-    label,
-    value: value == null || value === '' ? '—' : String(value),
-  }))
+function formatAnswerValue(value: unknown): string {
+  if (value == null || value === '') return '—'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -147,14 +145,14 @@ export const Bookings: React.FC = () => {
 
               <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                 <p className="text-xs text-gray-400 mb-2">Form answers</p>
-                {formatFormData(b.formData).length === 0 ? (
+                {!(b.formAnswers?.length) ? (
                   <p className="text-sm text-gray-400">No form data.</p>
                 ) : (
                   <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                    {formatFormData(b.formData).map((row) => (
-                      <div key={row.label}>
+                    {b.formAnswers.map((row) => (
+                      <div key={row.fieldId}>
                         <span className="text-gray-500">{row.label}: </span>
-                        <span className="font-medium">{row.value}</span>
+                        <span className="font-medium">{formatAnswerValue(row.value)}</span>
                       </div>
                     ))}
                   </div>

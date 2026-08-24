@@ -288,6 +288,8 @@ export interface Booking {
   endTime: string
   status: BookingStatus
   formData: Record<string, unknown>
+  /** Resolved form answers (field id → label) from GET /owner/bookings/:id */
+  formAnswers?: Array<{ fieldId: string; label: string; fieldType: string | null; value: unknown }>
   customerName: string
   customerPhone: string
   customerEmail: string | null

@@ -160,6 +160,8 @@ test('BAS-3. Booking detail returns service, staff, formData, and pricing fields
   assert.strictEqual(res.json.service?.name, 'Svc');
   assert.strictEqual(res.json.staff?.name, 'Worker');
   assert.deepStrictEqual(res.json.formData, { 'Preferred stylist': 'Worker', 'Notes': 'hello' });
+  assert.ok(Array.isArray(res.json.formAnswers));
+  assert.ok(res.json.formAnswers.some((a: any) => a.label === 'Preferred stylist' && a.value === 'Worker'));
   assert.strictEqual(res.json.finalPrice, 500);
   assert.ok(res.json.source);
 });

@@ -361,12 +361,38 @@ ownerRouter.get('/bookings', async (req: AuthRequest, res: Response) => {
  */
 ownerRouter.get('/bookings/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const businessId = req.owner!.businessId;
     const booking = await prisma.booking.findFirst({
-      where: { id: req.params.id, businessId: req.owner!.businessId },
+      where: { id: req.params.id, businessId },
       include: { staff: true, service: true },
     });
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    res.json(booking);
+
+    // formData keys are FormField ids — resolve to human labels for the owner UI.
+    const formFields = await prisma.formField.findMany({
+      where: { businessId },
+      select: { id: true, label: true, fieldType: true, order: true },
+      orderBy: { order: 'asc' },
+    });
+    const byId = new Map(formFields.map((f) => [f.id, f]));
+    const raw = (booking.formData && typeof booking.formData === 'object' && !Array.isArray(booking.formData))
+      ? (booking.formData as Record<string, unknown>)
+      : {};
+    const formAnswers = Object.entries(raw).map(([key, value]) => {
+      const field = byId.get(key);
+      return {
+        fieldId: key,
+        label: field?.label || key,
+        fieldType: field?.fieldType || null,
+        value: value == null || value === '' ? null : value,
+      };
+    }).sort((a, b) => {
+      const ao = byId.get(a.fieldId)?.order ?? 999;
+      const bo = byId.get(b.fieldId)?.order ?? 999;
+      return ao - bo;
+    });
+
+    res.json({ ...booking, formAnswers });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
