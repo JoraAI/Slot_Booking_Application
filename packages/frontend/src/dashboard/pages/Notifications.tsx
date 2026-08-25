@@ -504,10 +504,10 @@ export const Notifications: React.FC = () => {
     }
   }
 
-  const Row = ({ ok, label, error }: { ok?: boolean; label: string; error?: string }) => (
+  const Row = ({ ok, label, fix }: { ok?: boolean; label: string; fix?: string }) => (
     <p className={`text-xs ${ok ? 'text-green-600' : 'text-amber-600'}`}>
       {ok ? '✓' : '⚠'} {label}
-      {error ? ` — ${error}` : ''}
+      {!ok && fix ? ` — ${fix}` : ''}
     </p>
   )
 
@@ -523,17 +523,17 @@ export const Notifications: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-2 max-w-lg">
-        <h2 className="text-lg font-semibold">Channel Readiness</h2>
+        <h2 className="text-lg font-semibold">What's set up</h2>
         <p className="text-sm text-gray-500">
-          Customer email is sent from the mailbox you connected in Settings. WhatsApp uses Reservly’s shared number
-          after you enable it and top up the wallet. Channels that are not ready cannot be used.
+          Email goes out from the mailbox you connected in Settings. WhatsApp uses Reservly’s shared number
+          after you enable it and top up the wallet. Items below with a warning need attention before that channel can send.
           Need help? Contact <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
-        <Row ok={status?.smtpConfigured} label="Email ready (mailbox connected in Settings)" error="add email address and password in Settings" />
-        <Row ok={status?.ownerEmailPresent} label="Owner email present (alerts and Reply-To)" />
-        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp ready (shared number)" error="platform WhatsApp not configured — contact support" />
-        <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number set (customer contact)" />
-        <Row ok={status?.frontendUrlConfigured} label="HTTPS frontend URL configured (manage link)" error="FRONTEND_PUBLIC_URL" />
+        <Row ok={status?.smtpConfigured} label="Email mailbox connected" fix="add your email address and password in Settings" />
+        <Row ok={status?.ownerEmailPresent} label="Owner email on file (alerts and replies)" />
+        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp available" fix="not available yet — contact support" />
+        <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number on file" />
+        <Row ok={status?.frontendUrlConfigured} label="Booking manage links ready" fix="contact support to finish setup" />
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-lg">
