@@ -449,12 +449,16 @@ class NotificationService {
   ): Promise<Response> {
     // Meta rejects template variable values that contain newlines / tabs /
     // long runs of spaces — Gupshup still returns "submitted", then delivery fails.
+    // URLs and heavy emoji in {{1}} are also frequent silent drops; keep params plain.
     const param = String(message || '')
-      .replace(/[\r\n\t]+/g, ' · ')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[·•]+/g, ' ')
       .replace(/ {5,}/g, '    ')
-      .replace(/\s+·\s+·/g, ' · ')
+      .replace(/\s{2,}/g, ' ')
       .trim()
-      .slice(0, 1024);
+      .slice(0, 900);
     return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', {
       destination: toDigits,
       template: JSON.stringify({
@@ -837,19 +841,16 @@ class NotificationService {
       );
     }
     if (business.notifyCustomerWhatsapp && booking.customerPhone) {
-      const { address, directions, contact } = this.locationText(business);
-      // Address + directions are included. Manage/cancel is a CTA button when Meta allows it.
+      // Keep WhatsApp body plain/single-line: Gupshup templates put this in {{1}},
+      // and Meta silently drops params with newlines, tabs, or often URLs/emoji spam.
+      const plainService = this.bookingServiceName(booking);
       const body =
-        `✅ Booking Confirmed!\n\n${this.esc(business.name)}\n💇 ${serviceName}${durationMin ? ` (${durationMin})` : ''}\n📅 ${dateStr}\n🕐 ${booking.startTime} - ${booking.endTime}\n${booking.staff ? `👤 ${this.esc(booking.staff.name)}\n` : ''}${booking.finalPrice != null ? `💰 ₹${booking.finalPrice}\n` : ''}${address}${directions}${contact}\nBooking Reference: ${this.esc(booking.id)}`.trim();
-      const manageUrl = typeof booking.managementUrl === 'string' && /^https:\/\//i.test(booking.managementUrl)
-        ? booking.managementUrl
-        : null;
+        `Your appointment at ${business.name} is confirmed for ${dateStr} at ${booking.startTime}. ` +
+        `Service ${plainService}${durationMin ? ` (${durationMin})` : ''}. ` +
+        `Booking reference ${booking.id}.`;
       await this.sendWhatsApp(booking.customerPhone, body, {
         business,
         bookingId: booking.id,
-        cta: manageUrl
-          ? { displayText: 'Cancel booking', url: manageUrl }
-          : null,
       });
     }
 
