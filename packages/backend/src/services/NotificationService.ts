@@ -447,11 +447,19 @@ class NotificationService {
     templateId: string,
     message: string
   ): Promise<Response> {
+    // Meta rejects template variable values that contain newlines / tabs /
+    // long runs of spaces — Gupshup still returns "submitted", then delivery fails.
+    const param = String(message || '')
+      .replace(/[\r\n\t]+/g, ' · ')
+      .replace(/ {5,}/g, '    ')
+      .replace(/\s+·\s+·/g, ' · ')
+      .trim()
+      .slice(0, 1024);
     return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', {
       destination: toDigits,
       template: JSON.stringify({
         id: templateId,
-        params: [message.slice(0, 1024)],
+        params: [param || 'Your booking was updated.'],
       }),
     });
   }
