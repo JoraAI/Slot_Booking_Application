@@ -10,6 +10,7 @@ const navItems = [
   { path: '/dashboard/customers', label: 'Customers', icon: '📒' },
   { path: '/dashboard/calendar', label: 'Calendar', icon: '📅' },
   { path: '/dashboard/services', label: 'Services', icon: '💇' },
+  { path: '/dashboard/products', label: 'Products', icon: '🛍️' },
   { path: '/dashboard/blocks', label: 'Block Slots', icon: '🚫' },
   { path: '/dashboard/waitlist', label: 'Waitlist', icon: '⏳', feature: 'waitlist' as const },
   { path: '/dashboard/staff', label: 'Staff', icon: '👥', feature: 'multiStaff' as const },

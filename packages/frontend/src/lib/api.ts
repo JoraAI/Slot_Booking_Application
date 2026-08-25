@@ -586,6 +586,40 @@ class ApiClient {
     return this.request<import('../types').Staff[]>('/owner/staff')
   }
 
+  getProducts() {
+    return this.request<import('../types').Product[]>('/owner/products')
+  }
+
+  createProduct(data: { name: string; price: number; sku?: string | null; cost?: number | null }) {
+    return this.request<import('../types').Product>('/owner/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  updateProduct(id: string, data: Record<string, unknown>) {
+    return this.request<import('../types').Product>(`/owner/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  deactivateProduct(id: string) {
+    return this.request<import('../types').Product>(`/owner/products/${id}`, { method: 'DELETE' })
+  }
+
+  markProductSale(data: { productId: string; quantity: number; soldAt?: string; note?: string | null; bookingId?: string | null }) {
+    return this.request<import('../types').ProductSale>('/owner/product-sales', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  getProductSales(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return this.request<import('../types').ProductSale[]>(`/owner/product-sales${qs}`)
+  }
+
   createStaff(data: Record<string, unknown>) {
     return this.request<import('../types').Staff>('/owner/staff', {
       method: 'POST',

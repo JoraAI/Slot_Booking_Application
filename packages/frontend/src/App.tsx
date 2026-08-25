@@ -16,6 +16,7 @@ import { Notifications } from './dashboard/pages/Notifications'
 import { Settings } from './dashboard/pages/Settings'
 import { LoginPage } from './dashboard/pages/LoginPage'
 import { ServicesPage } from './dashboard/pages/ServicesPage'
+import { ProductsPage } from './dashboard/pages/Products'
 import { PageBuilder } from './dashboard/pages/PageBuilder'
 import { QRCodePage } from './dashboard/pages/QRCodePage'
 import { CustomersPage } from './dashboard/pages/Customers'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="waitlist" element={<WaitlistPage />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="services" element={<ServicesPage />} />
+        <Route path="products" element={<ProductsPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="form-builder" element={<FormBuilder />} />

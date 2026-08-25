@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import type { Booking } from '../../types'
 
@@ -31,19 +32,53 @@ function StatusActions({ booking, onStatus }: { booking: Booking; onStatus: (id:
 }
 
 export const Bookings: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState(searchParams.get('status') || '')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<Booking | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
+  // Filters from Analytics drill-down (query params); status can also be set by the dropdown.
+  const analyticsFrom = searchParams.get('dateFrom') || ''
+  const analyticsTo = searchParams.get('dateTo') || ''
+  const analyticsStatus = searchParams.get('status') || ''
+  const analyticsSource = searchParams.get('source') || ''
+  const analyticsServiceId = searchParams.get('serviceId') || ''
+  const fromAnalytics = !!(analyticsFrom || analyticsTo || analyticsSource || analyticsServiceId)
+
   useEffect(() => {
-    api.getOwnerBookings(filter ? { status: filter } : undefined)
+    setLoading(true)
+    const params: Record<string, string> = {}
+    if (analyticsFrom) params.dateFrom = analyticsFrom
+    if (analyticsTo) params.dateTo = analyticsTo
+    if (filter) params.status = filter
+    else if (analyticsStatus) params.status = analyticsStatus
+    if (analyticsSource) params.source = analyticsSource
+    if (analyticsServiceId) params.serviceId = analyticsServiceId
+    if (fromAnalytics) params.limit = '500'
+    api.getOwnerBookings(Object.keys(params).length ? params : undefined)
       .then((data) => setBookings(data.bookings))
-      .catch(() => {})
+      .catch(() => setBookings([]))
       .finally(() => setLoading(false))
-  }, [filter])
+  }, [analyticsFrom, analyticsTo, analyticsStatus, analyticsSource, analyticsServiceId, filter, fromAnalytics])
+
+  const changeStatusFilter = (status: string) => {
+    setFilter(status)
+    const next = new URLSearchParams(searchParams)
+    if (status) next.set('status', status)
+    else next.delete('status')
+    setSearchParams(next, { replace: true })
+  }
+
+  const analyticsBackHref = (() => {
+    const q = new URLSearchParams()
+    if (analyticsFrom) q.set('dateFrom', analyticsFrom)
+    if (analyticsTo) q.set('dateTo', analyticsTo)
+    const qs = q.toString()
+    return qs ? `/dashboard/analytics?${qs}` : '/dashboard/analytics'
+  })()
 
   const openDetail = async (id: string) => {
     setSelectedId(id)
@@ -172,9 +207,9 @@ export const Bookings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Bookings</h1>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}
+        <select value={filter || analyticsStatus} onChange={(e) => changeStatusFilter(e.target.value)}
           className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
           <option value="">All Status</option>
           <option value="CONFIRMED">Confirmed</option>
@@ -183,6 +218,22 @@ export const Bookings: React.FC = () => {
           <option value="NO_SHOW">No Show</option>
         </select>
       </div>
+
+      {fromAnalytics && (
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+          <p className="text-gray-700 dark:text-gray-200">
+            Filtered from Analytics
+            {analyticsFrom || analyticsTo ? ` · ${analyticsFrom || '…'} → ${analyticsTo || '…'}` : ''}
+            {(filter || analyticsStatus) ? ` · ${filter || analyticsStatus}` : ''}
+            {analyticsSource ? ` · source ${analyticsSource}` : ''}
+          </p>
+          <Link to={analyticsBackHref}
+            className="shrink-0 px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-white dark:hover:bg-gray-800 font-medium">
+            ← Back to Analytics
+          </Link>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">

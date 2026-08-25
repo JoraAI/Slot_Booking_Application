@@ -157,6 +157,8 @@ model Business {
   wallet                  Wallet?
   walletTransactions      WalletTransaction[]
   whatsappMessageLogs     WhatsAppMessageLog[]
+  products                Product[]
+  productSales            ProductSale[]
   customerNotifications   CustomerNotification[]
   mediaAssets             MediaAsset[]
   createdAt               DateTime  @default(now())
@@ -683,4 +685,40 @@ model WhatsAppMessageLog {
   createdAt         DateTime  @default(now())
 
   @@index([businessId, createdAt])
+}
+
+// ---- Retail products (owner-only; no public storefront in this batch) ----
+
+model Product {
+  id         String        @id @default(cuid())
+  businessId String
+  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  sku        String?
+  price      Float         // INR, mirrors Service.price / finalPrice style
+  cost       Float?
+  isActive   Boolean       @default(true)
+  sales      ProductSale[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([businessId, isActive])
+}
+
+model ProductSale {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity    Int      @default(1) // ≥ 1
+  unitPrice   Float    // price snapshot at sale time
+  totalAmount Float    // quantity × unitPrice
+  soldAt      DateTime @default(now())
+  note        String?
+  bookingId   String?  // optional link to a booking
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, soldAt])
+  @@index([businessId, productId])
 }

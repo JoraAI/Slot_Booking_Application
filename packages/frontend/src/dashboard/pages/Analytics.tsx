@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import type { AnalyticsData } from '../../types'
@@ -33,12 +34,21 @@ function rangeDays(range: string, upcomingDays: number): { dateFrom: string; dat
   return { dateFrom: iso(from), dateTo: iso(to) }
 }
 
+const STATUS_DRILL: Record<string, string> = {
+  confirmed: 'CONFIRMED',
+  completed: 'COMPLETED',
+  cancelled: 'CANCELLED',
+  noShow: 'NO_SHOW',
+}
+
 export const Analytics: React.FC = () => {
   const { config } = useStore()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const upcomingDays = config?.bookingWindowDays || 30
   const [range, setRange] = useState('past-upcoming')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
+  const [customFrom, setCustomFrom] = useState(searchParams.get('dateFrom') || '')
+  const [customTo, setCustomTo] = useState(searchParams.get('dateTo') || '')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -47,6 +57,12 @@ export const Analytics: React.FC = () => {
   const preset = rangeDays(range, upcomingDays)
   const dateFrom = customFrom || preset.dateFrom
   const dateTo = customTo || preset.dateTo
+
+  // Drill to Bookings pre-filtered by this Analytics range (+ optional filters).
+  const drillBookings = (extra?: Record<string, string>) => {
+    const params = new URLSearchParams({ dateFrom, dateTo, ...(extra || {}) })
+    navigate(`/dashboard/bookings?${params.toString()}`)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -131,10 +147,10 @@ export const Analytics: React.FC = () => {
         <>
           {/* KPI cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Kpi label="Total Bookings" value={String(data.totalBookings ?? 0)} icon="📋" />
-            <Kpi label="Cancellation Rate" value={`${data.cancellationRate ?? 0}%`} icon="📉" />
-            <Kpi label="Peak Hour" value={data.peakHour || '--'} icon="🕐" />
-            <Kpi label="Busiest Day" value={data.busiestDay || '--'} icon="📅" />
+            <Kpi label="Total Bookings" value={String(data.totalBookings ?? 0)} icon="📋" onClick={() => drillBookings()} />
+            <Kpi label="Cancellation Rate" value={`${data.cancellationRate ?? 0}%`} icon="📉" onClick={() => drillBookings({ status: 'CANCELLED' })} />
+            <Kpi label="Peak Hour" value={data.peakHour || '--'} icon="🕐" onClick={() => drillBookings()} hint="Click to see bookings in this range" />
+            <Kpi label="Busiest Day" value={data.busiestDay || '--'} icon="📅" onClick={() => drillBookings()} hint="Click to see bookings in this range" />
           </div>
 
           {/* Revenue row */}
@@ -142,7 +158,7 @@ export const Analytics: React.FC = () => {
             <Kpi label="Collected" hint="Paid and not cancelled or refunded" value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`} icon="💰" />
             <Kpi label="Avg Booking Value" value={`₹${(data.avgBookingValue ?? 0).toLocaleString('en-IN')}`} icon="🧾" />
             <Kpi label="Discounts Given" value={`₹${(data.revenueMetrics?.discountsGiven ?? 0).toLocaleString('en-IN')}`} icon="🏷️" />
-            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" />
+            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" onClick={() => drillBookings({ source: 'QR' })} hint="QR-sourced bookings" />
           </div>
 
           {/* Heatmap */}
@@ -190,11 +206,14 @@ export const Analytics: React.FC = () => {
               <div className="space-y-2">
                 {Object.entries(data.statusBreakdown || {}).map(([k, v]) => (
                   <div key={k} className="flex items-center gap-3 text-sm">
-                    <span className="w-24 capitalize">{k}</span>
+                    <span className="w-24 capitalize">{k === 'noShow' ? 'No show' : k}</span>
                     <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-2">
                       <div className="bg-primary rounded-full h-2" style={{ width: `${data.totalBookings ? (v / data.totalBookings) * 100 : 0}%` }} />
                     </div>
-                    <span className="w-10 text-right">{v}</span>
+                    <button onClick={() => drillBookings({ status: STATUS_DRILL[k] || k.toUpperCase() })}
+                      className="w-10 text-right font-medium hover:underline focus:outline-none focus:underline" title={`View ${k} bookings`}>
+                      {v}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -208,10 +227,13 @@ export const Analytics: React.FC = () => {
               {(data.bookingsByService || []).length === 0 && <p className="text-sm text-gray-400">No bookings in this range.</p>}
               <div className="space-y-2">
                 {(data.bookingsByService || []).map((s) => (
-                  <div key={s.name} className="flex items-center justify-between text-sm">
+                  <button key={s.name} disabled={!s.id}
+                    onClick={() => s.id && drillBookings({ serviceId: s.id })}
+                    className="w-full flex items-center justify-between text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-1 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                    title={s.id ? 'View bookings for this service' : ''}>
                     <span>{s.name}</span>
                     <span className="text-gray-500">{s.count} · ₹{s.revenue.toLocaleString('en-IN')}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -220,13 +242,62 @@ export const Analytics: React.FC = () => {
               {(data.bookingsBySource || []).length === 0 && <p className="text-sm text-gray-400">No bookings in this range.</p>}
               <div className="space-y-2">
                 {(data.bookingsBySource || []).map((s) => (
-                  <div key={s.source} className="flex items-center justify-between text-sm">
+                  <button key={s.source} type="button" onClick={() => drillBookings({ source: s.source })}
+                    className="w-full flex items-center justify-between text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary"
+                    title={`View ${s.source} bookings`}>
                     <span>{s.source}</span>
                     <span className="text-gray-500">{s.count}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Product sales */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-lg font-semibold">Product sales</h2>
+                <p className="text-xs text-gray-500">Retail product revenue in {dateFrom} → {dateTo} (soldAt window)</p>
+              </div>
+              <button onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50">
+                Manage products →
+              </button>
+            </div>
+            {(!data.productMetrics || data.productMetrics.totalUnits === 0) ? (
+              <p className="text-sm text-gray-400">No product sales in this range. Record one from the Products page.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-6">
+                  <div>
+                    <p className="text-2xl font-bold">₹{data.productMetrics.totalRevenue.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500">Total revenue</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{data.productMetrics.totalUnits}</p>
+                    <p className="text-xs text-gray-500">Units sold</p>
+                  </div>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-500">Product</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-500">Units</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-500">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {(data.productMetrics.byProduct || []).map((p) => (
+                      <tr key={p.id}>
+                        <td className="px-4 py-2 font-medium">{p.name}</td>
+                        <td className="px-4 py-2">{p.units}</td>
+                        <td className="px-4 py-2">₹{p.revenue.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         </>
       )}
@@ -234,13 +305,23 @@ export const Analytics: React.FC = () => {
   )
 }
 
-function Kpi({ label, value, icon, hint }: { label: string; value: string; icon: string; hint?: string }) {
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+function Kpi({ label, value, icon, hint, onClick }: { label: string; value: string; icon: string; hint?: string; onClick?: () => void }) {
+  const inner = (
+    <>
       <p className="text-lg">{icon}</p>
       <p className="text-xl font-bold mt-1 truncate">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
       {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
-    </div>
+    </>
+  )
+  if (!onClick) {
+    return <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">{inner}</div>
+  }
+  return (
+    <button onClick={onClick} role="button" tabIndex={0} title={`View bookings for ${label.toLowerCase()}`}
+      className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-primary/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
+      {inner}
+      <p className="text-[10px] text-primary mt-0.5">View bookings →</p>
+    </button>
   )
 }

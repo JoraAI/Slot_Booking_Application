@@ -273,11 +273,11 @@ class AnalyticsService {
     const discountUsageCount = activeRows.filter(b => (b.discountAmount || 0) > 0).length;
 
     // Bookings by service (legacy rows appear under "Legacy/Unassigned")
-    const byServiceMap: Record<string, { name: string; count: number; revenue: number }> = {};
+    const byServiceMap: Record<string, { id: string | null; name: string; count: number; revenue: number }> = {};
     revenueRows.forEach(b => {
       const key = b.serviceId || '__legacy__';
       if (!byServiceMap[key]) {
-        byServiceMap[key] = { name: b.serviceNameSnapshot || 'Legacy/Unassigned', count: 0, revenue: 0 };
+        byServiceMap[key] = { id: b.serviceId || null, name: b.serviceNameSnapshot || 'Legacy/Unassigned', count: 0, revenue: 0 };
       }
       byServiceMap[key].count += 1;
       byServiceMap[key].revenue += netCollectedAmount(b);
@@ -320,6 +320,31 @@ class AnalyticsService {
     const qrBookingCount = bySourceMap['QR'] || 0;
     const qrBookingRate = totalBookings > 0 ? Math.round((qrBookingCount / totalBookings) * 10000) / 100 : 0;
 
+    // Product sales in the same appointment-date window (owner-only retail).
+    const productSales = await prisma.productSale.findMany({
+      where: { businessId, soldAt: { gte: from, lte: to } },
+      select: { quantity: true, totalAmount: true, productId: true, product: { select: { name: true } } },
+    });
+    const productByProduct: Record<string, { id: string; name: string; units: number; revenue: number }> = {};
+    let productTotalUnits = 0;
+    let productTotalRevenue = 0;
+    productSales.forEach((s) => {
+      if (!productByProduct[s.productId]) {
+        productByProduct[s.productId] = { id: s.productId, name: s.product?.name || 'Unknown', units: 0, revenue: 0 };
+      }
+      productByProduct[s.productId].units += s.quantity;
+      productByProduct[s.productId].revenue += s.totalAmount;
+      productTotalUnits += s.quantity;
+      productTotalRevenue += s.totalAmount;
+    });
+    const productMetrics = {
+      totalUnits: productTotalUnits,
+      totalRevenue: Math.round(productTotalRevenue * 100) / 100,
+      byProduct: Object.values(productByProduct)
+        .sort((a, b) => b.revenue - a.revenue)
+        .map((p) => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 })),
+    };
+
     return {
       totalBookings,
       cancellationRate,
@@ -352,6 +377,7 @@ class AnalyticsService {
       },
       popularServices,
       avgBookingValue,
+      productMetrics,
     };
   }
 }

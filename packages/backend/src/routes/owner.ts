@@ -3091,3 +3091,172 @@ ownerRouter.post('/media/upload', async (req: AuthRequest, res: Response) => {
     res.status(error.status || 400).json({ error: error.message });
   }
 });
+
+// ---------- Retail products + product sales (owner-only) ----------
+
+/**
+ * GET /owner/products — catalog for the authenticated business (active first).
+ */
+ownerRouter.get('/products', async (req: AuthRequest, res: Response) => {
+  try {
+    const products = await prisma.product.findMany({
+      where: { businessId: req.owner!.businessId },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+    });
+    res.json(products);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/products — add a retail product (name + price required).
+ */
+ownerRouter.post('/products', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = z.object({
+      name: z.string().trim().min(1).max(120),
+      sku: z.string().trim().max(80).nullable().optional(),
+      price: z.number().min(0).max(1_000_000_000),
+      cost: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      isActive: z.boolean().optional(),
+    }).parse(req.body);
+    const product = await prisma.product.create({
+      data: {
+        businessId: req.owner!.businessId,
+        name: parsed.name,
+        sku: parsed.sku || null,
+        price: parsed.price,
+        cost: parsed.cost ?? null,
+        isActive: parsed.isActive ?? true,
+      },
+    });
+    res.status(201).json(product);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message || 'Invalid product data' });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /owner/products/:id — update product. `isActive: false` deactivates
+ * (history is preserved); explicit null clears sku/cost.
+ */
+ownerRouter.put('/products/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.product.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+
+    const parsed = z.object({
+      name: z.string().trim().min(1).max(120).optional(),
+      sku: z.string().trim().max(80).nullable().optional(),
+      price: z.number().min(0).max(1_000_000_000).optional(),
+      cost: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      isActive: z.boolean().optional(),
+    }).parse(req.body);
+
+    const data: any = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value !== undefined) data[key] = value;
+    }
+    const updated = await prisma.product.update({ where: { id: existing.id }, data });
+    res.json(updated);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message || 'Invalid product data' });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /owner/products/:id — soft-deactivate (sales history stays intact).
+ */
+ownerRouter.delete('/products/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.product.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+    const updated = await prisma.product.update({
+      where: { id: existing.id },
+      data: { isActive: false },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/product-sales — mark a retail sale. unitPrice snapshots the
+ * product's current price; totalAmount = quantity × unitPrice.
+ */
+ownerRouter.post('/product-sales', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const parsed = z.object({
+      productId: z.string().min(1),
+      quantity: z.number().int().min(1).max(10_000),
+      soldAt: z.string().datetime({ offset: true }).optional(),
+      note: z.string().trim().max(500).nullable().optional(),
+      bookingId: z.string().nullable().optional(),
+    }).parse(req.body);
+
+    const product = await prisma.product.findFirst({
+      where: { id: parsed.productId, businessId },
+    });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    if (parsed.bookingId) {
+      const booking = await prisma.booking.findFirst({
+        where: { id: parsed.bookingId, businessId },
+        select: { id: true },
+      });
+      if (!booking) return res.status(404).json({ error: 'Booking not found for this business' });
+    }
+
+    const unitPrice = product.price;
+    const sale = await prisma.productSale.create({
+      data: {
+        businessId,
+        productId: product.id,
+        quantity: parsed.quantity,
+        unitPrice,
+        totalAmount: Math.round(unitPrice * parsed.quantity * 100) / 100,
+        soldAt: parsed.soldAt ? new Date(parsed.soldAt) : new Date(),
+        note: parsed.note || null,
+        bookingId: parsed.bookingId || null,
+      },
+    });
+    res.status(201).json(sale);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message || 'Invalid sale data' });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/product-sales?dateFrom=&dateTo= — sales list for the range
+ * (soldAt window), newest first.
+ */
+ownerRouter.get('/product-sales', async (req: AuthRequest, res: Response) => {
+  try {
+    const { dateFrom, dateTo } = req.query as any;
+    const where: any = { businessId: req.owner!.businessId };
+    if (dateFrom || dateTo) {
+      where.soldAt = {};
+      if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) where.soldAt.gte = new Date(dateFrom + 'T00:00:00Z');
+      if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) where.soldAt.lte = new Date(dateTo + 'T23:59:59Z');
+    }
+    const sales = await prisma.productSale.findMany({
+      where,
+      include: { product: { select: { id: true, name: true } } },
+      orderBy: { soldAt: 'desc' },
+      take: 500,
+    });
+    res.json(sales);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});

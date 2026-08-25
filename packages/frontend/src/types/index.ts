@@ -428,13 +428,18 @@ export interface AnalyticsData {
     avgBookingValue: number
     discountUsageCount: number
   }
-  bookingsByService?: { name: string; count: number; revenue: number }[]
+  bookingsByService?: { id?: string | null; name: string; count: number; revenue: number }[]
   revenueByService?: { name: string; revenue: number }[]
   bookingsByCategory?: { name: string; count: number }[]
   bookingsBySource?: { source: string; count: number }[]
   qrBooking?: { count: number; rate: number }
   popularServices?: { name: string; bookings: number }[]
   avgBookingValue?: number
+  productMetrics?: {
+    totalUnits: number
+    totalRevenue: number
+    byProduct: { id: string; name: string; units: number; revenue: number }[]
+  }
 }
 
 export interface BookingWizardState {
@@ -483,4 +488,30 @@ export type WalletTransaction = {
   providerPaymentId: string | null
   description: string | null
   createdAt: string
+}
+
+export interface Product {
+  id: string
+  businessId: string
+  name: string
+  sku: string | null
+  price: number
+  cost: number | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductSale {
+  id: string
+  businessId: string
+  productId: string
+  quantity: number
+  unitPrice: number
+  totalAmount: number
+  soldAt: string
+  note: string | null
+  bookingId: string | null
+  createdAt: string
+  product?: { id: string; name: string }
 }

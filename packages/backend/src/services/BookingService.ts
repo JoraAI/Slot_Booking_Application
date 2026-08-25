@@ -304,6 +304,7 @@ class BookingService {
     dateTo?: string;
     staffId?: string;
     serviceId?: string;
+    source?: string;
     page?: number | string;
     limit?: number | string;
   }) {
@@ -316,6 +317,7 @@ class BookingService {
     if (filters?.status) where.status = filters.status;
     if (filters?.staffId) where.staffId = filters.staffId;
     if (filters?.serviceId) where.serviceId = filters.serviceId;
+    if (filters?.source) where.source = filters.source;
     if (filters?.dateFrom || filters?.dateTo) {
       where.date = {};
       if (filters.dateFrom) where.date.gte = new Date(filters.dateFrom + 'T00:00:00Z');
