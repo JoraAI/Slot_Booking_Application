@@ -579,34 +579,36 @@ class NotificationService {
       bodyText = await res.text();
     };
 
-    const tryTemplate = async (text: string) => {
-      if (!templateId) return;
-      await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, text));
-    };
-
     const failed = () => !this.gupshupResponseOk(response!, bodyText);
+
+    // Gupshup returns HTTP 202 "submitted" for session sends even when the user is
+    // outside the 24h window — delivery then fails asynchronously. Prefer an
+    // APPROVED template whenever configured so booking alerts actually arrive.
+    if (templateId) {
+      let templateBody = message;
+      if (imageUrl) templateBody = `${message}\n\nImage: ${imageUrl}`.trim();
+      else if (ctaUrl) templateBody = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
+      await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, templateBody));
+      if (!failed()) {
+        return { response: response!, bodyText };
+      }
+      // Fall through to session types only if the template call itself failed.
+    }
 
     if (imageUrl) {
       await readBody(await this.sendGupshupWhatsappImage(gupshup, toDigits, imageUrl, message));
-      if (failed() && this.outsideSessionError(bodyText)) {
+      if (failed()) {
         const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
         await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
-        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
-      } else if (failed()) {
-        const withLink = `${message}\n\nImage: ${imageUrl}`.trim();
-        await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
-        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
       }
     } else if (ctaUrl) {
       await readBody(await this.sendGupshupWhatsappCta(gupshup, toDigits, message, ctaText, ctaUrl));
       if (failed()) {
         const withLink = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
         await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, withLink));
-        if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(withLink);
       }
     } else {
       await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, message));
-      if (failed() && this.outsideSessionError(bodyText)) await tryTemplate(message);
     }
 
     // Normalize so callers treating !response.ok as failure also catch Gupshup JSON errors.
