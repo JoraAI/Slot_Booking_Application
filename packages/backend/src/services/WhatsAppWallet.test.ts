@@ -7,6 +7,7 @@ import prisma from '../lib/prisma';
 import { bookingService } from './BookingService';
 import { notificationService } from './NotificationService';
 import { walletService } from './WalletService';
+import { whatsappPricingService } from './WhatsAppPricingService';
 import { ownerRouter } from '../routes/owner';
 import { publicRouter } from '../routes/public';
 import { timeService } from './TimeService';
@@ -20,6 +21,7 @@ let server: any;
 let baseUrl: string;
 const createdBusinessIds: string[] = [];
 const originalFetch = globalThis.fetch;
+const originalWhatsappProvider = process.env.WHATSAPP_PROVIDER;
 
 function dateStr(): string {
   return timeService.toDateStr(new Date(Date.now() + 4 * 86400000), 'UTC');
@@ -99,6 +101,8 @@ function ownerToken(b: any): string {
 }
 
 before(async () => {
+  // Tests mock Meta Graph API; pin provider so local GUPSHUP/Twilio env cannot divert sends.
+  process.env.WHATSAPP_PROVIDER = 'meta';
   const app = express();
   app.use(express.json());
   app.use('/api/owner', ownerRouter);
@@ -111,10 +115,13 @@ before(async () => {
 beforeEach(() => {
   business = null;
   globalThis.fetch = originalFetch;
+  process.env.WHATSAPP_PROVIDER = 'meta';
 });
 
 after(async () => {
   globalThis.fetch = originalFetch;
+  if (originalWhatsappProvider === undefined) delete process.env.WHATSAPP_PROVIDER;
+  else process.env.WHATSAPP_PROVIDER = originalWhatsappProvider;
   await prisma.business.deleteMany({ where: { id: { in: createdBusinessIds } } });
   createdBusinessIds.length = 0;
   server.close();
@@ -268,15 +275,17 @@ test('W5-6. Wallet-funded send to a mocked Meta → ACCEPTED log + provider id +
   const { booking } = await makeBooking(business);
   await notificationService.sendBookingConfirmation(booking, business);
 
+  const utilityPaise = await whatsappPricingService.getPricePaise('UTILITY');
+  assert.ok(utilityPaise != null && utilityPaise > 0, 'UTILITY pricing row required');
   const balance = await walletService.balance(business.id);
-  assert.strictEqual(balance, 900, '1000 - 100 (seeded UTILITY at 2× markup)');
+  assert.strictEqual(balance, 1000 - utilityPaise!, `1000 - ${utilityPaise} (current UTILITY wallet price)`);
   const log = await prisma.whatsAppMessageLog.findFirst({
     where: { businessId: business.id, bookingId: booking.id },
     orderBy: { createdAt: 'desc' },
   });
   assert.strictEqual(log?.status, 'ACCEPTED');
   assert.strictEqual(log?.providerMessageId, 'wamid.ACCEPTED1');
-  assert.strictEqual(log?.costPaise, 50);
+  assert.strictEqual(log?.costPaise, utilityPaise);
   const charge = await prisma.walletTransaction.findFirst({ where: { businessId: business.id, type: 'WHATSAPP_CHARGE' } });
   assert.ok(charge);
 });

@@ -189,6 +189,9 @@ class WalletService {
     } catch (e: any) {
       if (e?.code === 'P2002') {
         const winner = await prisma.walletTransaction.findUnique({ where: { providerPaymentId } });
+        if (winner && winner.businessId !== businessId) {
+          throw new Error('Payment reference already used by another account');
+        }
         const wallet = await this.getOrCreate(businessId);
         return { alreadyCredited: true, balancePaise: wallet.balancePaise, transactionId: winner?.id || '' };
       }

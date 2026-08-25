@@ -2136,13 +2136,12 @@ ownerRouter.post('/subscription/verify', async (req: AuthRequest, res: Response)
     if (!Number.isInteger(orderPaise) || orderPaise <= 0) {
       return res.status(400).json({ error: 'Invalid order amount' });
     }
-    // Allow verify when already paid this period (dueInr === 0) only if order amount matches a prior due;
-    // otherwise require order amount to match current due.
-    if (view.dueInr > 0 && orderPaise !== expectedPaise) {
-      return res.status(400).json({ error: 'Payment amount does not match subscription due' });
-    }
+    // Idempotent: period already paid — do not activate again (order ownership already verified).
     if (view.dueInr <= 0) {
       return res.json({ ok: true, dueInr: 0, plan: view.plan, alreadyPaid: true });
+    }
+    if (orderPaise !== expectedPaise) {
+      return res.status(400).json({ error: 'Payment amount does not match subscription due' });
     }
 
     const r = await subscriptionService.markPaid(businessId);
