@@ -293,9 +293,10 @@ See `packages/backend/.env.example`.
 - Wallet credits are prepaid, integer paise, never negative. Every WhatsApp send reserves the
   DB-configured price for the active `WHATSAPP_PROVIDER` → calls Meta/Twilio/Gupshup → finalizes (charge) or releases (refund to wallet).
 - Empty wallet → no provider call, message logged `INSUFFICIENT_CREDITS`; bookings and email keep working.
-- Per-message prices live in the `WhatsAppPricing` table (provider-aware, ≈**1.6×** modeled wholesale).
+- Per-message prices live in the `WhatsAppPricing` table (provider-aware, ≈**1.2×** modeled wholesale).
   Update without a code deploy via `POST /api/internal/whatsapp-pricing` with `x-cron-secret: <CRON_SECRET>`
   (`provider`: `meta` \| `twilio` \| `gupshup`).
+  Owners see wallet balance only — per-message rates are not shown in the dashboard.
 - Gupshup templates: create or reuse APPROVED TEXT templates with body `{{1}}` (utility + marketing),
   then set `GUPSHUP_TEMPLATE_*`. See `docs/whatsapp-wallet-architecture.md`.
 - Admin manual wallet adjustment: `POST /api/internal/wallet/adjust` with `x-cron-secret`.

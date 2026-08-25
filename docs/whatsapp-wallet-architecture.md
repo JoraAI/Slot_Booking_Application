@@ -18,19 +18,19 @@ Prepaid Wallet (paise) → reserve → send → finalize/release
 - Empty wallet → `INSUFFICIENT_CREDITS`, no provider call; bookings + email still work.
 - Provider is **invisible** to owners; flip `WHATSAPP_PROVIDER` in backend env.
 
-## Pricing (≈1.6× wholesale, provider-aware)
+## Pricing (≈1.2× wholesale, provider-aware)
 
-Seeded tenant charges (INR/India, paise). Wholesale ≈ Meta category fee; Twilio adds ~$0.005 (~42p). Gupshup uses the same tenant rates as Meta by default (adjust via internal API if needed):
+Seeded tenant charges (INR/India, paise). Wholesale ≈ Meta category fee; Twilio adds ~$0.005 (~42p). Gupshup uses the same tenant rates as Meta by default (adjust via internal API if needed). **Not shown in the owner dashboard.**
 
-| Category | Meta / Gupshup (1.6×) | Twilio (1.6×) |
+| Category | Meta / Gupshup (1.2×) | Twilio (1.2×) |
 |----------|----------------------|---------------|
-| UTILITY | ₹0.80 (80p) | ₹1.47 (147p) |
-| MARKETING | ₹1.36 (136p) | ₹2.03 (203p) |
-| SERVICE | ₹0.64 (64p) | ₹1.31 (131p) |
-| AUTHENTICATION | ₹0.48 (48p) | ₹1.15 (115p) |
+| UTILITY | ₹0.60 (60p) | ₹1.10 (110p) |
+| MARKETING | ₹1.02 (102p) | ₹1.52 (152p) |
+| SERVICE | ₹0.48 (48p) | ₹0.98 (98p) |
+| AUTHENTICATION | ₹0.36 (36p) | ₹0.86 (86p) |
 
 - Booking / reminder / cancel / waitlist / test → **UTILITY**
-- Owner custom / broadcast WhatsApp → **MARKETING** (UI highlights higher cost)
+- Owner custom / broadcast WhatsApp → **MARKETING**
 
 You still pay Meta / Twilio / Gupshup separately; the wallet margin is yours.
 

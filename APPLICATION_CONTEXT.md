@@ -449,10 +449,9 @@ Razorpay (`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`), Cloudinary
   credentials (Settings → Advanced). A guided Meta Embedded Signup flow needs Meta
   app/Tech Provider assets (`META_APP_ID`/`META_APP_SECRET`) and is future work.
 - **Wallet pricing is DB-seeded, not authoritative Meta billing**: `WhatsAppPricing`
-  rows for IN/INR use a **2× markup** over modeled Meta cost (UTILITY 100p / MARKETING 170p /
-  SERVICE 80p / AUTHENTICATION 60p) so the same message volume costs clients 2x. Adjust via
-  admin pricing route without a code change.
-  are editable defaults; update them to Meta's actual per-conversation rates via
+  rows for IN/INR use a **≈1.2× markup** over modeled wholesale (Meta fee; + Twilio fee when
+  on Twilio; Gupshup mirrors Meta). Owners see wallet balance only — per-message rates are
+  not shown in the dashboard. Adjust via
   `POST /api/internal/whatsapp-pricing` (`x-cron-secret`) or a migration. WhatsApp
   is skipped (logged `FAILED`) when no active pricing row matches a category.
 - **No Meta webhook yet**: `WhatsAppMessageLog` records Meta **acceptance**

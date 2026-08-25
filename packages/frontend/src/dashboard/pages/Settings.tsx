@@ -392,13 +392,12 @@ export const Settings: React.FC = () => {
               <p className="text-gray-600 dark:text-gray-400 mt-0.5">
                 Messages go out from Reservly’s WhatsApp number. You do not need your own WhatsApp Business API setup.
                 Add wallet credits, enable WhatsApp, then turn on “WhatsApp customers” below.
-                Custom / promo WhatsApps cost more per message than booking alerts — see Notifications for rates.
               </p>
               {waStatus?.wallet && (
                 <p className="text-gray-500 mt-1">
                   Wallet: ₹{(waStatus.wallet.balancePaise / 100).toFixed(2)}
                   {waStatus.wallet.lowBalance ? ' · low balance — top up soon' : ''}
-                  {waStatus.wallet.estimatedMessages != null ? ` · ≈ ${waStatus.wallet.estimatedMessages} utility msgs left` : ''}
+                  {waStatus.wallet.estimatedMessages != null ? ` · ≈ ${waStatus.wallet.estimatedMessages} messages left` : ''}
                 </p>
               )}
             </div>

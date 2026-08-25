@@ -60,8 +60,7 @@ export const SetupGuide: React.FC = () => (
           <strong>WhatsApp:</strong> messages are sent from <strong>Reservly’s shared</strong> number
           (you never paste API credentials). Enable WhatsApp in Settings, top up your
           <Link className="text-primary underline" to="/dashboard/notifications"> WhatsApp Wallet</Link>,
-          then tick “WhatsApp customers”. Booking alerts use the normal rate; custom / promo WhatsApps cost more
-          (shown on the Notifications page). Empty wallet → WhatsApp skips; bookings and email keep working.
+          then tick “WhatsApp customers”. Empty wallet → WhatsApp skips; bookings and email keep working.
         </li>
         <li>
           Tick which channels to use (email customers, email me, WhatsApp customers, WhatsApp me),

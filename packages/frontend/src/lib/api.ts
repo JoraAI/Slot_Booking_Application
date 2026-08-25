@@ -481,7 +481,6 @@ class ApiClient {
       platformReady?: boolean
       optedIn?: boolean
       wallet: WalletView
-      pricing: Array<{ category: string; country: string; pricePaise: number }>
     }>('/owner/whatsapp/status')
   }
 
@@ -497,7 +496,7 @@ class ApiClient {
   }
 
   getWhatsappWallet() {
-    return this.request<WalletView & { pricing: Array<{ category: string; country: string; pricePaise: number }> }>('/owner/whatsapp-wallet')
+    return this.request<WalletView>('/owner/whatsapp-wallet')
   }
 
   getWhatsappWalletTransactions(limit = 50) {

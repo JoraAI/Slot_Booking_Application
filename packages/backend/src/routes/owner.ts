@@ -1794,7 +1794,6 @@ ownerRouter.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
       whatsappPricingService.list(),
     ]);
     const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
-    const marketingPrice = pricing.find((p) => p.category === 'MARKETING')?.pricePaise ?? null;
     const wallet = await walletService.getView(businessId, utilityPrice);
     const platformReady = platformWhatsappConfigured();
     const optedIn = tenantWhatsappOptedIn(config);
@@ -1806,9 +1805,6 @@ ownerRouter.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
       platformReady,
       optedIn,
       wallet,
-      pricing,
-      utilityPricePaise: utilityPrice,
-      marketingPricePaise: marketingPrice,
     });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -1885,9 +1881,8 @@ ownerRouter.get('/whatsapp-wallet', async (req: AuthRequest, res: Response) => {
     const businessId = req.owner!.businessId;
     const pricing = await whatsappPricingService.list();
     const utilityPrice = pricing.find((p) => p.category === 'UTILITY')?.pricePaise ?? null;
-    const marketingPrice = pricing.find((p) => p.category === 'MARKETING')?.pricePaise ?? null;
     const wallet = await walletService.getView(businessId, utilityPrice);
-    res.json({ ...wallet, pricing, utilityPricePaise: utilityPrice, marketingPricePaise: marketingPrice });
+    res.json(wallet);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
