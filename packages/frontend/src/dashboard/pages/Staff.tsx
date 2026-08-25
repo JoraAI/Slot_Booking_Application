@@ -6,40 +6,119 @@ import toast from 'react-hot-toast'
 const COLORS = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6']
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+type StaffForm = {
+  name: string
+  role: string
+  phone: string
+  email: string
+  color: string
+  salary: string
+  isActive: boolean
+}
+
+const emptyForm = (): StaffForm => ({
+  name: '',
+  role: '',
+  phone: '',
+  email: '',
+  color: COLORS[0],
+  salary: '',
+  isActive: true,
+})
+
 export const StaffPage: React.FC = () => {
   const { config } = useStore()
   const [staffList, setStaffList] = useState<any[]>([])
   const [showForm, setShowForm] = useState(false)
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [color, setColor] = useState(COLORS[0])
-  const [salary, setSalary] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<StaffForm>(emptyForm())
   const [editingSalary, setEditingSalary] = useState<{ id: string; name: string; value: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [hoursEditor, setHoursEditor] = useState<{ id: string; name: string } | null>(null)
 
-  // Seed the list from the owner config (fetched by DashboardLayout), then keep
-  // in-session additions on top.
   useEffect(() => {
     if (config?.staff?.length) setStaffList(config.staff)
   }, [config])
 
-  const handleAdd = async () => {
-    if (!name) return
+  const openAdd = () => {
+    setEditingId(null)
+    setForm(emptyForm())
+    setShowForm(true)
+  }
+
+  const openEdit = (s: any) => {
+    setEditingId(s.id)
+    setForm({
+      name: s.name || '',
+      role: s.role || '',
+      phone: s.phone || '',
+      email: s.email || '',
+      color: s.color || COLORS[0],
+      salary: s.salary != null ? String(s.salary) : '',
+      isActive: s.isActive !== false,
+    })
+    setShowForm(true)
+    setEditingSalary(null)
+  }
+
+  const closeForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setForm(emptyForm())
+  }
+
+  const staffPayload = () => {
+    const salary = form.salary.trim() === '' ? null : Number(form.salary)
+    if (salary !== null && (!Number.isFinite(salary) || salary < 0)) {
+      throw new Error('Enter a valid salary (₹) or leave it blank')
+    }
+    return {
+      name: form.name.trim(),
+      role: form.role.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      color: form.color,
+      isActive: form.isActive,
+      salary,
+    }
+  }
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast.error('Name is required')
+      return
+    }
     setLoading(true)
     try {
-      const s = await api.createStaff({
-        name, role, phone, email, color,
-        salary: salary.trim() === '' ? null : Number(salary),
-      })
-      setStaffList([...staffList, s])
-      setShowForm(false)
-      setName(''); setRole(''); setPhone(''); setEmail(''); setSalary('')
-      toast.success('Staff added')
+      const payload = staffPayload()
+      if (editingId) {
+        const updated = await api.updateStaff(editingId, payload)
+        setStaffList((list) => list.map((s) => (s.id === editingId ? { ...s, ...updated } : s)))
+        toast.success('Staff updated')
+      } else {
+        const created = await api.createStaff(payload)
+        setStaffList((list) => [...list, created])
+        toast.success('Staff added')
+      }
+      closeForm()
     } catch (err: any) {
-      toast.error(err.message || 'Failed')
+      toast.error(err.message || 'Failed to save staff')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (s: any) => {
+    if (!window.confirm(`Delete "${s.name}"? Past bookings stay; this staff is removed from future selection.`)) return
+    setLoading(true)
+    try {
+      await api.deleteStaff(s.id)
+      setStaffList((list) => list.filter((row) => row.id !== s.id))
+      if (editingId === s.id) closeForm()
+      if (hoursEditor?.id === s.id) setHoursEditor(null)
+      toast.success('Staff deleted')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not delete staff')
     } finally {
       setLoading(false)
     }
@@ -69,52 +148,66 @@ export const StaffPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Staff</h1>
-        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
+        <button onClick={openAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
           + Add Staff
         </button>
       </div>
 
       {showForm && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4 max-w-lg">
+          <h2 className="text-lg font-semibold">{editingId ? 'Edit staff' : 'Add staff'}</h2>
           <div>
             <label className="block text-sm font-medium mb-1">Name *</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Role</label>
-            <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Senior Stylist" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <input value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="Senior Stylist"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Phone</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} type="tel"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Email</label>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} type="email"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Salary (₹/month, optional)</label>
-            <input value={salary} onChange={(e) => setSalary(e.target.value)} type="number" min={0} step={100} placeholder="e.g. 25000 — leave blank for none"
+            <input value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} type="number" min={0} step={100}
+              placeholder="e.g. 25000 — leave blank for none"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">Owner-only field — never shown on the public booking page.</p>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Color</label>
             <div className="flex gap-2">
-              {COLORS.map(c => (
-                <button key={c} onClick={() => setColor(c)}
-                  className={`w-8 h-8 rounded-full ${color === c ? 'ring-2 ring-offset-2 ring-primary' : ''}`}
+              {COLORS.map((c) => (
+                <button key={c} type="button" onClick={() => setForm((f) => ({ ...f, color: c }))}
+                  className={`w-8 h-8 rounded-full ${form.color === c ? 'ring-2 ring-offset-2 ring-primary' : ''}`}
                   style={{ backgroundColor: c }} />
               ))}
             </div>
           </div>
+          {editingId && (
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                className="rounded border-gray-300" />
+              Active (shown on booking page)
+            </label>
+          )}
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={loading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
-              {loading ? 'Adding...' : 'Add Staff'}
+            <button onClick={() => void handleSave()} disabled={loading}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {loading ? 'Saving...' : editingId ? 'Save changes' : 'Add Staff'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">Cancel</button>
+            <button onClick={closeForm} className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">Cancel</button>
           </div>
         </div>
       )}
@@ -127,41 +220,68 @@ export const StaffPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {staffList.map((s) => (
-            <div key={s.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold" style={{ backgroundColor: s.color }}>
-                {s.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+            <div key={s.id} className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3 ${s.isActive === false ? 'opacity-60' : ''}`}>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shrink-0" style={{ backgroundColor: s.color }}>
+                  {s.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium">{s.name}</p>
+                  {s.role && <p className="text-xs text-gray-500">{s.role}</p>}
+                  {s.isActive === false && <p className="text-xs text-amber-600 mt-0.5">Inactive</p>}
+                  {s.salary != null && (
+                    <p className="text-xs text-gray-400 mt-0.5">Salary: ₹{Number(s.salary).toLocaleString('en-IN')}/mo</p>
+                  )}
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium">{s.name}</p>
-                {s.role && <p className="text-xs text-gray-500">{s.role}</p>}
-                {s.salary != null && (
-                  <p className="text-xs text-gray-400 mt-0.5">Salary: ₹{Number(s.salary).toLocaleString('en-IN')}/mo</p>
-                )}
-                {editingSalary && editingSalary.id === s.id ? (
-                  <div className="mt-2 space-y-1.5">
-                    <input type="number" min={0} step={100} value={editingSalary.value} autoFocus
-                      onChange={(e) => setEditingSalary((p) => p ? { ...p, value: e.target.value } : p)}
-                      placeholder="e.g. 25000 — empty clears" className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
-                    <div className="flex gap-1.5">
-                      <button onClick={() => void saveSalary(s.id)} disabled={loading} className="px-2 py-1 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50">Save</button>
-                      <button onClick={() => setEditingSalary({ id: s.id, name: s.name, value: '' })} disabled={loading} className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
-                      <button onClick={() => setEditingSalary(null)} className="px-2 py-1 text-xs text-gray-500 hover:underline">Cancel</button>
-                    </div>
+
+              {editingSalary && editingSalary.id === s.id ? (
+                <div className="space-y-1.5">
+                  <input type="number" min={0} step={100} value={editingSalary.value} autoFocus
+                    onChange={(e) => setEditingSalary((p) => (p ? { ...p, value: e.target.value } : p))}
+                    placeholder="e.g. 25000 — empty clears"
+                    className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
+                  <div className="flex gap-1.5">
+                    <button onClick={() => void saveSalary(s.id)} disabled={loading}
+                      className="px-2 py-1 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50">Save</button>
+                    <button onClick={() => setEditingSalary({ id: s.id, name: s.name, value: '' })} disabled={loading}
+                      className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
+                    <button onClick={() => setEditingSalary(null)} className="px-2 py-1 text-xs text-gray-500 hover:underline">Cancel</button>
                   </div>
-                ) : (
-                  <button onClick={() => setEditingSalary({ id: s.id, name: s.name, value: s.salary != null ? String(s.salary) : '' })}
-                    className="mt-1 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800" title="Set / edit / clear salary">
-                    {s.salary != null ? '✎ Edit salary' : '+ Set salary'}
-                  </button>
-                )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingSalary({ id: s.id, name: s.name, value: s.salary != null ? String(s.salary) : '' })}
+                  className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+                  title="Set / edit / clear salary"
+                >
+                  {s.salary != null ? '✎ Edit salary' : '+ Set salary'}
+                </button>
+              )}
+
+              <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  onClick={() => setHoursEditor({ id: s.id, name: s.name })}
+                  className="px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-md text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+                  title="Set per-day working hours for this staff member"
+                >
+                  🕐 Hours
+                </button>
+                <button
+                  onClick={() => openEdit(s)}
+                  className="px-2.5 py-1.5 text-xs font-medium text-primary rounded-md hover:bg-primary/10"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => void handleDelete(s)}
+                  disabled={loading}
+                  className="px-2.5 py-1.5 text-xs text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
+                  aria-label={`Delete ${s.name}`}
+                >
+                  Delete
+                </button>
               </div>
-              <button
-                onClick={() => setHoursEditor({ id: s.id, name: s.name })}
-                className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
-                title="Set per-day working hours for this staff member"
-              >
-                🕐 Hours
-              </button>
             </div>
           ))}
         </div>

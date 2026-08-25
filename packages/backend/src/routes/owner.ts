@@ -2420,7 +2420,16 @@ ownerRouter.delete('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: A
       where: { id: req.params.id, businessId: req.owner!.businessId },
     });
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
-    await prisma.staff.delete({ where: { id: staff.id } });
+
+    // StaffService / StaffWorkingHour / BlockedSlot cascade via Prisma FK.
+    // Booking + PaymentAttempt SetNull. WaitlistEntry.staffId has no FK — clear orphans here.
+    await prisma.$transaction([
+      prisma.waitlistEntry.updateMany({
+        where: { businessId: req.owner!.businessId, staffId: staff.id },
+        data: { staffId: null },
+      }),
+      prisma.staff.delete({ where: { id: staff.id } }),
+    ]);
     res.json({ success: true });
   } catch (error: any) {
     res.status(error.status || 400).json({ error: error.message });
