@@ -491,8 +491,8 @@ export const Settings: React.FC = () => {
           {[
             { key: 'notifyCustomerEmail', label: 'Email customers' },
             { key: 'notifyOwnerEmail', label: 'Email me on bookings' },
-            { key: 'notifyCustomerWhatsapp', label: 'WhatsApp customers' },
-            { key: 'notifyOwnerWhatsapp', label: 'WhatsApp me on bookings' },
+            { key: 'notifyCustomerWhatsapp', label: 'WhatsApp customers on new bookings' },
+            { key: 'notifyOwnerWhatsapp', label: 'WhatsApp me on new bookings' },
           ].map((row) => (
             <label key={row.key} className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={Boolean((form as any)[row.key])}
@@ -502,6 +502,9 @@ export const Settings: React.FC = () => {
             </label>
           ))}
         </div>
+        <p className="text-xs text-gray-400 pt-1">
+          WhatsApp is used for new booking alerts and owner promos. Cancellations are emailed only.
+        </p>
       </div>
 
       {/* Feature Toggles */}

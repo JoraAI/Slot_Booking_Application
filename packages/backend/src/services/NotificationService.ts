@@ -965,12 +965,7 @@ class NotificationService {
         { business }
       );
     }
-    if (business.notifyCustomerWhatsapp && booking.customerPhone) {
-      await this.sendWhatsApp(booking.customerPhone,
-        `❌ Booking cancelled\n\n${business.name}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${refund && refund.amount > 0 ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}`,
-        { business, bookingId: booking.id }
-      );
-    }
+    // Cancellations are email-only — WhatsApp is reserved for booking confirms + promos.
 
     // ONE owner message: paid amount + durable refund state + manual-action
     // warning when applicable.
@@ -988,12 +983,6 @@ class NotificationService {
         ${refundLine}
         ${manualAction}`,
         { business }
-      );
-    }
-    if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
-      await this.sendWhatsApp(business.ownerWhatsapp,
-        `❌ Booking cancelled\n\n${booking.customerName}\n💇 ${serviceName}\n📅 ${dateStr} at ${booking.startTime}${booking.paymentAmount ? `\n💰 Paid: ₹${booking.paymentAmount}` : ''}${refund ? `\n↩️ Refund: ${refund.status} (₹${refund.amount})` : ''}${refund && refund.status === 'FAILED' ? '\n⚠️ Manual action needed — refund failed.' : ''}`,
-        { business, bookingId: booking.id }
       );
     }
   }
