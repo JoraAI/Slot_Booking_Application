@@ -34,6 +34,15 @@ type SendOpts = {
   customerId?: string;
   /** When true, insufficient wallet credits throw (async jobs like reminders that must retry). */
   throwOnInsufficient?: boolean;
+  /**
+   * Structured Gupshup/Meta template placeholders (order of occurrence).
+   * When set with a booking template, used instead of stuffing the full message into {{1}}.
+   */
+  templateParams?: string[];
+  /** Dynamic Visit Website button suffix (path + query after the approved base URL). */
+  templateButtonUrlSuffix?: string;
+  /** Override template UUID (defaults to booking template, then utility). */
+  templateId?: string;
 };
 
 class NotificationService {
@@ -441,29 +450,48 @@ class NotificationService {
     });
   }
 
+  /** Sanitize a single template variable for Meta (no newlines/tabs/URL spam). */
+  private sanitizeTemplateParam(value: string, maxLen = 200): string {
+    return String(value || '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/ {5,}/g, '    ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, maxLen);
+  }
+
+  /** Path+query after origin for Visit Website dynamic suffix. */
+  private manageUrlButtonSuffix(manageUrl: string | null | undefined): string {
+    if (!manageUrl) return 'b/samplecode/bookings/sampleid/manage';
+    try {
+      const u = new URL(manageUrl);
+      return `${u.pathname.replace(/^\//, '')}${u.search}`.replace(/^\s+/, '');
+    } catch {
+      return String(manageUrl).replace(/^https?:\/\/[^/]+\//i, '').replace(/^\s+/, '');
+    }
+  }
+
   private async sendGupshupWhatsappTemplate(
     gupshup: GupshupWhatsappConfig,
     toDigits: string,
     templateId: string,
-    message: string
+    params: string[]
   ): Promise<Response> {
-    // Meta rejects template variable values that contain newlines / tabs /
-    // long runs of spaces — Gupshup still returns "submitted", then delivery fails.
-    // URLs and heavy emoji in {{1}} are also frequent silent drops; keep params plain.
-    const param = String(message || '')
-      .replace(/https?:\/\/\S+/gi, '')
-      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
-      .replace(/[\r\n\t]+/g, ' ')
-      .replace(/[·•]+/g, ' ')
-      .replace(/ {5,}/g, '    ')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-      .slice(0, 900);
+    // Body vars: sanitize Meta-sensitive chars. Last param may be Visit Website
+    // URL suffix (path+query) — keep as-is aside from trim.
+    const raw = params.length ? params : ['Your booking was updated.'];
+    const cleaned = raw.map((p, i) => {
+      const isLikelyButtonSuffix = i === raw.length - 1 && /^b\//i.test(String(p).trim());
+      if (isLikelyButtonSuffix) return String(p).trim().slice(0, 2000);
+      return this.sanitizeTemplateParam(p, 900);
+    });
     return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', {
       destination: toDigits,
       template: JSON.stringify({
         id: templateId,
-        params: [param || 'Your booking was updated.'],
+        params: cleaned,
       }),
     });
   }
@@ -473,7 +501,13 @@ class NotificationService {
     toDigits: string,
     message: string,
     category: string,
-    opts: { imageUrl?: string | null; cta?: { displayText: string; url: string } | null }
+    opts: {
+      imageUrl?: string | null;
+      cta?: { displayText: string; url: string } | null;
+      templateParams?: string[];
+      templateButtonUrlSuffix?: string;
+      templateId?: string;
+    }
   ): Promise<{ response: Response; bodyText: string }> {
     const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
     const ctaUrl = opts.cta?.url && /^https:\/\//i.test(opts.cta.url) ? opts.cta.url : null;
@@ -483,7 +517,7 @@ class NotificationService {
       return this.dispatchTwilioWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
     }
     if (platform.provider === 'gupshup') {
-      return this.dispatchGupshupWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
+      return this.dispatchGupshupWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText, opts);
     }
     return this.dispatchMetaWhatsapp(platform, toDigits, message, category, imageUrl, ctaUrl, ctaText);
   }
@@ -580,9 +614,14 @@ class NotificationService {
     category: string,
     imageUrl: string | null,
     ctaUrl: string | null,
-    ctaText: string
+    ctaText: string,
+    opts: {
+      templateParams?: string[];
+      templateButtonUrlSuffix?: string;
+      templateId?: string;
+    } = {}
   ): Promise<{ response: Response; bodyText: string }> {
-    const templateId = this.gupshupTemplateId(gupshup, category);
+    const fallbackTemplateId = this.gupshupTemplateId(gupshup, category);
     let response: Response;
     let bodyText = '';
 
@@ -593,18 +632,30 @@ class NotificationService {
 
     const failed = () => !this.gupshupResponseOk(response!, bodyText);
 
-    // Gupshup returns HTTP 202 "submitted" for session sends even when the user is
-    // outside the 24h window — delivery then fails asynchronously. Prefer an
-    // APPROVED template whenever configured so booking alerts actually arrive.
+    // Structured booking template: body {{1}}…{{5}} + Visit Website suffix as last param.
+    if (opts.templateParams && opts.templateParams.length > 0) {
+      const templateId =
+        opts.templateId || gupshup.bookingTemplate || fallbackTemplateId;
+      if (templateId) {
+        const params = [...opts.templateParams];
+        if (opts.templateButtonUrlSuffix) {
+          params.push(opts.templateButtonUrlSuffix.replace(/^\s+/, ''));
+        }
+        await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, params));
+        if (!failed()) return { response: response!, bodyText };
+      }
+    }
+
+    // Generic path: prefer APPROVED template when configured (session 202 ≠ delivered).
+    const templateId = opts.templateId || fallbackTemplateId;
     if (templateId) {
       let templateBody = message;
       if (imageUrl) templateBody = `${message}\n\nImage: ${imageUrl}`.trim();
       else if (ctaUrl) templateBody = `${message}\n\n${ctaText}: ${ctaUrl}`.trim();
-      await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, templateBody));
+      await readBody(await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, [templateBody]));
       if (!failed()) {
         return { response: response!, bodyText };
       }
-      // Fall through to session types only if the template call itself failed.
     }
 
     if (imageUrl) {
@@ -623,7 +674,6 @@ class NotificationService {
       await readBody(await this.sendGupshupWhatsappText(gupshup, toDigits, message));
     }
 
-    // Normalize so callers treating !response.ok as failure also catch Gupshup JSON errors.
     if (failed() && response!.ok) {
       return {
         response: new Response(bodyText, { status: 400, statusText: 'Gupshup error' }),
@@ -841,16 +891,29 @@ class NotificationService {
       );
     }
     if (business.notifyCustomerWhatsapp && booking.customerPhone) {
-      // Keep WhatsApp body plain/single-line: Gupshup templates put this in {{1}},
-      // and Meta silently drops params with newlines, tabs, or often URLs/emoji spam.
       const plainService = this.bookingServiceName(booking);
+      // Shorter date for template vars (Meta length / readability).
+      const waDate = new Intl.DateTimeFormat('en-IN', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz,
+      }).format(new Date(booking.date));
+      // Fallback body for session/Meta when structured booking template is unavailable.
       const body =
-        `Your appointment at ${business.name} is confirmed for ${dateStr} at ${booking.startTime}. ` +
+        `Your appointment at ${business.name} is confirmed for ${waDate} at ${booking.startTime}. ` +
         `Service ${plainService}${durationMin ? ` (${durationMin})` : ''}. ` +
         `Booking reference ${booking.id}.`;
+      // appointment_confirmation_2: Hello {{1}}, thanks {{2}}, appointment for {{3}} on {{4}} at {{5}}
+      // + Visit Website button suffix (path+query after approved base URL).
       await this.sendWhatsApp(booking.customerPhone, body, {
         business,
         bookingId: booking.id,
+        templateParams: [
+          String(booking.customerName || 'there'),
+          String(business.name || 'us'),
+          plainService,
+          waDate,
+          String(booking.startTime || ''),
+        ],
+        templateButtonUrlSuffix: this.manageUrlButtonSuffix(booking.managementUrl),
       });
     }
 
