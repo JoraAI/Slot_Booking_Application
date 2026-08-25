@@ -160,8 +160,18 @@ class NotificationService {
     }
   }
 
+  /**
+   * Digits-only WhatsApp destination for providers (Gupshup/Meta/Twilio).
+   * Indian 10-digit mobiles are prefixed with 91 when country code is missing —
+   * otherwise the provider may accept the API call but never deliver.
+   */
   private normalizeWhatsappDestination(value: string): string {
-    return String(value || '').replace(/\D/g, '');
+    let digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    // Strip a single leading 0 (common local format 0XXXXXXXXXX).
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length === 10 && /^[6-9]/.test(digits)) return `91${digits}`;
+    return digits;
   }
 
   private outsideSessionError(bodyText: string): boolean {
