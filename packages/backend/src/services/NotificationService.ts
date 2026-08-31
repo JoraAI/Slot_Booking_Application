@@ -458,6 +458,7 @@ class NotificationService {
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/ {5,}/g, '    ')
       .replace(/\s{2,}/g, ' ')
+      .replace(/^[\s,;.-]+|[\s,;.-]+$/g, '')
       .trim()
       .slice(0, maxLen);
   }
@@ -930,9 +931,29 @@ class NotificationService {
       );
     }
     if (business.notifyOwnerWhatsapp && business.ownerWhatsapp) {
+      const plainService = this.bookingServiceName(booking);
+      const waDate = new Intl.DateTimeFormat('en-IN', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz,
+      }).format(new Date(booking.date));
+      const customerLabel = `customer ${booking.customerName || 'Guest'}${booking.customerPhone ? ` (${booking.customerPhone})` : ''}`;
+      const serviceStaff = booking.staff
+        ? `${plainService}${durationMin ? ` (${durationMin})` : ''} with ${booking.staff.name}`
+        : `${plainService}${durationMin ? ` (${durationMin})` : ''}`;
+
       await this.sendWhatsApp(business.ownerWhatsapp,
-        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n💇 ${this.bookingServiceName(booking)}${booking.durationMinutesSnapshot ? ` (${booking.durationMinutesSnapshot} min)` : ''}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
-        { business, bookingId: booking.id }
+        `📅 New Booking!\n\n${booking.customerName}\n📞 ${booking.customerPhone}\n💇 ${plainService}${booking.durationMinutesSnapshot ? ` (${booking.durationMinutesSnapshot} min)` : ''}\n🕐 ${dateStr} ${booking.startTime}-${booking.endTime}`,
+        {
+          business,
+          bookingId: booking.id,
+          templateParams: [
+            String(business.name || 'Owner'),
+            customerLabel,
+            serviceStaff,
+            waDate,
+            String(booking.startTime || ''),
+          ],
+          templateButtonUrlSuffix: this.manageUrlButtonSuffix(booking.managementUrl),
+        }
       );
     }
   }
