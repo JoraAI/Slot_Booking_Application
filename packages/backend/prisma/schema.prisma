@@ -624,7 +624,7 @@ model Wallet {
   currency                String   @default("INR")
   status                  String   @default("ACTIVE") // 'ACTIVE' | 'FROZEN'
   version                 Int      @default(0) // incremented on every mutation (optimistic-ish guard)
-  lowBalanceThresholdPaise Int     @default(50000) // ₹500 — dashboard low-balance warning
+  lowBalanceThresholdPaise Int     @default(500) // ₹5 — dashboard low-balance warning
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 }

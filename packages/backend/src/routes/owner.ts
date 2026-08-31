@@ -1758,7 +1758,7 @@ ownerRouter.get('/settings/status', async (req: AuthRequest, res: Response) => {
     ]);
     const frontendUrl = (process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL || '').trim();
     const isHttpsAbsolute = /^https:\/\/[^\s]+$/i.test(frontendUrl);
-    const threshold = wallet?.lowBalanceThresholdPaise ?? 50000;
+    const threshold = wallet?.lowBalanceThresholdPaise ?? 500; // default ₹5 low balance warning threshold
     res.json({
       smtpConfigured: smtpConfigured(business),
       metaWhatsappConfigured: platformWhatsappConfigured(),
@@ -1909,7 +1909,7 @@ ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: R
 ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
-    const schema = z.object({ amountPaise: z.number().int().min(10000) }); // ₹100
+    const schema = z.object({ amountPaise: z.number().int().min(500) }); // min ₹5 (500 paise)
     const { amountPaise } = schema.parse(req.body);
 
     const keyId = process.env.RAZORPAY_KEY_ID || '';
@@ -1990,7 +1990,7 @@ ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Respon
       return res.status(400).json({ error: 'Payment order does not belong to this account' });
     }
     const amountPaise = Number(order.amount);
-    if (!Number.isInteger(amountPaise) || amountPaise < 10000) {
+    if (!Number.isInteger(amountPaise) || amountPaise < 500) {
       return res.status(400).json({ error: 'Invalid order amount' });
     }
 

@@ -212,7 +212,7 @@ export const Notifications: React.FC = () => {
   const [waMessages, setWaMessages] = useState<Array<{
     id: string; toPhone: string; category: string; costPaise: number; status: string; failureReason: string | null; createdAt: string
   }>>([])
-  const [rechargeAmount, setRechargeAmount] = useState(50000) // ₹500
+  const [rechargeAmount, setRechargeAmount] = useState(500) // ₹5 default
   const [recharging, setRecharging] = useState(false)
 
   const [emailMode, setEmailMode] = useState<AudienceMode>('individual')
@@ -577,10 +577,10 @@ export const Notifications: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <input type="number" min={100} step={100} value={Math.round((rechargeAmount ?? 0) / 100)}
-              onChange={(e) => setRechargeAmount(Math.max(100, Math.round(Number(e.target.value || 0) * 100)))}
+            <input type="number" min={5} step={1} value={Math.round((rechargeAmount ?? 0) / 100)}
+              onChange={(e) => setRechargeAmount(Math.max(500, Math.round(Number(e.target.value || 0) * 100)))}
               className="w-28 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-              placeholder="500" />
+              placeholder="5" />
             <button onClick={handleRecharge} disabled={recharging || !wallet}
               className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
               {recharging ? 'Starting…' : 'Add credits (₹)'}
