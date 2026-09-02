@@ -23,6 +23,7 @@ import {
   verifyRazorpayPaymentSignature,
 } from '../services/razorpaySecurity';
 import { toOwnerConfig } from '../services/ownerDto';
+import { invoiceService } from '../services/InvoiceService';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import {
   platformWhatsappConfigured,
@@ -816,7 +817,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'name', 'description', 'timezone', 'primaryColor', 'secondaryColor', 'accentColor',
       'logoUrl', 'logoPublicId', 'coverImageUrl', 'coverImagePublicId',
       'slotGranularityMinutes', 'remindersEnabled', 'reminderOffsetsMinutes',
-      'bookingManagementOtpEnabled', 'bookingManagementOtpChannel',
+      'bookingManagementOtpEnabled', 'bookingManagementOtpChannel', 'allowCustomerCancel',
       'bookingWindowDays', 'minBookingNoticeHours',
       'showAvailableCount', 'notifyOwnerEmail', 'notifyOwnerWhatsapp',
       'notifyCustomerEmail', 'notifyCustomerWhatsapp', 'ownerEmail', 'ownerWhatsapp',
@@ -3256,6 +3257,207 @@ ownerRouter.get('/product-sales', async (req: AuthRequest, res: Response) => {
       take: 500,
     });
     res.json(sales);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// ---------- Invoices (owner-only) ----------
+
+const invoiceLineItemSchema = z.object({
+  description: z.string().trim().min(1).max(500),
+  quantity: z.number().int().min(1).max(999),
+  unitPrice: z.number().min(0),
+  amount: z.number().min(0),
+});
+
+const createWalkInInvoiceSchema = z.object({
+  customerName: z.string().trim().min(1).max(200),
+  customerPhone: z.string().trim().max(30).optional().nullable(),
+  customerEmail: z.string().trim().email().max(254).optional().nullable(),
+  lineItems: z.array(invoiceLineItemSchema).min(1).max(20),
+  taxAmount: z.number().min(0).optional(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  paymentMethod: z.enum(['cash', 'upi', 'card', 'other']).optional(),
+  paymentRef: z.string().trim().max(200).optional().nullable(),
+}).strict();
+
+const issueBookingInvoiceSchema = z.object({
+  amount: z.number().min(0).optional(),
+  paymentMethod: z.enum(['cash', 'upi', 'card', 'other', 'razorpay']).optional(),
+  notes: z.string().trim().max(1000).optional(),
+}).strict();
+
+/**
+ * GET /owner/invoices — list invoices for the authenticated business.
+ */
+ownerRouter.get('/invoices', async (req: AuthRequest, res: Response) => {
+  try {
+    const { dateFrom, dateTo } = req.query as any;
+    const where: any = { businessId: req.owner!.businessId };
+    if (dateFrom || dateTo) {
+      where.issuedAt = {};
+      if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) where.issuedAt.gte = new Date(dateFrom + 'T00:00:00Z');
+      if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) where.issuedAt.lte = new Date(dateTo + 'T23:59:59Z');
+    }
+    const invoices = await prisma.invoice.findMany({
+      where,
+      include: {
+        booking: {
+          select: {
+            id: true, date: true, startTime: true, endTime: true, status: true,
+            serviceNameSnapshot: true, paymentStatus: true,
+          },
+        },
+      },
+      orderBy: { issuedAt: 'desc' },
+      take: 500,
+    });
+    res.json(invoices.map((inv) => invoiceService.toListItem(inv)));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/invoices/eligible-bookings — completed bookings without an invoice yet.
+ */
+ownerRouter.get('/invoices/eligible-bookings', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = req.owner!.businessId;
+    const invoicedBookingIds = (await prisma.invoice.findMany({
+      where: { businessId, bookingId: { not: null } },
+      select: { bookingId: true },
+    })).map((r) => r.bookingId).filter(Boolean) as string[];
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        businessId,
+        status: 'COMPLETED',
+        id: invoicedBookingIds.length ? { notIn: invoicedBookingIds } : undefined,
+        OR: [
+          { paymentStatus: null },
+          { paymentStatus: 'pending' },
+        ],
+      },
+      select: {
+        id: true,
+        customerName: true,
+        customerPhone: true,
+        customerEmail: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        serviceNameSnapshot: true,
+        finalPrice: true,
+        originalPrice: true,
+        paymentStatus: true,
+      },
+      orderBy: { date: 'desc' },
+      take: 100,
+    });
+    res.json({ bookings });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/invoices — create a walk-in / manual invoice.
+ */
+ownerRouter.post('/invoices', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = createWalkInInvoiceSchema.parse(req.body);
+    const lineItems = parsed.lineItems.map((row) => ({
+      ...row,
+      amount: row.amount ?? row.quantity * row.unitPrice,
+    }));
+    const invoice = await invoiceService.createWalkInInvoice(req.owner!.businessId, {
+      ...parsed,
+      lineItems,
+    });
+    res.status(201).json(invoiceService.toListItem(invoice));
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/invoices/from-booking/:bookingId — issue invoice for a completed unpaid booking.
+ */
+ownerRouter.post('/invoices/from-booking/:bookingId', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = issueBookingInvoiceSchema.parse(req.body || {});
+    const businessId = req.owner!.businessId;
+    const booking = await prisma.booking.findFirst({
+      where: { id: req.params.bookingId, businessId },
+    });
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    const invoice = invoiceService.bookingHasInvoiceAccess(booking)
+      ? await invoiceService.getOrCreatePaidBookingInvoice(businessId, booking.id)
+      : await invoiceService.createFromCompletedBooking(businessId, booking.id, parsed);
+
+    res.status(201).json(invoiceService.toListItem(invoice));
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/invoices/:id — invoice detail JSON.
+ */
+ownerRouter.get('/invoices/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: req.params.id, businessId: req.owner!.businessId },
+      include: {
+        booking: {
+          select: {
+            id: true, date: true, startTime: true, endTime: true, status: true,
+            serviceNameSnapshot: true, paymentStatus: true,
+          },
+        },
+      },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    res.json(invoice);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/invoices/:id/html — printable invoice HTML.
+ */
+ownerRouter.get('/invoices/:id/html', async (req: AuthRequest, res: Response) => {
+  try {
+    const business = await prisma.business.findUnique({ where: { id: req.owner!.businessId } });
+    if (!business) return res.status(401).json({ error: 'Session expired. Please log in again.' });
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: req.params.id, businessId: business.id },
+      include: {
+        booking: {
+          select: {
+            id: true, date: true, startTime: true, endTime: true, status: true,
+            serviceNameSnapshot: true, paymentStatus: true,
+          },
+        },
+      },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+    const html = invoiceService.renderInvoiceHtml(invoice, business);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.html"`);
+    res.send(html);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

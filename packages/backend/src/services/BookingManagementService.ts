@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { notificationService } from './NotificationService';
 import { locationInfo } from './LocationService';
 import { smtpConfigured as smtpReady } from './notificationCredentials';
+import { invoiceService } from './InvoiceService';
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -70,6 +71,7 @@ class BookingManagementService {
 
   /** Minimal customer-facing booking view (never payment secrets). */
   customerBookingView(booking: any): any {
+    const business = booking.business;
     return {
       id: booking.id,
       customerName: booking.customerName,
@@ -80,8 +82,12 @@ class BookingManagementService {
       serviceName: booking.serviceNameSnapshot,
       staffName: booking.staff?.name ?? null,
       finalPrice: booking.finalPrice ?? null,
+      paymentStatus: booking.paymentStatus ?? null,
+      paymentAmount: booking.paymentAmount ?? null,
+      allowCustomerCancel: business?.allowCustomerCancel ?? true,
+      canDownloadInvoice: invoiceService.bookingHasInvoiceAccess(booking),
       // Batch 4 — salon location (address + server-generated directions link).
-      location: booking.business ? locationInfo(booking.business) : null,
+      location: business ? locationInfo(business) : null,
     };
   }
 

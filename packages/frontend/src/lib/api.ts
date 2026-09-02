@@ -135,6 +135,22 @@ class ApiClient {
     })
   }
 
+  async manageOpenInvoice(identifier: string, bookingId: string, sessionToken: string) {
+    const res = await fetch(`${API_BASE}/${identifier}/bookings/${bookingId}/manage/invoice`, {
+      headers: { 'X-Booking-Session': sessionToken },
+    })
+    const body = await res.text()
+    if (!res.ok) {
+      let message = 'Unable to open invoice'
+      try { message = JSON.parse(body).error || message } catch { /* html */ }
+      throw new ApiError(res.status, message, null)
+    }
+    const blob = new Blob([body], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+
   joinWaitlist(identifier: string, data: Record<string, unknown>) {
     return this.request<WaitlistEntry>(`/${identifier}/waitlist`, {
       method: 'POST',
@@ -757,6 +773,54 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data || {}),
     })
+  }
+
+  getInvoices(params?: { dateFrom?: string; dateTo?: string }) {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return this.request<import('../types').InvoiceListItem[]>(`/owner/invoices${qs}`)
+  }
+
+  getEligibleInvoiceBookings() {
+    return this.request<{ bookings: import('../types').EligibleBookingForInvoice[] }>('/owner/invoices/eligible-bookings')
+  }
+
+  createWalkInInvoice(data: {
+    customerName: string
+    customerPhone?: string | null
+    customerEmail?: string | null
+    lineItems: import('../types').InvoiceLineItem[]
+    taxAmount?: number
+    notes?: string | null
+    paymentMethod?: string
+    paymentRef?: string | null
+  }) {
+    return this.request<import('../types').InvoiceListItem>('/owner/invoices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  issueBookingInvoice(bookingId: string, data?: { amount?: number; paymentMethod?: string; notes?: string }) {
+    return this.request<import('../types').InvoiceListItem>(`/owner/invoices/from-booking/${bookingId}`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    })
+  }
+
+  async openInvoiceHtml(invoiceId: string) {
+    const res = await fetch(`${API_BASE}/owner/invoices/${invoiceId}/html`, {
+      headers: { Authorization: `Bearer ${this.getToken()}` },
+    })
+    const body = await res.text()
+    if (!res.ok) {
+      let message = 'Unable to open invoice'
+      try { message = JSON.parse(body).error || message } catch { /* html */ }
+      throw new ApiError(res.status, message, null)
+    }
+    const blob = new Blob([body], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 }
 

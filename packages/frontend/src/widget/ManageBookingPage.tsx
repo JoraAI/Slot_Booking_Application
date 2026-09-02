@@ -14,6 +14,10 @@ interface BookingView {
   serviceName: string | null
   staffName: string | null
   finalPrice: number | null
+  paymentStatus?: string | null
+  paymentAmount?: number | null
+  allowCustomerCancel?: boolean
+  canDownloadInvoice?: boolean
   location?: { address: string | null; latitude: number | null; longitude: number | null; directionsUrl: string | null } | null
 }
 
@@ -118,6 +122,18 @@ export const ManageBookingPage: React.FC = () => {
     }
   }
 
+  const openInvoice = async () => {
+    if (!identifier || !bookingId || !sessionToken) return
+    setBusy(true)
+    try {
+      await api.manageOpenInvoice(identifier, bookingId, sessionToken)
+    } catch (e: any) {
+      toast.error(e.message || 'Unable to open invoice')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const inputCls = 'w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800'
 
   return (
@@ -191,10 +207,22 @@ export const ManageBookingPage: React.FC = () => {
               </div>
             )}
 
-            {booking.status === 'CONFIRMED' && (
+            {booking.canDownloadInvoice && (
+              <button onClick={openInvoice} disabled={busy} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                {busy ? 'Opening…' : 'View / Download Invoice'}
+              </button>
+            )}
+
+            {booking.status === 'CONFIRMED' && booking.allowCustomerCancel !== false && (
               <button onClick={doCancel} disabled={busy} className="w-full py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50">
                 {busy ? 'Cancelling…' : 'Cancel Booking'}
               </button>
+            )}
+
+            {booking.status === 'CONFIRMED' && booking.allowCustomerCancel === false && (
+              <p className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                Online cancellation is disabled for this salon. Please contact them directly if you need to change your appointment.
+              </p>
             )}
           </div>
         )}

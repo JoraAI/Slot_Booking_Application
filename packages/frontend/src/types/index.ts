@@ -24,6 +24,7 @@ export interface BusinessConfig {
   remindersEnabled: boolean
   bookingManagementOtpEnabled: boolean
   bookingManagementOtpChannel: string | null
+  allowCustomerCancel: boolean
   bookingWindowDays: number
   minBookingNoticeHours: number
   showAvailableCount: boolean
@@ -514,4 +515,46 @@ export interface ProductSale {
   bookingId: string | null
   createdAt: string
   product?: { id: string; name: string }
+}
+
+export interface InvoiceLineItem {
+  description: string
+  quantity: number
+  unitPrice: number
+  amount: number
+}
+
+export interface InvoiceListItem {
+  id: string
+  invoiceNumber: string
+  customerName: string
+  customerPhone: string | null
+  customerEmail: string | null
+  total: number
+  currency: string
+  source: string
+  paymentMethod: string | null
+  issuedAt: string
+  bookingId: string | null
+  booking?: {
+    id: string
+    date: string
+    startTime: string
+    status: string
+    serviceName: string | null
+  } | null
+}
+
+export interface EligibleBookingForInvoice {
+  id: string
+  customerName: string
+  customerPhone: string
+  customerEmail: string | null
+  date: string
+  startTime: string
+  endTime: string
+  serviceNameSnapshot: string | null
+  finalPrice: number | null
+  originalPrice: number | null
+  paymentStatus: string | null
 }

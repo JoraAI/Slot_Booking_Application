@@ -58,6 +58,7 @@ export const Settings: React.FC = () => {
     reminderOffsetsMinutes: config?.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
     bookingManagementOtpEnabled: config?.bookingManagementOtpEnabled ?? false,
     bookingManagementOtpChannel: config?.bookingManagementOtpChannel || 'EMAIL',
+    allowCustomerCancel: config?.allowCustomerCancel ?? true,
     bookingWindowDays: config?.bookingWindowDays || 7,
     minBookingNoticeHours: config?.minBookingNoticeHours ?? 0,
     showAvailableCount: config?.showAvailableCount || false,
@@ -108,6 +109,7 @@ export const Settings: React.FC = () => {
         reminderOffsetsMinutes: config.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
         bookingManagementOtpEnabled: config.bookingManagementOtpEnabled ?? false,
         bookingManagementOtpChannel: config.bookingManagementOtpChannel || 'EMAIL',
+        allowCustomerCancel: config.allowCustomerCancel ?? true,
         bookingWindowDays: config.bookingWindowDays || 7,
         minBookingNoticeHours: config.minBookingNoticeHours ?? 0,
         showAvailableCount: config.showAvailableCount || false,
@@ -816,6 +818,19 @@ export const Settings: React.FC = () => {
             )}
           </div>
         )}
+
+        <label className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.allowCustomerCancel}
+            onChange={(e) => setForm(p => ({ ...p, allowCustomerCancel: e.target.checked }))}
+            className="mt-0.5 rounded border-gray-300"
+          />
+          <span>
+            <span className="text-sm font-medium block">Allow customers to cancel online</span>
+            <span className="text-xs text-gray-500">When unchecked, the manage-booking link still works for viewing details and invoices, but customers cannot cancel themselves.</span>
+          </span>
+        </label>
       </div>
 
       {/* QR Code */}

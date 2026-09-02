@@ -18,6 +18,7 @@ import { timeService } from './../services/TimeService';
 import { businessResolver } from '../services/BusinessResolver';
 import { locationInfo } from '../services/LocationService';
 import { bookingManagementService } from '../services/BookingManagementService';
+import { invoiceService } from '../services/InvoiceService';
 import { ensurePhoneAndEmailFields } from '../services/FormContactFields';
 import { subscriptionService } from '../services/SubscriptionService';
 import { serveMediaAsset } from '../services/MediaService';
@@ -899,6 +900,29 @@ publicRouter.get('/:identifier/bookings/:id/manage', async (req: Request, res: R
   }
 });
 
+/** Download or view invoice HTML for a paid booking (management session required). */
+publicRouter.get('/:identifier/bookings/:id/manage/invoice', async (req: Request, res: Response) => {
+  try {
+    const sessionToken = sessionHeader(req);
+    if (!sessionToken) return res.status(401).json({ error: 'Unauthorized' });
+    const business = await businessResolver.resolveOrThrow(req.params.identifier);
+    const { booking } = await bookingManagementService.authorizeSession(sessionToken);
+    if (booking.id !== req.params.id || booking.businessId !== business.id) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    if (!invoiceService.bookingHasInvoiceAccess(booking)) {
+      return res.status(403).json({ error: 'Invoice is only available for paid bookings' });
+    }
+    const invoice = await invoiceService.getOrCreatePaidBookingInvoice(business.id, booking.id);
+    const html = invoiceService.renderInvoiceHtml({ ...invoice, booking }, business);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.html"`);
+    res.send(html);
+  } catch (error: any) {
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
 /** Customer management currently supports viewing and cancellation only. */
 publicRouter.put('/:identifier/bookings/:id/manage', (_req: Request, res: Response) => {
   res.status(405).json({ error: 'Customer rescheduling is not available' });
@@ -913,6 +937,10 @@ publicRouter.delete('/:identifier/bookings/:id/manage', async (req: Request, res
     const { booking } = await bookingManagementService.authorizeSession(sessionToken);
     if (booking.id !== req.params.id || booking.businessId !== business.id) {
       return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!business.allowCustomerCancel) {
+      return res.status(403).json({ error: 'Online cancellation is not available for this business. Please contact the salon.' });
     }
 
     // Atomic: cancel + durable refund intent commit in one DB transaction

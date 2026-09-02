@@ -87,6 +87,7 @@ model Business {
   showAvailableCount      Boolean   @default(false)
   bookingManagementOtpEnabled Boolean @default(false)
   bookingManagementOtpChannel String? // 'EMAIL' (email-only; SMS removed)
+  allowCustomerCancel       Boolean   @default(true)
   // Batch 4 — salon location (address + optional lat/lng pair, directions
   // links are generated server-side; no Maps API key is used).
   address                 String?
@@ -159,6 +160,7 @@ model Business {
   whatsappMessageLogs     WhatsAppMessageLog[]
   products                Product[]
   productSales            ProductSale[]
+  invoices                Invoice[]
   customerNotifications   CustomerNotification[]
   mediaAssets             MediaAsset[]
   createdAt               DateTime  @default(now())
@@ -418,6 +420,7 @@ model Booking {
   reminders               BookingReminder[]
   paymentAttempts         PaymentAttempt[]
   paymentRefund           PaymentRefund?      // one durable refund pipeline per booking (bookingId unique)
+  invoice                 Invoice?
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
   cancelledAt             DateTime?
@@ -721,4 +724,31 @@ model ProductSale {
 
   @@index([businessId, soldAt])
   @@index([businessId, productId])
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookingId     String?  @unique
+  booking       Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  invoiceNumber String
+  customerName  String
+  customerPhone String?
+  customerEmail String?
+  lineItems     Json     // [{ description, quantity, unitPrice, amount }]
+  subtotal      Float
+  taxAmount     Float    @default(0)
+  total         Float
+  currency      String   @default("INR")
+  notes         String?
+  paymentMethod String?  // 'razorpay' | 'cash' | 'upi' | 'card' | 'other'
+  paymentRef    String?
+  source        String   @default("manual") // 'booking_paid' | 'booking_completed' | 'walk_in' | 'manual'
+  issuedAt      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, invoiceNumber])
+  @@index([businessId, issuedAt])
 }
