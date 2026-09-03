@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { BusinessConfig, PublicConfig, BookingWizardState } from '../types'
+import { getOwnerTokenSync } from '../lib/tokenStorage'
 
 interface AppState {
   // Owner business config (dashboard)
@@ -50,7 +51,7 @@ export const useStore = create<AppState>((set) => ({
   publicConfig: null,
   setPublicConfig: (publicConfig) => set({ publicConfig }),
 
-  isAuthenticated: !!localStorage.getItem('owner_token'),
+  isAuthenticated: !!getOwnerTokenSync(),
   setIsAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
 
   wizard: initialWizard,

@@ -2,7 +2,26 @@ node_modules/
 dist/
 .env
 .env.local
+.env.demo
+.env.production
+packages/backend/.env
+packages/backend/.env.demo
+packages/backend/.env.production
+packages/frontend/.env
+packages/frontend/.env.demo
+packages/frontend/.env.production
 *.log
 .DS_Store
 coverage/
 .vite/
+
+# Capacitor / native build caches (keep android/ and ios/ project sources)
+packages/frontend/android/.gradle/
+packages/frontend/android/app/build/
+packages/frontend/android/build/
+packages/frontend/android/captures/
+packages/frontend/android/local.properties
+packages/frontend/ios/App/Pods/
+packages/frontend/ios/App/build/
+packages/frontend/ios/DerivedData/
+*.xcuserstate

@@ -6,6 +6,11 @@
 export type GeoFailureKind = 'unsupported' | 'insecure' | 'denied' | 'timeout' | 'unavailable'
 
 export function geolocationAvailable(): boolean {
+  try {
+    // Capacitor injects at runtime; avoid hard dependency in unit tests.
+    const Cap = (globalThis as any).Capacitor
+    if (Cap?.isNativePlatform?.()) return true
+  } catch { /* web */ }
   return typeof navigator !== 'undefined' && 'geolocation' in navigator
 }
 
@@ -21,7 +26,7 @@ export function geoFailureMessage(kind: GeoFailureKind): string {
     case 'insecure':
       return 'Geolocation requires a secure context (HTTPS) or localhost.'
     case 'denied':
-      return 'Location permission was denied. Allow location access in your browser.'
+      return 'Location permission was denied. Allow location access in your browser or app settings.'
     case 'timeout':
       return 'Location request timed out. Try again.'
     case 'unavailable':

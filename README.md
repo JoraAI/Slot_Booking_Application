@@ -2,6 +2,8 @@
 
 A self-contained, embeddable reservation platform for appointment and capacity-based businesses, including salons, clinics, studios, gyms, cafés, and restaurants.
 
+**Environments:** `main` = production Neon + live Razorpay; `demo` = demo Neon + test Razorpay. See [ENVIRONMENTS.md](./ENVIRONMENTS.md). Deploy steps: [DEPLOYMENT.md](./DEPLOYMENT.md). Mobile: [MOBILE.md](./MOBILE.md).
+
 ## Features
 
 ### Core
@@ -88,6 +90,7 @@ pnpm --filter frontend dev   # Frontend on http://localhost:5173
 - **Owner Dashboard**: `http://localhost:5173/login`
 - **API Docs (Swagger)**: `http://localhost:3001/api-docs`
 - **API Health**: `http://localhost:3001/api/health`
+- **Android / iOS owner app**: see [MOBILE.md](./MOBILE.md) (Capacitor; same dashboard, web booking stays on the web)
 
 ### 6. Demo Credentials
 - **Owner Login**: `owner@demosalon.com` / `admin123`

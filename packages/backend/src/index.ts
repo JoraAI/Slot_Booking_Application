@@ -216,18 +216,49 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: 'Reservly API Docs',
 }));
 
-// Middleware
+// Middleware — allow web frontend + Capacitor (Android/iOS) WebView origins.
+function resolveCorsOrigins(): (string | RegExp)[] {
+  const primary = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const extras = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [
+    primary,
+    'http://localhost:5173',
+    'http://localhost',
+    'https://localhost',
+    'capacitor://localhost',
+    'ionic://localhost',
+    ...extras,
+    /^https?:\/\/localhost(?::\d+)?$/,
+  ];
+}
+
 app.use(cors({
-  origin: [process.env.FRONTEND_URL || 'http://localhost:5173'],
+  origin(origin, callback) {
+    // Same-origin / native tools may omit Origin.
+    if (!origin) return callback(null, true);
+    const allowed = resolveCorsOrigins();
+    const ok = allowed.some((entry) =>
+      typeof entry === 'string' ? entry === origin : entry.test(origin)
+    );
+    callback(null, ok);
+  },
   credentials: true,
 }));
 app.use('/api/owner/media/upload', express.json({ limit: '6mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Health check — RESERVLY_ENV distinguishes demo vs production (see ENVIRONMENTS.md)
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', media: true, timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    media: true,
+    env: process.env.RESERVLY_ENV || process.env.NODE_ENV || 'unknown',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Routes. Owner + internal namespaces are mounted BEFORE the public router so
@@ -277,7 +308,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // Bind 0.0.0.0 so container hosts (Fly.io, Docker) can reach the process.
 const server = app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  const reservlyEnv = process.env.RESERVLY_ENV || process.env.NODE_ENV || 'unknown';
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT} (RESERVLY_ENV=${reservlyEnv})`);
   const emailVia = resolveResend() ? 'Resend' : platformEmailConfigured() ? 'SMTP' : 'MISSING';
   console.log(
     `Platform email (signup/forgot OTP): ${emailVia === 'MISSING' ? 'MISSING — set RESEND_API_KEY (Render free) or SMTP_USER/SMTP_PASS' : emailVia}`

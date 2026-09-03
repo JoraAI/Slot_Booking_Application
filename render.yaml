@@ -1,19 +1,63 @@
-# Optional Render Blueprint — you can also create the Web Service manually in the UI.
+# Two Render services — one DB + Razorpay set per branch.
 # Docs: https://render.com/docs/blueprint-spec
+# Full guide: ENVIRONMENTS.md
 services:
+  # Production — Git branch `main`, Neon reservly-prod, LIVE Razorpay
   - type: web
     name: reservly-api
     runtime: docker
     plan: free
+    branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: RESERVLY_ENV
+        value: production
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_URL
+        sync: false
+
+  # Demo — Git branch `demo`, Neon reservly-demo, TEST Razorpay
+  - type: web
+    name: reservly-api-demo
+    runtime: docker
+    plan: free
+    branch: demo
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RESERVLY_ENV
+        value: demo
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
         sync: false
       - key: RESEND_API_KEY
         sync: false

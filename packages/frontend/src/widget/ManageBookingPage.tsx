@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { BusyOverlay } from '../components/BusyOverlay'
 import toast from 'react-hot-toast'
+import { JoraPoweredBy } from '../components/JoraPoweredBy'
 
 interface BookingView {
   id: string
@@ -260,6 +261,7 @@ export const ManageBookingPage: React.FC = () => {
           </div>
         )}
       </div>
+      <JoraPoweredBy />
     </div>
   )
 }

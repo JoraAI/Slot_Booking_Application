@@ -5,13 +5,16 @@
 
 No credit card required for this path (free tiers). Repo includes `Dockerfile` and optional `render.yaml`.
 
+**Two environments:** Git `main` → production Neon + live Razorpay; Git `demo` → demo Neon + test Razorpay.  
+See **[ENVIRONMENTS.md](./ENVIRONMENTS.md)** for the full branch / DB / Razorpay split.
+
 ---
 
 ## Every-time checklist (after first setup)
 
-1. Push to the Git branch Render watches (usually `main`) → auto-deploys API  
-2. If you changed `VITE_*` on Vercel → **Redeploy** the frontend  
-3. Smoke test: `curl https://YOUR-API.onrender.com/api/health`
+1. Push `demo` → demo API + smoke with test Razorpay; push `main` → prod API  
+2. If you changed `VITE_*` on Vercel → **Redeploy** that env’s frontend  
+3. Smoke test: `curl https://YOUR-API.onrender.com/api/health` (expect `"env":"production"` or `"demo"`)
 
 ---
 

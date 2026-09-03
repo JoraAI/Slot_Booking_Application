@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Reservly</string>
+    <string name="title_activity_main">Reservly</string>
+    <string name="package_name">tech.staffingpros.reservly</string>
+    <string name="custom_url_scheme">tech.staffingpros.reservly</string>
+</resources>

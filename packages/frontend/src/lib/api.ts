@@ -1,19 +1,29 @@
 import type { PublicConfig, BusinessConfig, TimeSlot, AvailabilityResult, Booking, WaitlistEntry, BlockedSlot, AnalyticsData, Service, ServiceCategory, PageSection, StaffWorkingHour, RefundResult, FormField, CustomerContact, CustomerNotification, WalletView, WalletTransaction } from '../types'
+import { getOwnerTokenSync, setOwnerToken } from './tokenStorage'
+import { isNativePlatform, openHtmlDocument } from './native'
 
 // Split-host friendly API base:
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
 // - Vercel static + external Node API: set VITE_API_BASE_URL to the API origin
 //   (e.g. https://reservly-api.onrender.com) OR origin + `/api`. Never put secrets
 //   in VITE_* — these vars are exposed to the browser at build time.
+// - Android/iOS (Capacitor): always set VITE_API_BASE_URL — there is no Vite proxy
+//   and relative `/api` would hit the local WebView host.
 function resolveApiBase(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
-  if (!raw) return '/api'
-  // Same-origin `/api` is always correct: Vite proxies it in dev, Vercel
-  // rewrites it to the Render API in production. A VITE value that points at
-  // the frontend host would fetch index.html and break JSON parsing.
+  const native = isNativePlatform()
+  if (!raw) {
+    if (native && typeof console !== 'undefined') {
+      console.error('[Reservly] VITE_API_BASE_URL is required for Android/iOS builds')
+    }
+    return '/api'
+  }
+  // Same-origin `/api` is always correct on web: Vite proxies it in dev, Vercel
+  // rewrites it to the Render API in production. Do not collapse on native —
+  // Capacitor's origin is https://localhost, not the API host.
   try {
     const resolved = raw.endsWith('/api') ? raw : `${raw}/api`
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !native) {
       const target = new URL(resolved, window.location.origin)
       if (target.origin === window.location.origin) return '/api'
     }
@@ -29,12 +39,11 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token
-    if (token) localStorage.setItem('owner_token', token)
-    else localStorage.removeItem('owner_token')
+    void setOwnerToken(token)
   }
 
   getToken(): string | null {
-    if (!this.token) this.token = localStorage.getItem('owner_token')
+    if (!this.token) this.token = getOwnerTokenSync()
     return this.token
   }
 
@@ -145,10 +154,7 @@ class ApiClient {
       try { message = JSON.parse(body).error || message } catch { /* html */ }
       throw new ApiError(res.status, message, null)
     }
-    const blob = new Blob([body], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    openHtmlDocument(body, 'Invoice')
   }
 
   joinWaitlist(identifier: string, data: Record<string, unknown>) {
@@ -817,10 +823,7 @@ class ApiClient {
       try { message = JSON.parse(body).error || message } catch { /* html */ }
       throw new ApiError(res.status, message, null)
     }
-    const blob = new Blob([body], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    openHtmlDocument(body, 'Invoice')
   }
 }
 

@@ -28,19 +28,32 @@ import { useStore } from './store'
 import { useEmbedMode } from './hooks'
 import { PageSections } from './widget/PageSections'
 import { ManageBookingPage } from './widget/ManageBookingPage'
+import { isNativePlatform } from './lib/native'
+import { JoraPoweredBy } from './components/JoraPoweredBy'
 
 export default function App() {
   const { isAuthenticated } = useStore()
+  const nativeOwnerApp = isNativePlatform()
 
   return (
     <Routes>
-      {/* Public booking widget */}
-      <Route path="/:slug" element={<BookingWidget />} />
-      <Route path="/b/:slug" element={<BookingWidget />} />
-
-      {/* Customer booking management (token + optional OTP) */}
-      <Route path="/:slug/bookings/:bookingId/manage" element={<ManageBookingPage />} />
-      <Route path="/b/:slug/bookings/:bookingId/manage" element={<ManageBookingPage />} />
+      {/* Public booking widget — web only; native shell is owner dashboard */}
+      {!nativeOwnerApp && (
+        <>
+          <Route path="/:slug" element={<BookingWidget />} />
+          <Route path="/b/:slug" element={<BookingWidget />} />
+          <Route path="/:slug/bookings/:bookingId/manage" element={<ManageBookingPage />} />
+          <Route path="/b/:slug/bookings/:bookingId/manage" element={<ManageBookingPage />} />
+        </>
+      )}
+      {nativeOwnerApp && (
+        <>
+          <Route path="/:slug" element={<Navigate to="/login" replace />} />
+          <Route path="/b/:slug" element={<Navigate to="/login" replace />} />
+          <Route path="/:slug/bookings/:bookingId/manage" element={<Navigate to="/login" replace />} />
+          <Route path="/b/:slug/bookings/:bookingId/manage" element={<Navigate to="/login" replace />} />
+        </>
+      )}
 
       {/* Owner login */}
       <Route path="/login" element={<LoginPage />} />
@@ -144,6 +157,7 @@ function BookingWidget() {
           location={publicConfig.business.location}
         />
       )}
+      {!isEmbedded && <JoraPoweredBy />}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { api } from '../lib/api'
 import { FeatureGate } from '../widget/FeatureGate'
+import { JoraPoweredBy } from '../components/JoraPoweredBy'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊', end: true },
@@ -94,11 +95,14 @@ export const DashboardLayout: React.FC = () => {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 overflow-y-auto">
-        <div className="p-4 lg:p-8">
+        <div className="p-4 lg:p-8 flex flex-col min-h-full">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden mb-4 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
             ☰
           </button>
-          <Outlet />
+          <div className="flex-1">
+            <Outlet />
+          </div>
+          <JoraPoweredBy />
         </div>
       </main>
 

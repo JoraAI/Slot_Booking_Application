@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
+import { isNativePlatform } from '../../lib/native'
 import { useStore } from '../../store'
 import toast from 'react-hot-toast'
 
@@ -48,9 +49,10 @@ export const LoginPage: React.FC = () => {
     navigate('/dashboard')
   }
 
-  // Google Identity Services button (login view only).
+  // Google Identity Services button (login view only). Skip on native WebView —
+  // GIS often fails in Capacitor; email/password (and OTP signup) remain available.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || mode !== 'login') return
+    if (!GOOGLE_CLIENT_ID || mode !== 'login' || isNativePlatform()) return
     let cancelled = false
     const render = () => {
       if (cancelled || !googleBtnRef.current || !window.google?.accounts) return
@@ -243,7 +245,7 @@ export const LoginPage: React.FC = () => {
           </form>
         )}
 
-        {mode === 'login' && !forgotOpen && GOOGLE_CLIENT_ID && (
+        {mode === 'login' && !forgotOpen && GOOGLE_CLIENT_ID && !isNativePlatform() && (
           <div className="mt-4">
             <div className="flex items-center gap-3 my-3">
               <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />

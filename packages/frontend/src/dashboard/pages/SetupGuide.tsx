@@ -107,7 +107,7 @@ export const SetupGuide: React.FC = () => (
     <GuideSection id="owner-app" title="Owner app information">
       <p>
         Open <Link className="text-primary underline" to="/dashboard/app-info">Owner App</Link> for a summary
-        of the Reservly owner experience and the mobile-release feature roadmap.
+        of the Reservly owner experience and how the Android / iOS owner app relates to the web dashboard.
       </p>
     </GuideSection>
 

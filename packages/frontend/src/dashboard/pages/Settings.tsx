@@ -4,6 +4,7 @@ import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import { MediaUploadButton } from '../components/MediaUploadButton'
 import { geoFailureMessage, geolocationAvailable, mapPositionError, secureContextAvailable } from '../geolocation'
+import { getCurrentPositionCoords, isNativePlatform, openExternalUrl } from '../../lib/native'
 import toast from 'react-hot-toast'
 
 const FEATURES = [
@@ -156,27 +157,30 @@ export const Settings: React.FC = () => {
   // Geolocation requires a secure context (HTTPS or localhost) + permission.
   const useMyLocation = () => {
     setGeoError('')
-    if (!geolocationAvailable()) {
+    if (!geolocationAvailable() && !isNativePlatform()) {
       setGeoError(geoFailureMessage('unsupported'))
       return
     }
-    if (!secureContextAvailable()) {
+    if (!isNativePlatform() && !secureContextAvailable()) {
       setGeoError(geoFailureMessage('insecure'))
       return
     }
     setGeoLoading(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setForm(p => ({ ...p, latitude: Math.round(pos.coords.latitude * 1e6) / 1e6, longitude: Math.round(pos.coords.longitude * 1e6) / 1e6 }))
+    void getCurrentPositionCoords()
+      .then((coords) => {
+        setForm(p => ({
+          ...p,
+          latitude: Math.round(coords.latitude * 1e6) / 1e6,
+          longitude: Math.round(coords.longitude * 1e6) / 1e6,
+        }))
         setGeoLoading(false)
         toast.success('Location captured from your device')
-      },
-      (err) => {
+      })
+      .catch((err: any) => {
         setGeoLoading(false)
-        setGeoError(geoFailureMessage(mapPositionError(err.code)))
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-    )
+        const code = typeof err?.code === 'number' ? err.code : 2
+        setGeoError(geoFailureMessage(mapPositionError(code)))
+      })
   }
 
   const clearLocation = () => {
@@ -696,10 +700,10 @@ export const Settings: React.FC = () => {
             Clear
           </button>
           {mapPreviewUrl && (
-            <a href={mapPreviewUrl} target="_blank" rel="noopener noreferrer"
+            <button type="button" onClick={() => void openExternalUrl(mapPreviewUrl)}
               className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-primary hover:bg-gray-50 dark:hover:bg-gray-800">
               🗺️ Preview directions
-            </a>
+            </button>
           )}
         </div>
         {geoError && (
