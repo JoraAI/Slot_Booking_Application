@@ -104,33 +104,37 @@ export const Analytics: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             By appointment date · {dateFrom} to {dateTo}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
           <select value={range} onChange={(e) => { setRange(e.target.value); setCustomFrom(''); setCustomTo('') }}
-            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
+            className="w-full sm:w-auto text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800">
             {RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
-          <span className="text-xs text-gray-400">or custom range:</span>
-          <input type="date" value={customFrom} max={customTo || undefined}
-            onChange={(e) => setCustomFrom(e.target.value)}
-            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800" />
-          <span className="text-xs text-gray-400">→</span>
-          <input type="date" value={customTo} min={customFrom || undefined}
-            onChange={(e) => setCustomTo(e.target.value)}
-            className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800" />
-          <button onClick={load} disabled={loading} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">
-            Refresh
-          </button>
-          <button onClick={() => void downloadCsv()} disabled={exporting || !data}
-            className="text-sm px-3 py-1.5 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
-            {exporting ? 'Downloading…' : 'Download Excel (.csv)'}
-          </button>
+          <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2">
+            <span className="text-xs text-gray-400 sm:whitespace-nowrap">Custom:</span>
+            <input type="date" value={customFrom} max={customTo || undefined}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="w-full sm:w-auto text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-2 bg-white dark:bg-gray-800" />
+            <span className="hidden sm:inline text-xs text-gray-400">→</span>
+            <input type="date" value={customTo} min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="w-full sm:w-auto text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-2 bg-white dark:bg-gray-800" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button onClick={load} disabled={loading} className="w-full sm:w-auto text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg disabled:opacity-50">
+              Refresh
+            </button>
+            <button onClick={() => void downloadCsv()} disabled={exporting || !data}
+              className="w-full sm:w-auto text-sm px-3 py-2 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
+              {exporting ? 'Downloading…' : 'Download CSV'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -153,12 +157,41 @@ export const Analytics: React.FC = () => {
             <Kpi label="Busiest Day" value={data.busiestDay || '--'} icon="📅" onClick={() => drillBookings()} hint="Click to see bookings in this range" />
           </div>
 
-          {/* Revenue row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Kpi label="Collected" hint="Paid and not cancelled or refunded" value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`} icon="💰" />
+          {/* Collections: service + product */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <Kpi
+              label="Total collections"
+              hint="Services + product sales"
+              value={`₹${(
+                data.revenueMetrics?.totalCollections
+                ?? ((data.revenueMetrics?.totalCollected ?? 0) + (data.productMetrics?.totalRevenue ?? 0))
+              ).toLocaleString('en-IN')}`}
+              icon="🏦"
+            />
+            <Kpi
+              label="Service collections"
+              hint="Paid bookings (not cancelled/refunded)"
+              value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`}
+              icon="💰"
+              onClick={() => drillBookings()}
+              drillLabel="View bookings →"
+            />
+            <Kpi
+              label="Product collections"
+              hint="Retail sales in this range"
+              value={`₹${(
+                data.revenueMetrics?.productCollected ?? data.productMetrics?.totalRevenue ?? 0
+              ).toLocaleString('en-IN')}`}
+              icon="🛍️"
+              onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)}
+              drillLabel="View products →"
+            />
+            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" onClick={() => drillBookings({ source: 'QR' })} hint="QR-sourced bookings" />
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <Kpi label="Avg Booking Value" value={`₹${(data.avgBookingValue ?? 0).toLocaleString('en-IN')}`} icon="🧾" />
             <Kpi label="Discounts Given" value={`₹${(data.revenueMetrics?.discountsGiven ?? 0).toLocaleString('en-IN')}`} icon="🏷️" />
-            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" onClick={() => drillBookings({ source: 'QR' })} hint="QR-sourced bookings" />
           </div>
 
           {/* Heatmap */}
@@ -229,10 +262,10 @@ export const Analytics: React.FC = () => {
                 {(data.bookingsByService || []).map((s) => (
                   <button key={s.name} disabled={!s.id}
                     onClick={() => s.id && drillBookings({ serviceId: s.id })}
-                    className="w-full flex items-center justify-between text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-1 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-3 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg px-2 py-2 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-primary"
                     title={s.id ? 'View bookings for this service' : ''}>
-                    <span>{s.name}</span>
-                    <span className="text-gray-500">{s.count} · ₹{s.revenue.toLocaleString('en-IN')}</span>
+                    <span className="break-words">{s.name}</span>
+                    <span className="text-gray-500 shrink-0">{s.count} · ₹{s.revenue.toLocaleString('en-IN')}</span>
                   </button>
                 ))}
               </div>
@@ -254,13 +287,13 @@ export const Analytics: React.FC = () => {
           </div>
 
           {/* Product sales */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Product sales</h2>
-                <p className="text-xs text-gray-500">Retail product revenue in {dateFrom} → {dateTo} (soldAt window)</p>
+                <p className="text-xs text-gray-500">Included in Total collections · {dateFrom} → {dateTo}</p>
               </div>
-              <button onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50">
+              <button onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)} className="w-full sm:w-auto text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
                 Manage products →
               </button>
             </div>
@@ -271,31 +304,44 @@ export const Analytics: React.FC = () => {
                 <div className="flex flex-wrap gap-6">
                   <div>
                     <p className="text-2xl font-bold">₹{data.productMetrics.totalRevenue.toLocaleString('en-IN')}</p>
-                    <p className="text-xs text-gray-500">Total revenue</p>
+                    <p className="text-xs text-gray-500">Product revenue</p>
                   </div>
                   <div>
                     <p className="text-2xl font-bold">{data.productMetrics.totalUnits}</p>
                     <p className="text-xs text-gray-500">Units sold</p>
                   </div>
                 </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-800">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-500">Units</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-500">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {(data.productMetrics.byProduct || []).map((p) => (
-                      <tr key={p.id}>
-                        <td className="px-4 py-2 font-medium">{p.name}</td>
-                        <td className="px-4 py-2">{p.units}</td>
-                        <td className="px-4 py-2">₹{p.revenue.toLocaleString('en-IN')}</td>
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-gray-500">Product</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-500">Units</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-500">Revenue</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {(data.productMetrics.byProduct || []).map((p) => (
+                        <tr key={p.id}>
+                          <td className="px-4 py-2 font-medium">{p.name}</td>
+                          <td className="px-4 py-2">{p.units}</td>
+                          <td className="px-4 py-2">₹{p.revenue.toLocaleString('en-IN')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="md:hidden space-y-2">
+                  {(data.productMetrics.byProduct || []).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.units} units</p>
+                      </div>
+                      <p className="font-semibold shrink-0">₹{p.revenue.toLocaleString('en-IN')}</p>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -305,23 +351,30 @@ export const Analytics: React.FC = () => {
   )
 }
 
-function Kpi({ label, value, icon, hint, onClick }: { label: string; value: string; icon: string; hint?: string; onClick?: () => void }) {
+function Kpi({ label, value, icon, hint, onClick, drillLabel }: {
+  label: string
+  value: string
+  icon: string
+  hint?: string
+  onClick?: () => void
+  drillLabel?: string
+}) {
   const inner = (
     <>
       <p className="text-lg">{icon}</p>
-      <p className="text-xl font-bold mt-1 truncate">{value}</p>
+      <p className="text-lg sm:text-xl font-bold mt-1 break-words">{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
-      {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
     </>
   )
   if (!onClick) {
-    return <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">{inner}</div>
+    return <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">{inner}</div>
   }
   return (
-    <button onClick={onClick} role="button" tabIndex={0} title={`View bookings for ${label.toLowerCase()}`}
-      className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-primary/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
+    <button onClick={onClick} type="button" title={drillLabel || `View details for ${label.toLowerCase()}`}
+      className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4 hover:border-primary/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
       {inner}
-      <p className="text-[10px] text-primary mt-0.5">View bookings →</p>
+      <p className="text-[10px] text-primary mt-0.5">{drillLabel || 'View bookings →'}</p>
     </button>
   )
 }

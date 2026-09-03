@@ -366,6 +366,8 @@ class AnalyticsService {
         discountsGiven: Math.round(discountsGiven * 100) / 100,
         avgBookingValue,
         discountUsageCount,
+        productCollected: Math.round(productTotalRevenue * 100) / 100,
+        totalCollections: Math.round((totalCollected + productTotalRevenue) * 100) / 100,
       },
       bookingsByService,
       revenueByService,

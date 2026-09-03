@@ -45,6 +45,8 @@ async function ensureFormFields(businessId: string, fields: FormFieldSeed[]): Pr
 
 async function main() {
   const hashedPassword = await bcrypt.hash('admin123', 10);
+  const demoPaidUntil = new Date();
+  demoPaidUntil.setUTCFullYear(demoPaidUntil.getUTCFullYear() + 1);
 
   const business = await prisma.business.upsert({
     where: { slug: 'demo-salon' },
@@ -59,6 +61,10 @@ async function main() {
       slotGranularityMinutes: 15,
       ownerEmail: 'owner@demosalon.com',
       ownerPassword: hashedPassword,
+      subscriptionPlan: 'YEARLY_799',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: demoPaidUntil,
+      subscriptionLastPaidAt: new Date(),
     },
     create: {
       name: 'Demo Salon & Spa',
@@ -71,6 +77,10 @@ async function main() {
       accentColor: '#F59E0B',
       ownerEmail: 'owner@demosalon.com',
       ownerPassword: hashedPassword,
+      subscriptionPlan: 'YEARLY_799',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: demoPaidUntil,
+      subscriptionLastPaidAt: new Date(),
       bookingWindowDays: 14,
       slotGranularityMinutes: 15,
       showAvailableCount: false,
@@ -165,6 +175,10 @@ async function main() {
       slotGranularityMinutes: 15,
       ownerEmail: 'owner@eclatunisexsalon.in',
       ownerPassword: hashedPassword,
+      subscriptionPlan: 'YEARLY_799',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: demoPaidUntil,
+      subscriptionLastPaidAt: new Date(),
     },
     create: {
       name: 'Eclat Unisex Salon',
@@ -179,6 +193,10 @@ async function main() {
       accentColor: '#F2F2F2',
       ownerEmail: 'owner@eclatunisexsalon.in',
       ownerPassword: hashedPassword,
+      subscriptionPlan: 'YEARLY_799',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: demoPaidUntil,
+      subscriptionLastPaidAt: new Date(),
       bookingWindowDays: 30,
       slotGranularityMinutes: 15,
       showAvailableCount: false,

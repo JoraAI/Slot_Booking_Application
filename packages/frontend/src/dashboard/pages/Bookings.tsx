@@ -40,7 +40,6 @@ export const Bookings: React.FC = () => {
   const [detail, setDetail] = useState<Booking | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // Filters from Analytics drill-down (query params); status can also be set by the dropdown.
   const analyticsFrom = searchParams.get('dateFrom') || ''
   const analyticsTo = searchParams.get('dateTo') || ''
   const analyticsStatus = searchParams.get('status') || ''
@@ -86,7 +85,6 @@ export const Bookings: React.FC = () => {
     setDetailLoading(true)
     try {
       const b = await api.getOwnerBooking(id)
-      // The list row may be stale after a status change; merge fresh detail in.
       setDetail(b)
       setBookings((prev) => prev.map((x) => (x.id === id ? { ...x, ...b } : x)))
     } catch {
@@ -114,15 +112,15 @@ export const Bookings: React.FC = () => {
     const b = detail
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={closeDetail} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <button onClick={closeDetail} className="w-full sm:w-auto text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
               ← Back to list
             </button>
-            <h1 className="text-2xl font-bold">Booking detail</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Booking detail</h1>
           </div>
           {b && (
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
+            <span className={`self-start px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
           )}
         </div>
 
@@ -131,75 +129,73 @@ export const Bookings: React.FC = () => {
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-400">Booking not found.</div>
         )}
         {b && (
-          <>
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                <div>
-                  <p className="text-xs text-gray-400">Customer</p>
-                  <p className="font-medium">{b.customerName}</p>
-                  <p className="text-gray-500">{b.customerPhone}</p>
-                  {b.customerEmail && <p className="text-gray-500">{b.customerEmail}</p>}
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Service</p>
-                  <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
-                  {b.durationMinutesSnapshot ? <p className="text-gray-500">{b.durationMinutesSnapshot} min</p> : null}
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Staff</p>
-                  <p className="font-medium">{b.staff?.name || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">When</p>
-                  <p className="font-medium">{fmtDate(b.date)} · {b.startTime} - {b.endTime}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Amount</p>
-                  <p className="font-medium">₹{b.finalPrice != null ? b.finalPrice.toLocaleString('en-IN') : '—'}</p>
-                  {b.originalPrice != null && b.discountAmount != null && b.discountAmount > 0 && (
-                    <p className="text-gray-500">was ₹{b.originalPrice.toLocaleString('en-IN')} · discount ₹{b.discountAmount.toLocaleString('en-IN')}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Payment</p>
-                  <p className="font-medium">{b.paymentStatus ? String(b.paymentStatus) : '—'}{b.paymentAmount != null ? ` · ₹${b.paymentAmount.toLocaleString('en-IN')}` : ''}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Source</p>
-                  <p className="font-medium">{b.source || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Booking ID</p>
-                  <p className="font-mono text-xs break-all">{b.id}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Created</p>
-                  <p className="font-medium">{b.createdAt ? new Date(b.createdAt).toLocaleString() : '—'}</p>
-                </div>
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-400">Customer</p>
+                <p className="font-medium">{b.customerName}</p>
+                <p className="text-gray-500 break-all">{b.customerPhone}</p>
+                {b.customerEmail && <p className="text-gray-500 break-all">{b.customerEmail}</p>}
               </div>
-
-              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <p className="text-xs text-gray-400 mb-2">Form answers</p>
-                {!(b.formAnswers?.length) ? (
-                  <p className="text-sm text-gray-400">No form data.</p>
-                ) : (
-                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                    {b.formAnswers.map((row) => (
-                      <div key={row.fieldId}>
-                        <span className="text-gray-500">{row.label}: </span>
-                        <span className="font-medium">{formatAnswerValue(row.value)}</span>
-                      </div>
-                    ))}
-                  </div>
+              <div>
+                <p className="text-xs text-gray-400">Service</p>
+                <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                {b.durationMinutesSnapshot ? <p className="text-gray-500">{b.durationMinutesSnapshot} min</p> : null}
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Staff</p>
+                <p className="font-medium">{b.staff?.name || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">When</p>
+                <p className="font-medium">{fmtDate(b.date)} · {b.startTime} - {b.endTime}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Amount</p>
+                <p className="font-medium">₹{b.finalPrice != null ? b.finalPrice.toLocaleString('en-IN') : '—'}</p>
+                {b.originalPrice != null && b.discountAmount != null && b.discountAmount > 0 && (
+                  <p className="text-gray-500">was ₹{b.originalPrice.toLocaleString('en-IN')} · discount ₹{b.discountAmount.toLocaleString('en-IN')}</p>
                 )}
               </div>
-
-              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-                <p className="text-xs text-gray-400 mb-2">Status actions</p>
-                <StatusActions booking={b} onStatus={handleStatusChange} />
+              <div>
+                <p className="text-xs text-gray-400">Payment</p>
+                <p className="font-medium">{b.paymentStatus ? String(b.paymentStatus) : '—'}{b.paymentAmount != null ? ` · ₹${b.paymentAmount.toLocaleString('en-IN')}` : ''}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Source</p>
+                <p className="font-medium">{b.source || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Booking ID</p>
+                <p className="font-mono text-xs break-all">{b.id}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Created</p>
+                <p className="font-medium">{b.createdAt ? new Date(b.createdAt).toLocaleString() : '—'}</p>
               </div>
             </div>
-          </>
+
+            <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+              <p className="text-xs text-gray-400 mb-2">Form answers</p>
+              {!(b.formAnswers?.length) ? (
+                <p className="text-sm text-gray-400">No form data.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  {b.formAnswers.map((row) => (
+                    <div key={row.fieldId}>
+                      <span className="text-gray-500">{row.label}: </span>
+                      <span className="font-medium break-words">{formatAnswerValue(row.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+              <p className="text-xs text-gray-400 mb-2">Status actions</p>
+              <StatusActions booking={b} onStatus={handleStatusChange} />
+            </div>
+          </div>
         )}
       </div>
     )
@@ -207,10 +203,13 @@ export const Bookings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold">Bookings</h1>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Bookings</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Tap a booking for full details.</p>
+        </div>
         <select value={filter || analyticsStatus} onChange={(e) => changeStatusFilter(e.target.value)}
-          className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800">
+          className="w-full sm:w-auto text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800">
           <option value="">All Status</option>
           <option value="CONFIRMED">Confirmed</option>
           <option value="CANCELLED">Cancelled</option>
@@ -220,7 +219,7 @@ export const Bookings: React.FC = () => {
       </div>
 
       {fromAnalytics && (
-        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
           <p className="text-gray-700 dark:text-gray-200">
             Filtered from Analytics
             {analyticsFrom || analyticsTo ? ` · ${analyticsFrom || '…'} → ${analyticsTo || '…'}` : ''}
@@ -228,52 +227,85 @@ export const Bookings: React.FC = () => {
             {analyticsSource ? ` · source ${analyticsSource}` : ''}
           </p>
           <Link to={analyticsBackHref}
-            className="shrink-0 px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-white dark:hover:bg-gray-800 font-medium">
+            className="w-full sm:w-auto text-center shrink-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-white dark:hover:bg-gray-800 font-medium">
             ← Back to Analytics
           </Link>
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Customer</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Service</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Time</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
-            ) : bookings.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No bookings found</td></tr>
-            ) : bookings.map((b) => (
-              <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => void openDetail(b.id)}>
-                <td className="px-4 py-3">
-                  <p className="font-medium">{b.customerName}</p>
-                  <p className="text-xs text-gray-400">{b.customerPhone}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
-                  {b.staff?.name && <p className="text-xs text-gray-400">{b.staff.name}</p>}
-                </td>
-                <td className="px-4 py-3">{fmtDate(b.date)}</td>
-                <td className="px-4 py-3">{b.startTime} - {b.endTime}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
-                </td>
-                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+      {loading ? (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-400">Loading...</div>
+      ) : bookings.length === 0 ? (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-8 text-center text-gray-400">No bookings found</div>
+      ) : (
+        <>
+          <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Customer</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Service</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Time</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {bookings.map((b) => (
+                  <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={() => void openDetail(b.id)}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{b.customerName}</p>
+                      <p className="text-xs text-gray-400">{b.customerPhone}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                      {b.staff?.name && <p className="text-xs text-gray-400">{b.staff.name}</p>}
+                    </td>
+                    <td className="px-4 py-3">{fmtDate(b.date)}</td>
+                    <td className="px-4 py-3">{b.startTime} - {b.endTime}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={() => void openDetail(b.id)} className="text-xs px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 font-medium text-primary">
+                          View
+                        </button>
+                        <StatusActions booking={b} onStatus={handleStatusChange} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden space-y-3">
+            {bookings.map((b) => (
+              <div key={b.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+                <button type="button" onClick={() => void openDetail(b.id)} className="w-full text-left space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{b.customerName}</p>
+                      <p className="text-xs text-gray-500">{b.customerPhone}</p>
+                    </div>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
+                  </div>
+                  <p className="text-sm font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                  <p className="text-xs text-gray-500">{fmtDate(b.date)} · {b.startTime} - {b.endTime}{b.staff?.name ? ` · ${b.staff.name}` : ''}</p>
+                </button>
+                <button onClick={() => void openDetail(b.id)} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">
+                  View details
+                </button>
+                <div onClick={(e) => e.stopPropagation()}>
                   <StatusActions booking={b} onStatus={handleStatusChange} />
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

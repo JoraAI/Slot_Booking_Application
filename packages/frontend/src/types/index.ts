@@ -428,6 +428,8 @@ export interface AnalyticsData {
     discountsGiven: number
     avgBookingValue: number
     discountUsageCount: number
+    productCollected?: number
+    totalCollections?: number
   }
   bookingsByService?: { id?: string | null; name: string; count: number; revenue: number }[]
   revenueByService?: { name: string; revenue: number }[]
