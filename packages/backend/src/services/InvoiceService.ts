@@ -1,3 +1,4 @@
+import PDFDocument from 'pdfkit';
 import prisma from '../lib/prisma';
 
 export type InvoiceLineItem = {
@@ -21,6 +22,14 @@ class InvoiceService {
   private formatMoney(amount: number, currency = 'INR'): string {
     if (currency === 'INR') return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
     return `${currency} ${amount.toFixed(2)}`;
+  }
+
+  /** ASCII-safe money for PDFKit Helvetica (no ₹ glyph in WinAnsi). */
+  private formatMoneyPdf(amount: number, currency = 'INR'): string {
+    if (currency === 'INR') {
+      return `Rs. ${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    }
+    return `${currency} ${Number(amount).toFixed(2)}`;
   }
 
   private formatDate(d: Date | string, tz = 'Asia/Kolkata'): string {
@@ -268,6 +277,119 @@ class InvoiceService {
     });
   }
 
+  /** Generate a compact invoice PDF for email attachment + WhatsApp document header. */
+  async renderInvoicePdf(invoice: any, business: any): Promise<Buffer> {
+    const tz = business.timezone || 'Asia/Kolkata';
+    const items = (invoice.lineItems as InvoiceLineItem[]) || [];
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    const done = new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
+
+    doc.fontSize(18).fillColor('#111827').text('Tax Invoice', { continued: false });
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor('#6b7280')
+      .text(`${invoice.invoiceNumber} · Issued ${this.formatDate(invoice.issuedAt, tz)}`);
+    doc.moveDown(1);
+
+    const leftX = doc.x;
+    const midY = doc.y;
+    doc.fontSize(9).fillColor('#6b7280').text('FROM', leftX, midY);
+    doc.fontSize(11).fillColor('#111827').text(String(business.name || 'Salon'), leftX, midY + 14, { width: 220 });
+    if (business.address) {
+      doc.fontSize(9).fillColor('#6b7280').text(String(business.address), leftX, doc.y, { width: 220 });
+    }
+    if (business.ownerEmail) {
+      doc.fontSize(9).fillColor('#6b7280').text(String(business.ownerEmail), leftX, doc.y, { width: 220 });
+    }
+    const leftBottom = doc.y;
+
+    const rightX = 320;
+    doc.fontSize(9).fillColor('#6b7280').text('BILL TO', rightX, midY);
+    doc.fontSize(11).fillColor('#111827').text(String(invoice.customerName || 'Customer'), rightX, midY + 14, { width: 220 });
+    if (invoice.customerPhone) {
+      doc.fontSize(9).fillColor('#6b7280').text(String(invoice.customerPhone), rightX, doc.y, { width: 220 });
+    }
+    if (invoice.customerEmail) {
+      doc.fontSize(9).fillColor('#6b7280').text(String(invoice.customerEmail), rightX, doc.y, { width: 220 });
+    }
+    doc.y = Math.max(leftBottom, doc.y) + 16;
+
+    if (invoice.booking) {
+      doc.fontSize(9).fillColor('#6b7280').text(
+        `Appointment: ${this.formatDate(invoice.booking.date, tz)} · ${invoice.booking.startTime || ''}` +
+          (invoice.booking.endTime ? ` – ${invoice.booking.endTime}` : '')
+      );
+      doc.moveDown(0.8);
+    }
+
+    const colDesc = 50;
+    const colQty = 320;
+    const colRate = 380;
+    const colAmt = 460;
+    let y = doc.y;
+
+    doc.fontSize(8).fillColor('#6b7280');
+    doc.text('DESCRIPTION', colDesc, y, { width: 250 });
+    doc.text('QTY', colQty, y, { width: 40, align: 'right' });
+    doc.text('RATE', colRate, y, { width: 60, align: 'right' });
+    doc.text('AMOUNT', colAmt, y, { width: 80, align: 'right' });
+    y += 14;
+    doc.moveTo(50, y).lineTo(545, y).strokeColor('#e5e7eb').stroke();
+    y += 8;
+
+    for (const row of items) {
+      if (y > 720) {
+        doc.addPage();
+        y = 50;
+      }
+      doc.fontSize(9).fillColor('#111827');
+      const descHeight = doc.heightOfString(String(row.description || 'Item'), { width: 250 });
+      doc.text(String(row.description || 'Item'), colDesc, y, { width: 250 });
+      doc.text(String(row.quantity), colQty, y, { width: 40, align: 'right' });
+      doc.text(this.formatMoneyPdf(row.unitPrice, invoice.currency), colRate, y, { width: 60, align: 'right' });
+      doc.text(this.formatMoneyPdf(row.amount, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+      y += Math.max(descHeight, 12) + 6;
+    }
+
+    doc.moveTo(50, y).lineTo(545, y).strokeColor('#e5e7eb').stroke();
+    y += 12;
+    const totalsX = 360;
+    doc.fontSize(10).fillColor('#111827');
+    doc.text('Subtotal', totalsX, y, { width: 80 });
+    doc.text(this.formatMoneyPdf(invoice.subtotal, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+    y += 16;
+    if (invoice.taxAmount > 0) {
+      doc.text('Tax', totalsX, y, { width: 80 });
+      doc.text(this.formatMoneyPdf(invoice.taxAmount, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+      y += 16;
+    }
+    doc.fontSize(12).text('Total', totalsX, y, { width: 80 });
+    doc.fontSize(12).text(this.formatMoneyPdf(invoice.total, invoice.currency), colAmt, y, {
+      width: 80,
+      align: 'right',
+    });
+    y += 24;
+    doc.y = y;
+
+    if (invoice.paymentMethod) {
+      doc.fontSize(9).fillColor('#6b7280').text(
+        `Payment: ${invoice.paymentMethod}${invoice.paymentRef ? ` · Ref ${invoice.paymentRef}` : ''}`
+      );
+    }
+    if (invoice.notes) {
+      doc.moveDown(0.4);
+      doc.fontSize(9).fillColor('#6b7280').text(String(invoice.notes), { width: 480 });
+    }
+
+    doc.end();
+    return done;
+  }
+
   renderInvoiceHtml(invoice: any, business: any): string {
     const tz = business.timezone || 'Asia/Kolkata';
     const items = (invoice.lineItems as InvoiceLineItem[]) || [];
@@ -356,6 +478,86 @@ class InvoiceService {
     if (booking.paymentStatus === 'refunded') return false;
     return (booking.paymentStatus === 'paid' || booking.paymentStatus === 'partial')
       && (booking.paymentAmount ?? 0) > 0;
+  }
+
+  async sendInvoice(
+    businessId: string,
+    invoiceId: string,
+    channels: Array<'email' | 'whatsapp'>
+  ) {
+    const unique = Array.from(new Set(channels));
+    if (!unique.length) {
+      const err: any = new Error('Select email and/or WhatsApp');
+      err.status = 400;
+      throw err;
+    }
+
+    const [business, invoice] = await Promise.all([
+      prisma.business.findUnique({ where: { id: businessId } }),
+      prisma.invoice.findFirst({
+        where: { id: invoiceId, businessId },
+        include: {
+          booking: {
+            select: {
+              id: true, date: true, startTime: true, endTime: true, status: true,
+              serviceNameSnapshot: true, paymentStatus: true,
+            },
+          },
+        },
+      }),
+    ]);
+    if (!business) {
+      const err: any = new Error('Business not found');
+      err.status = 404;
+      throw err;
+    }
+    if (!invoice) {
+      const err: any = new Error('Invoice not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const phone = String(invoice.customerPhone || '').trim();
+    const email = String(invoice.customerEmail || '').trim();
+    for (const ch of unique) {
+      if (ch === 'email' && !email) {
+        const err: any = new Error('Invoice has no customer email');
+        err.status = 400;
+        throw err;
+      }
+      if (ch === 'whatsapp' && !phone) {
+        const err: any = new Error('Invoice has no customer phone');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const { notificationService } = await import('./NotificationService');
+    const { createDocumentMediaAsset, publicMediaUrl } = await import('./MediaService');
+
+    const html = this.renderInvoiceHtml(invoice, business);
+    const pdfBytes = await this.renderInvoicePdf(invoice, business);
+    const filename = `${String(invoice.invoiceNumber || 'invoice').replace(/[^\w.-]+/g, '_')}.pdf`;
+
+    // Persist PDF only when WhatsApp needs a public HTTPS URL for Gupshup to fetch.
+    let documentUrl = '';
+    if (unique.includes('whatsapp')) {
+      const asset = await createDocumentMediaAsset(businessId, pdfBytes, 'application/pdf');
+      documentUrl = publicMediaUrl(asset.id);
+    }
+
+    const results = await notificationService.sendInvoiceToCustomer(
+      businessId,
+      invoice,
+      html,
+      unique,
+      {
+        pdf: { filename, content: pdfBytes, contentType: 'application/pdf' },
+        documentUrl,
+        documentFilename: filename,
+      }
+    );
+    return { results };
   }
 }
 

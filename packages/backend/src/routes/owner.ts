@@ -3462,3 +3462,27 @@ ownerRouter.get('/invoices/:id/html', async (req: AuthRequest, res: Response) =>
     res.status(400).json({ error: error.message });
   }
 });
+
+/**
+ * POST /owner/invoices/:id/send — email and/or WhatsApp the invoice to the customer.
+ * Channels require matching contact fields on the invoice.
+ */
+ownerRouter.post('/invoices/:id/send', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      channels: z.array(z.enum(['email', 'whatsapp'])).min(1).max(2),
+    }).strict();
+    const parsed = schema.parse(req.body || {});
+    const result = await invoiceService.sendInvoice(
+      req.owner!.businessId,
+      req.params.id,
+      parsed.channels
+    );
+    res.json(result);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
