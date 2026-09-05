@@ -6,6 +6,8 @@ import prisma from '../lib/prisma';
 export const MEDIA_MAX_FILE_BYTES = 2 * 1024 * 1024;
 /** Stored file cap after WebP compression. */
 export const MEDIA_MAX_STORED_BYTES = 80 * 1024;
+/** Invoice / document PDF cap (Gupshup fetches this URL). */
+export const MEDIA_MAX_DOCUMENT_BYTES = 500 * 1024;
 /** Per salon — enough for unique service photos plus a cover. */
 export const MEDIA_MAX_ASSETS = 50;
 /** Per salon — 8MB after compression. */
@@ -94,9 +96,7 @@ export async function compressImage(bytes: Buffer): Promise<{ data: Buffer; mime
   return { data, mimeType: 'image/webp' };
 }
 
-export async function createMediaAsset(businessId: string, bytes: Buffer) {
-  const { data, mimeType } = await compressImage(bytes);
-
+async function assertMediaQuota(businessId: string, byteSize: number, kind: 'image' | 'document') {
   const [perBusiness, platform] = await Promise.all([
     prisma.mediaAsset.aggregate({
       where: { businessId },
@@ -109,14 +109,25 @@ export async function createMediaAsset(businessId: string, bytes: Buffer) {
   ]);
 
   if (perBusiness._count._all >= MEDIA_MAX_ASSETS) {
-    throw Object.assign(new Error(`Image limit reached (${MEDIA_MAX_ASSETS} per business)`), { status: 400 });
+    throw Object.assign(
+      new Error(`${kind === 'image' ? 'Image' : 'File'} limit reached (${MEDIA_MAX_ASSETS} per business)`),
+      { status: 400 }
+    );
   }
-  if ((perBusiness._sum.byteSize ?? 0) + data.length > MEDIA_MAX_BUSINESS_BYTES) {
-    throw Object.assign(new Error('Image storage limit reached for this business'), { status: 400 });
+  if ((perBusiness._sum.byteSize ?? 0) + byteSize > MEDIA_MAX_BUSINESS_BYTES) {
+    throw Object.assign(new Error('Media storage limit reached for this business'), { status: 400 });
   }
-  if ((platform._sum.byteSize ?? 0) + data.length > MEDIA_MAX_PLATFORM_BYTES) {
-    throw Object.assign(new Error('Free-plan image storage is full (sized for about 10 stores). Delete unused images or upgrade storage.'), { status: 400 });
+  if ((platform._sum.byteSize ?? 0) + byteSize > MEDIA_MAX_PLATFORM_BYTES) {
+    throw Object.assign(
+      new Error('Free-plan media storage is full (sized for about 10 stores). Delete unused files or upgrade storage.'),
+      { status: 400 }
+    );
   }
+}
+
+export async function createMediaAsset(businessId: string, bytes: Buffer) {
+  const { data, mimeType } = await compressImage(bytes);
+  await assertMediaQuota(businessId, data.length, 'image');
 
   return prisma.mediaAsset.create({
     data: {
@@ -124,6 +135,39 @@ export async function createMediaAsset(businessId: string, bytes: Buffer) {
       mimeType,
       byteSize: data.length,
       data,
+    },
+    select: { id: true, mimeType: true, byteSize: true },
+  });
+}
+
+/** Store a non-image file (e.g. invoice PDF) for public HTTPS fetch by WhatsApp providers. */
+export async function createDocumentMediaAsset(
+  businessId: string,
+  bytes: Buffer,
+  mimeType: string
+) {
+  if (!bytes.length) {
+    throw Object.assign(new Error('Empty document'), { status: 400 });
+  }
+  if (bytes.length > MEDIA_MAX_DOCUMENT_BYTES) {
+    throw Object.assign(
+      new Error(`Document too large (max ${Math.round(MEDIA_MAX_DOCUMENT_BYTES / 1024)}KB)`),
+      { status: 400 }
+    );
+  }
+  const safeMime = String(mimeType || '').trim().toLowerCase();
+  if (safeMime !== 'application/pdf') {
+    throw Object.assign(new Error('Only PDF documents are allowed'), { status: 400 });
+  }
+
+  await assertMediaQuota(businessId, bytes.length, 'document');
+
+  return prisma.mediaAsset.create({
+    data: {
+      businessId,
+      mimeType: safeMime,
+      byteSize: bytes.length,
+      data: bytes,
     },
     select: { id: true, mimeType: true, byteSize: true },
   });
@@ -137,13 +181,17 @@ export async function serveMediaAsset(req: Request, res: Response) {
     where: { id },
     select: { mimeType: true, byteSize: true, data: true },
   });
-  if (!asset) return res.status(404).json({ error: 'Image not found' });
+  if (!asset) return res.status(404).json({ error: 'Media not found' });
 
+  const buf = Buffer.from(asset.data);
   res.setHeader('Content-Type', asset.mimeType);
-  res.setHeader('Content-Length', String(Buffer.from(asset.data).length));
+  res.setHeader('Content-Length', String(buf.length));
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  if (asset.mimeType === 'application/pdf') {
+    res.setHeader('Content-Disposition', 'inline; filename="invoice.pdf"');
+  }
   res.setHeader('ETag', `"${id}"`);
   if (req.headers['if-none-match'] === `"${id}"`) return res.status(304).end();
-  return res.status(200).send(Buffer.from(asset.data));
+  return res.status(200).send(buf);
 }

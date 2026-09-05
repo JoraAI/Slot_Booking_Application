@@ -49,6 +49,8 @@ export type GupshupWhatsappConfig = {
   utilityTemplate?: string;
   /** Approved multi-param booking confirmation template UUID (e.g. appointment_confirmation_2). */
   bookingTemplate?: string;
+  /** Approved multi-param invoice notification template UUID. */
+  invoiceTemplate?: string;
   /** Approved template UUID for marketing / broadcasts. */
   marketingTemplate?: string;
   displayPhone?: string;
@@ -137,6 +139,7 @@ export function resolvePlatformGupshupWhatsapp(): GupshupWhatsappConfig | null {
   const source = String(process.env.GUPSHUP_SOURCE || '').replace(/\D/g, '');
   const utilityTemplate = String(process.env.GUPSHUP_TEMPLATE_UTILITY || '').trim();
   const bookingTemplate = String(process.env.GUPSHUP_TEMPLATE_BOOKING || '').trim();
+  const invoiceTemplate = String(process.env.GUPSHUP_TEMPLATE_INVOICE || '').trim();
   const marketingTemplate = String(process.env.GUPSHUP_TEMPLATE_MARKETING || '').trim();
   const displayPhone = String(process.env.GUPSHUP_DISPLAY_PHONE || '').trim();
   if (!apiKey || !appName || !source) return null;
@@ -148,6 +151,7 @@ export function resolvePlatformGupshupWhatsapp(): GupshupWhatsappConfig | null {
     source,
     ...(utilityTemplate ? { utilityTemplate } : {}),
     ...(bookingTemplate ? { bookingTemplate } : {}),
+    ...(invoiceTemplate ? { invoiceTemplate } : {}),
     ...(marketingTemplate ? { marketingTemplate } : {}),
     ...(displayPhone ? { displayPhone } : {}),
   };

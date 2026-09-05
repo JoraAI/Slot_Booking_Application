@@ -8,6 +8,7 @@ import {
   resolveEnvSmtp,
   resolveResend,
   resolveWhatsappCredentials,
+  resolvePlatformWhatsapp,
   smtpConfigured,
   type GupshupWhatsappConfig,
   type MetaWhatsappConfig,
@@ -22,6 +23,12 @@ import {
 } from './CustomerService';
 import { contactMatchesFilters } from './CustomerAttributes';
 import { htmlToPlainText, wrapEmailMessage } from './MessageFormat';
+
+type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
 
 type SendOpts = {
   replyTo?: string;
@@ -43,6 +50,11 @@ type SendOpts = {
   templateButtonUrlSuffix?: string;
   /** Override template UUID (defaults to booking template, then utility). */
   templateId?: string;
+  /** Email file attachments (e.g. invoice PDF). */
+  attachments?: EmailAttachment[];
+  /** Public HTTPS URL for WhatsApp document-header templates (Gupshup). */
+  documentUrl?: string | null;
+  documentFilename?: string;
 };
 
 class NotificationService {
@@ -91,6 +103,11 @@ class NotificationService {
   private async sendViaResend(to: string, subject: string, html: string, opts: SendOpts): Promise<void> {
     const resend = resolveResend();
     if (!resend) throw new Error('Email: Resend is not configured (RESEND_API_KEY).');
+    const attachments = (opts.attachments || []).map((a) => ({
+      filename: a.filename,
+      content: a.content.toString('base64'),
+      ...(a.contentType ? { content_type: a.contentType } : {}),
+    }));
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -103,6 +120,7 @@ class NotificationService {
         subject,
         html,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(attachments.length ? { attachments } : {}),
       }),
     });
     if (!res.ok) {
@@ -134,6 +152,15 @@ class NotificationService {
       subject,
       html,
       ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+      ...(opts.attachments?.length
+        ? {
+            attachments: opts.attachments.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              contentType: a.contentType || 'application/octet-stream',
+            })),
+          }
+        : {}),
     });
     console.log(`Email sent to ${to}: ${subject}`);
   }
@@ -478,7 +505,8 @@ class NotificationService {
     gupshup: GupshupWhatsappConfig,
     toDigits: string,
     templateId: string,
-    params: string[]
+    params: string[],
+    document?: { link: string; filename: string } | null
   ): Promise<Response> {
     // Body vars: sanitize Meta-sensitive chars. Last param may be Visit Website
     // URL suffix (path+query) — keep as-is aside from trim.
@@ -488,13 +516,24 @@ class NotificationService {
       if (isLikelyButtonSuffix) return String(p).trim().slice(0, 2000);
       return this.sanitizeTemplateParam(p, 900);
     });
-    return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', {
+    const fields: Record<string, string> = {
       destination: toDigits,
       template: JSON.stringify({
         id: templateId,
         params: cleaned,
       }),
-    });
+    };
+    // Document-header templates require the public PDF link in `message`.
+    if (document?.link) {
+      fields.message = JSON.stringify({
+        type: 'document',
+        document: {
+          link: document.link,
+          filename: (document.filename || 'invoice.pdf').slice(0, 240),
+        },
+      });
+    }
+    return this.sendGupshupForm(gupshup, '/wa/api/v1/template/msg', fields);
   }
 
   private async dispatchWhatsapp(
@@ -508,6 +547,8 @@ class NotificationService {
       templateParams?: string[];
       templateButtonUrlSuffix?: string;
       templateId?: string;
+      documentUrl?: string | null;
+      documentFilename?: string;
     }
   ): Promise<{ response: Response; bodyText: string }> {
     const imageUrl = this.absolutePublicUrl(opts.imageUrl || '');
@@ -620,6 +661,8 @@ class NotificationService {
       templateParams?: string[];
       templateButtonUrlSuffix?: string;
       templateId?: string;
+      documentUrl?: string | null;
+      documentFilename?: string;
     } = {}
   ): Promise<{ response: Response; bodyText: string }> {
     const fallbackTemplateId = this.gupshupTemplateId(gupshup, category);
@@ -632,6 +675,33 @@ class NotificationService {
     };
 
     const failed = () => !this.gupshupResponseOk(response!, bodyText);
+
+    // Invoice / media document templates: no session fallback (must deliver the PDF).
+    const documentLink =
+      this.absolutePublicUrl(opts.documentUrl || '') ||
+      (/^https:\/\//i.test(String(opts.documentUrl || '').trim())
+        ? String(opts.documentUrl).trim()
+        : null);
+    if (documentLink && opts.templateParams && opts.templateParams.length > 0) {
+      const templateId = opts.templateId || fallbackTemplateId;
+      if (!templateId) {
+        return {
+          response: new Response('WhatsApp document template is not configured', { status: 400 }),
+          bodyText: 'WhatsApp document template is not configured',
+        };
+      }
+      const params = [...opts.templateParams];
+      if (opts.templateButtonUrlSuffix) {
+        params.push(opts.templateButtonUrlSuffix.replace(/^\s+/, ''));
+      }
+      await readBody(
+        await this.sendGupshupWhatsappTemplate(gupshup, toDigits, templateId, params, {
+          link: documentLink,
+          filename: opts.documentFilename || 'invoice.pdf',
+        })
+      );
+      return { response: response!, bodyText };
+    }
 
     // Structured booking template: body {{1}}…{{5}} + Visit Website suffix as last param.
     if (opts.templateParams && opts.templateParams.length > 0) {
@@ -806,7 +876,11 @@ class NotificationService {
       const { response, bodyText: initialBody } = await this.dispatchWhatsapp(platform, toDigits, message, category, opts);
       let bodyText = initialBody;
 
-      if (!response.ok) {
+      const providerRejected =
+        !response.ok ||
+        (platform.provider === 'gupshup' && !this.gupshupResponseOk(response, bodyText || ''));
+
+      if (providerRejected) {
         const err = new Error(`WhatsApp sending failed: ${bodyText}`);
         await walletService.releaseReservation(reserve.reservationId, err.message);
         await this.logWhatsAppMessage(businessId, opts, toDigits, category, costPaise, 'FAILED',
@@ -1515,6 +1589,117 @@ class NotificationService {
     }
 
     return { email, whatsapp };
+  }
+
+  /**
+   * Deliver an invoice PDF to the customer by email and/or WhatsApp.
+   * WhatsApp requires GUPSHUP_TEMPLATE_INVOICE (approved Document-header template UUID)
+   * and a publicly fetchable HTTPS PDF URL.
+   */
+  async sendInvoiceToCustomer(
+    businessId: string,
+    invoice: {
+      id: string;
+      invoiceNumber: string;
+      customerName: string;
+      customerPhone?: string | null;
+      customerEmail?: string | null;
+      total: number;
+      currency?: string;
+    },
+    html: string,
+    channels: Array<'email' | 'whatsapp'>,
+    delivery: {
+      pdf: EmailAttachment;
+      /** Required when WhatsApp is among channels (public HTTPS media URL). */
+      documentUrl?: string;
+      documentFilename: string;
+    }
+  ): Promise<Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }>> {
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) throw new Error('Business not found');
+
+    const pdfAttachment: EmailAttachment = {
+      filename: delivery.pdf.filename,
+      content: delivery.pdf.content,
+      contentType: delivery.pdf.contentType || 'application/pdf',
+    };
+
+    const results: Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }> = [];
+    for (const channel of channels) {
+      let ok = false;
+      let error: string | undefined;
+      try {
+        if (channel === 'email') {
+          const to = String(invoice.customerEmail || '').trim();
+          if (!to) throw new Error('Invoice has no customer email');
+          if (!this.smtpConfigured(business)) {
+            throw new Error('Email is not configured. Connect SMTP in Settings or contact support.');
+          }
+          await this.sendEmail(
+            to,
+            `Invoice ${invoice.invoiceNumber} from ${business.name}`,
+            html,
+            {
+              replyTo: business.ownerEmail,
+              throwOnError: true,
+              business,
+              attachments: [pdfAttachment],
+            }
+          );
+        } else {
+          const phone = String(invoice.customerPhone || '').trim();
+          if (!phone) throw new Error('Invoice has no customer phone');
+          const platform = resolvePlatformWhatsapp();
+          const invoiceTemplate =
+            platform && platform.provider === 'gupshup'
+              ? platform.invoiceTemplate
+              : String(process.env.GUPSHUP_TEMPLATE_INVOICE || '').trim() || undefined;
+          if (!invoiceTemplate) {
+            throw new Error(
+              'WhatsApp invoice template is not configured yet. Add GUPSHUP_TEMPLATE_INVOICE after Gupshup approval (Header = Document).'
+            );
+          }
+          const publicPdf =
+            this.absolutePublicUrl(delivery.documentUrl || '') ||
+            (/^https:\/\//i.test(String(delivery.documentUrl || '')) ? String(delivery.documentUrl) : null);
+          if (!publicPdf) {
+            throw new Error(
+              'Invoice PDF URL is not publicly reachable. Set FRONTEND_PUBLIC_URL so WhatsApp can fetch the document.'
+            );
+          }
+          // WhatsApp body params stay readable; PDF itself uses Rs. for Helvetica.
+          const amountLabel =
+            invoice.currency === 'INR' || !invoice.currency
+              ? `Rs. ${Number(invoice.total).toLocaleString('en-IN')}`
+              : `${invoice.currency} ${invoice.total}`;
+          await this.sendWhatsApp(
+            phone,
+            `Hi ${invoice.customerName}, your invoice ${invoice.invoiceNumber} from ${business.name} for ${amountLabel} is ready.`,
+            {
+              throwOnError: true,
+              throwOnInsufficient: true,
+              business,
+              category: 'UTILITY',
+              templateId: invoiceTemplate,
+              templateParams: [
+                String(invoice.customerName || 'Customer').slice(0, 60),
+                String(invoice.invoiceNumber).slice(0, 40),
+                String(business.name || 'Salon').slice(0, 60),
+                amountLabel.slice(0, 40),
+              ],
+              documentUrl: publicPdf,
+              documentFilename: delivery.documentFilename || pdfAttachment.filename,
+            }
+          );
+        }
+        ok = true;
+      } catch (e: any) {
+        error = e?.message || `${channel} delivery failed`;
+      }
+      results.push({ channel, ok, error });
+    }
+    return results;
   }
 }
 

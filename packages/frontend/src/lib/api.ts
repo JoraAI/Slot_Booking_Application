@@ -825,6 +825,13 @@ class ApiClient {
     }
     openHtmlDocument(body, 'Invoice')
   }
+
+  sendInvoice(invoiceId: string, channels: Array<'email' | 'whatsapp'>) {
+    return this.request<{ results: Array<{ channel: 'email' | 'whatsapp'; ok: boolean; error?: string }> }>(
+      `/owner/invoices/${invoiceId}/send`,
+      { method: 'POST', body: JSON.stringify({ channels }) },
+    )
+  }
 }
 
 class ApiError extends Error {
