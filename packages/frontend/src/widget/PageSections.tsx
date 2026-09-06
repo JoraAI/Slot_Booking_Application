@@ -53,7 +53,9 @@ function PageSectionBlock({ section, services, workingHours, location }: {
   const content = section.content || ''
 
   if (section.type === 'SERVICES') {
-    const list = services.filter((s) => s.isActive)
+    const list = services
+      .filter((s) => s.isActive)
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
     if (list.length === 0) return null
     return (
       <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
@@ -61,10 +63,10 @@ function PageSectionBlock({ section, services, workingHours, location }: {
         {subtitle && <p className="text-sm text-gray-500 mb-4">{subtitle}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {list.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 p-3 border border-gray-100 dark:border-gray-800 rounded-lg">
-              {s.imageUrl && <img src={s.imageUrl} alt={s.name} className="w-12 h-12 rounded-lg object-cover" />}
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{s.name}</p>
+            <div key={s.id} className="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 rounded-lg">
+              {s.imageUrl && <img src={s.imageUrl} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium break-words [overflow-wrap:anywhere] leading-snug">{s.name}</p>
                 <p className="text-xs text-gray-500">{s.durationMinutes} min</p>
                 <p className="text-sm font-semibold text-primary">₹{s.price}</p>
               </div>
