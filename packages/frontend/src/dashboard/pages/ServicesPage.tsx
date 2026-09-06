@@ -52,6 +52,8 @@ export const ServicesPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [showCatForm, setShowCatForm] = useState(false)
   const [catName, setCatName] = useState('')
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [savingCategory, setSavingCategory] = useState(false)
   const [showServiceForm, setShowServiceForm] = useState(false)
   const [serviceForm, setServiceForm] = useState<ServiceForm>(emptyServiceForm)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -83,22 +85,76 @@ export const ServicesPage: React.FC = () => {
 
   useEffect(() => { load() }, [load])
 
+  const resetCategoryForm = () => {
+    setCatName('')
+    setEditingCategoryId(null)
+    setShowCatForm(false)
+  }
+
+  const openCreateCategory = () => {
+    setEditingCategoryId(null)
+    setCatName('')
+    setShowCatForm(true)
+  }
+
+  const openEditCategory = (cat: ServiceCategory) => {
+    setEditingCategoryId(cat.id)
+    setCatName(cat.name)
+    setShowCatForm(true)
+  }
+
   const saveCategory = async (e: React.FormEvent) => {
     e.preventDefault()
+    const name = catName.trim()
+    if (!name) {
+      toast.error('Category name is required')
+      return
+    }
+    setSavingCategory(true)
     try {
-      await api.createCategory({ name: catName })
-      toast.success('Category created')
-      setCatName('')
-      setShowCatForm(false)
+      if (editingCategoryId) {
+        await api.updateCategory(editingCategoryId, { name })
+        toast.success('Category updated')
+      } else {
+        await api.createCategory({ name })
+        toast.success('Category created')
+      }
+      resetCategoryForm()
       load()
     } catch (err: any) {
       toast.error(err.message)
+    } finally {
+      setSavingCategory(false)
     }
   }
 
   const toggleCategory = async (cat: ServiceCategory) => {
-    await api.updateCategory(cat.id, { isActive: !cat.isActive })
-    load()
+    try {
+      await api.updateCategory(cat.id, { isActive: !cat.isActive })
+      load()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update category')
+    }
+  }
+
+  const deleteCategory = async (cat: ServiceCategory) => {
+    const tagged = services.filter((s) => s.categoryId === cat.id).length
+    if (tagged > 0) {
+      toast.error(
+        `Cannot delete “${cat.name}” — ${tagged} service${tagged === 1 ? ' is' : 's are'} tagged to it (active or inactive). Reassign them first.`
+      )
+      return
+    }
+    if (!window.confirm(`Delete category “${cat.name}”? This cannot be undone.`)) return
+    try {
+      await api.deleteCategory(cat.id)
+      toast.success('Category deleted')
+      if (categoryFilter === cat.id) setCategoryFilter('all')
+      if (editingCategoryId === cat.id) resetCategoryForm()
+      load()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not delete category')
+    }
   }
 
   const openServiceForm = (svc?: Service) => {
@@ -290,15 +346,41 @@ export const ServicesPage: React.FC = () => {
               </button>
             )
           })}
-          <button onClick={() => setShowCatForm(!showCatForm)} className="shrink-0 px-3 py-1.5 rounded-full text-sm border border-dashed border-primary/50 text-primary hover:bg-primary/5">
-            {showCatForm ? 'Cancel' : '+ Category'}
+          <button
+            onClick={() => {
+              if (showCatForm && !editingCategoryId) resetCategoryForm()
+              else openCreateCategory()
+            }}
+            className="shrink-0 px-3 py-1.5 rounded-full text-sm border border-dashed border-primary/50 text-primary hover:bg-primary/5"
+          >
+            {showCatForm && !editingCategoryId ? 'Cancel' : '+ Category'}
           </button>
         </div>
 
         {showCatForm && (
-          <form onSubmit={saveCategory} className="flex gap-2 px-4 pb-4">
-            <input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="Category name" required className={input} />
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">Add</button>
+          <form onSubmit={saveCategory} className="flex flex-col sm:flex-row gap-2 px-4 pb-4">
+            <input
+              value={catName}
+              onChange={(e) => setCatName(e.target.value)}
+              placeholder={editingCategoryId ? 'Rename category' : 'Category name'}
+              required
+              className={input}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={savingCategory}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {savingCategory ? 'Saving…' : editingCategoryId ? 'Update' : 'Add'}
+              </button>
+              {editingCategoryId && (
+                <button type="button" onClick={resetCategoryForm} className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
         )}
       </div>
@@ -386,18 +468,57 @@ export const ServicesPage: React.FC = () => {
       )}
 
       {categories.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-          <span>Category visibility:</span>
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => toggleCategory(category)}
-              className={`px-2 py-1 rounded-md border transition ${category.isActive ? 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400' : 'border-gray-200 text-gray-400 dark:border-gray-700'}`}
-              title={`Click to ${category.isActive ? 'hide' : 'show'} this category`}
-            >
-              {category.isActive ? '●' : '○'} {category.name}
-            </button>
-          ))}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold">Manage categories</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Edit or hide categories used when tagging services. Delete only when no services (active or inactive) use them.
+            </p>
+          </div>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {categories.map((category) => {
+              const count = services.filter((service) => service.categoryId === category.id).length
+              return (
+                <li key={category.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{category.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {count} service{count === 1 ? '' : 's'} tagged · {category.isActive ? 'Visible' : 'Hidden'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(category)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
+                        category.isActive
+                          ? 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400'
+                          : 'border-gray-200 text-gray-500 dark:border-gray-700'
+                      }`}
+                    >
+                      {category.isActive ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditCategory(category)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 hover:border-primary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteCategory(category)}
+                      disabled={count > 0}
+                      title={count > 0 ? 'Reassign all tagged services first' : 'Delete category'}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
 
