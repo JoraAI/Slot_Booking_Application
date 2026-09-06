@@ -50,6 +50,9 @@ export const InvoicesPage: React.FC = () => {
     notes: '',
     customDescription: '',
     customAmount: '',
+    discountEnabled: false,
+    discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FLAT',
+    discountValue: '',
   })
   const [selected, setSelected] = useState<Record<string, SelectedLine>>({})
 
@@ -76,11 +79,33 @@ export const InvoicesPage: React.FC = () => {
   useEffect(() => { load() }, [dateFrom, dateTo])
 
   const selectedLines = useMemo(() => Object.values(selected), [selected])
-  const total = useMemo(
+  const subtotal = useMemo(
     () => selectedLines.reduce((sum, row) => sum + row.quantity * row.unitPrice, 0),
     [selectedLines],
   )
+  const discountPreview = useMemo(() => {
+    if (!form.discountEnabled) return 0
+    const value = Number(form.discountValue)
+    if (!Number.isFinite(value) || value <= 0 || subtotal <= 0) return 0
+    if (form.discountType === 'PERCENTAGE') {
+      return Math.min(subtotal, Math.round(((subtotal * Math.min(100, value)) / 100) * 100) / 100)
+    }
+    return Math.min(subtotal, Math.round(value * 100) / 100)
+  }, [form.discountEnabled, form.discountType, form.discountValue, subtotal])
+  const total = Math.max(0, Math.round((subtotal - discountPreview) * 100) / 100)
 
+  const emptyForm = {
+    customerName: '',
+    customerPhone: '',
+    customerEmail: '',
+    paymentMethod: 'cash' as const,
+    notes: '',
+    customDescription: '',
+    customAmount: '',
+    discountEnabled: false,
+    discountType: 'PERCENTAGE' as const,
+    discountValue: '',
+  }
   const toggleCatalogItem = (kind: 'service' | 'product', item: { id: string; name: string; price: number }) => {
     const key = `${kind}:${item.id}`
     setSelected((prev) => {
@@ -181,6 +206,17 @@ export const InvoicesPage: React.FC = () => {
       toast.error('Invoice total must be greater than zero')
       return
     }
+    if (form.discountEnabled) {
+      const value = Number(form.discountValue)
+      if (!Number.isFinite(value) || value <= 0) {
+        toast.error('Enter a discount value greater than zero, or turn discount off')
+        return
+      }
+      if (form.discountType === 'PERCENTAGE' && value > 100) {
+        toast.error('Percentage discount cannot exceed 100%')
+        return
+      }
+    }
     setSaving(true)
     try {
       const inv = await api.createWalkInInvoice({
@@ -190,19 +226,13 @@ export const InvoicesPage: React.FC = () => {
         lineItems,
         paymentMethod: form.paymentMethod,
         notes: form.notes.trim() || null,
+        discountType: form.discountEnabled ? form.discountType : null,
+        discountValue: form.discountEnabled ? Number(form.discountValue) : null,
       })
       toast.success(`Invoice ${inv.invoiceNumber} created`)
       setShowForm(false)
       setSelected({})
-      setForm({
-        customerName: '',
-        customerPhone: '',
-        customerEmail: '',
-        paymentMethod: 'cash',
-        notes: '',
-        customDescription: '',
-        customAmount: '',
-      })
+      setForm({ ...emptyForm })
       load()
     } catch (e: any) {
       toast.error(e.message || 'Could not create invoice')
@@ -465,10 +495,83 @@ export const InvoicesPage: React.FC = () => {
                     </button>
                   </div>
                 ))}
-                <p className="font-semibold text-right pt-1">Total: ₹{total.toLocaleString('en-IN')}</p>
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, discountEnabled: !p.discountEnabled }))}
+                        className={`relative inline-block w-9 h-5 shrink-0 rounded-full transition-colors ${
+                          form.discountEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-700'
+                        }`}
+                        aria-pressed={form.discountEnabled}
+                        aria-label="Toggle discount"
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                            form.discountEnabled ? 'translate-x-4' : ''
+                          }`}
+                        />
+                      </button>
+                      <span className="text-sm font-medium">Discount</span>
+                    </div>
+                    {form.discountEnabled && (
+                      <div className="flex rounded-lg bg-gray-100 dark:bg-gray-900 p-0.5">
+                        {(['PERCENTAGE', 'FLAT'] as const).map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, discountType: type }))}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                              form.discountType === type
+                                ? 'bg-white dark:bg-gray-800 shadow text-primary'
+                                : 'text-gray-500'
+                            }`}
+                          >
+                            {type === 'PERCENTAGE' ? '%' : '₹'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {form.discountEnabled && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={form.discountType === 'PERCENTAGE' ? 100 : undefined}
+                        step="any"
+                        value={form.discountValue}
+                        onChange={(e) => setForm((p) => ({ ...p, discountValue: e.target.value }))}
+                        placeholder={form.discountType === 'PERCENTAGE' ? 'e.g. 10' : 'e.g. 100'}
+                        className={`${inputCls} flex-1`}
+                      />
+                      <span className="text-sm text-gray-500 w-8 shrink-0">
+                        {form.discountType === 'PERCENTAGE' ? '%' : '₹'}
+                      </span>
+                    </div>
+                  )}
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between text-gray-500">
+                      <span>Subtotal</span>
+                      <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                    {discountPreview > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>
+                          Discount
+                          {form.discountType === 'PERCENTAGE' && form.discountValue
+                            ? ` (${form.discountValue}%)`
+                            : ''}
+                        </span>
+                        <span>- ₹{discountPreview.toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    <p className="font-semibold text-right pt-1">Total: ₹{total.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
               </div>
             )}
-
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium mb-1">Payment method</label>

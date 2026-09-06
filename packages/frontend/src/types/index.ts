@@ -532,6 +532,11 @@ export interface InvoiceListItem {
   customerName: string
   customerPhone: string | null
   customerEmail: string | null
+  subtotal?: number
+  taxAmount?: number
+  discountType?: 'PERCENTAGE' | 'FLAT' | null
+  discountValue?: number | null
+  discountAmount?: number
   total: number
   currency: string
   source: string
