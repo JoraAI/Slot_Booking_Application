@@ -62,38 +62,62 @@ function PageSectionBlock({ section, services, workingHours, location }: {
         <h2 className="text-lg font-bold mb-1">💇 {section.title || 'Our Services'}</h2>
         {subtitle && <p className="text-sm text-gray-500 mb-4">{subtitle}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {list.map((s) => (
-            <div key={s.id} className="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 rounded-lg">
-              {s.imageUrl && <img src={s.imageUrl} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium break-words [overflow-wrap:anywhere] leading-snug">{s.name}</p>
-                <p className="text-xs text-gray-500">{s.durationMinutes} min</p>
-                <p className="text-sm font-semibold text-primary">₹{s.price}</p>
+          {list.map((s) => {
+            const pricing = s.displayedPricing
+            const hasDiscount = !!pricing && pricing.discountAmount > 0
+            return (
+              <div key={s.id} className="flex items-start gap-3 p-3 border border-gray-100 dark:border-gray-800 rounded-lg">
+                {s.imageUrl && <img src={s.imageUrl} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium break-words [overflow-wrap:anywhere] leading-snug">{s.name}</p>
+                  <p className="text-xs text-gray-500">{s.durationMinutes} min</p>
+                  {hasDiscount ? (
+                    <div className="mt-0.5">
+                      <p className="text-sm font-semibold text-primary">₹{pricing.finalPrice}</p>
+                      <p className="text-xs text-gray-400 line-through">₹{pricing.originalPrice}</p>
+                      {pricing.discountLabel && (
+                        <p className="text-xs font-medium text-emerald-600">{pricing.discountLabel}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold text-primary">₹{pricing?.finalPrice ?? s.price}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     )
   }
 
   if (section.type === 'OFFERS') {
-    const offers = services.filter((s) => s.isActive && s.discountActive && s.discountValue != null)
+    const offers = services.filter(
+      (s) => s.isActive && !!s.displayedPricing && s.displayedPricing.discountAmount > 0,
+    )
     if (offers.length === 0) return null
     return (
       <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm">
         <h2 className="text-lg font-bold mb-1">🏷️ {section.title || 'Offers'}</h2>
         {subtitle && <p className="text-sm text-gray-500 mb-4">{subtitle}</p>}
         <div className="space-y-2">
-          {offers.map((s) => (
-            <div key={s.id} className="flex items-center justify-between p-3 border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 rounded-lg text-sm">
-              <div>
-                <p className="font-medium">{s.name}</p>
-                <p className="text-xs text-amber-700 dark:text-amber-400">{s.discountLabel || `${s.discountValue}${s.discountType === 'PERCENTAGE' ? '%' : ' ₹'} off`}</p>
+          {offers.map((s) => {
+            const pricing = s.displayedPricing!
+            return (
+              <div key={s.id} className="flex items-center justify-between gap-3 p-3 border border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 rounded-lg text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{s.name}</p>
+                  {pricing.discountLabel && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">{pricing.discountLabel}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-semibold text-primary">₹{pricing.finalPrice}</p>
+                  <p className="text-xs text-gray-400 line-through">₹{pricing.originalPrice}</p>
+                </div>
               </div>
-              <p className="font-semibold">₹{s.price}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     )

@@ -255,6 +255,55 @@ export const ServicesPage: React.FC = () => {
     maximumFractionDigits: value % 1 === 0 ? 0 : 2,
   }).format(value)
 
+  /** Mirror PricingService for owner list: strikethrough original + final when offer applies now. */
+  const getDisplayPricing = (svc: typeof services[number]) => {
+    const originalPrice = Math.round((Math.max(0, Number(svc.price) || 0) + Number.EPSILON) * 100) / 100
+    const configured =
+      !!svc.discountActive &&
+      (svc.discountType === 'PERCENTAGE' || svc.discountType === 'FLAT') &&
+      typeof svc.discountValue === 'number' &&
+      svc.discountValue > 0
+
+    let inWindow = configured
+    const now = new Date()
+    if (inWindow && svc.discountValidFrom) {
+      inWindow = now >= new Date(svc.discountValidFrom)
+    }
+    if (inWindow && svc.discountValidUntil) {
+      inWindow = now <= new Date(svc.discountValidUntil)
+    }
+
+    if (!inWindow) {
+      return {
+        originalPrice,
+        finalPrice: originalPrice,
+        hasDiscount: false,
+        discountLabel: null as string | null,
+        offerConfigured: configured,
+      }
+    }
+
+    let discountAmount = 0
+    if (svc.discountType === 'PERCENTAGE') {
+      const pct = Math.min(100, Math.max(0, svc.discountValue || 0))
+      discountAmount = (originalPrice * pct) / 100
+    } else {
+      discountAmount = Math.max(0, svc.discountValue || 0)
+    }
+    discountAmount = Math.min(
+      Math.round((discountAmount + Number.EPSILON) * 100) / 100,
+      originalPrice,
+    )
+    const finalPrice = Math.round((Math.max(0, originalPrice - discountAmount) + Number.EPSILON) * 100) / 100
+    return {
+      originalPrice,
+      finalPrice,
+      hasDiscount: discountAmount > 0,
+      discountLabel: svc.discountLabel || null,
+      offerConfigured: configured,
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -403,6 +452,7 @@ export const ServicesPage: React.FC = () => {
           {filteredServices.map((svc) => {
             const category = categories.find((item) => item.id === svc.categoryId)
             const capacity = svc.resourceMode === 'STAFF_BASED' ? svc.assignedStaffIds?.length || 0 : svc.capacity
+            const pricing = getDisplayPricing(svc)
             return (
               <article key={svc.id} className={`group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:border-primary/40 hover:shadow-md transition ${!svc.isActive ? 'opacity-70' : ''}`}>
                 <div className="flex">
@@ -427,7 +477,24 @@ export const ServicesPage: React.FC = () => {
                         </div>
                         <p className="text-xs text-primary font-medium mt-0.5 break-words">{category?.name || 'Uncategorized'}</p>
                       </div>
-                      <p className="font-bold whitespace-nowrap shrink-0 pt-0.5">{formatPrice(svc.price)}</p>
+                      <div className="text-right shrink-0 pt-0.5">
+                        {pricing.hasDiscount ? (
+                          <>
+                            <p className="font-bold whitespace-nowrap text-primary">{formatPrice(pricing.finalPrice)}</p>
+                            <p className="text-xs text-gray-400 line-through whitespace-nowrap">{formatPrice(pricing.originalPrice)}</p>
+                            {pricing.discountLabel && (
+                              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">{pricing.discountLabel}</p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-bold whitespace-nowrap">{formatPrice(svc.price)}</p>
+                            {pricing.offerConfigured && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Offer scheduled</p>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {svc.description && <p className="text-sm text-gray-500 mt-2 line-clamp-2">{svc.description}</p>}
@@ -439,12 +506,6 @@ export const ServicesPage: React.FC = () => {
                         {svc.resourceMode === 'STAFF_BASED' ? '♙' : '◎'} {capacity} {capacity === 1 ? 'seat' : 'seats'}
                       </span>
                     </div>
-
-                    {svc.discountActive && svc.discountType && (
-                      <div className="inline-flex mt-3 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
-                        {svc.discountLabel || 'Offer'} · {svc.discountType === 'PERCENTAGE' ? `${svc.discountValue || 0}%` : formatPrice(svc.discountValue || 0)} off
-                      </div>
-                    )}
                   </div>
                 </div>
                 <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
