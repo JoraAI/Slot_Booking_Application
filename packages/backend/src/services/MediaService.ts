@@ -8,8 +8,8 @@ export const MEDIA_MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const MEDIA_MAX_STORED_BYTES = 80 * 1024;
 /** Invoice / document PDF cap (Gupshup fetches this URL). */
 export const MEDIA_MAX_DOCUMENT_BYTES = 500 * 1024;
-/** Per salon — enough for unique service photos plus a cover. */
-export const MEDIA_MAX_ASSETS = 50;
+/** Per salon — enough for service photos, cover, and invoice PDFs. */
+export const MEDIA_MAX_ASSETS = 100;
 /** Per salon — 8MB after compression. */
 export const MEDIA_MAX_BUSINESS_BYTES = 8 * 1024 * 1024;
 /** Platform-wide cap so ~10 salons fit on Neon free (0.5GB) with room for bookings. */

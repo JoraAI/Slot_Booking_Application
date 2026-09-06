@@ -2684,10 +2684,16 @@ ownerRouter.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     });
     if (!category) return res.status(404).json({ error: 'Category not found' });
 
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Category name is required' });
+      }
+    }
+
     const updated = await prisma.serviceCategory.update({
       where: { id: category.id },
       data: {
-        ...(name !== undefined ? { name } : {}),
+        ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(displayOrder !== undefined ? { displayOrder: Number(displayOrder) } : {}),
         ...(isActive !== undefined ? { isActive } : {}),
@@ -2707,9 +2713,14 @@ ownerRouter.delete('/categories/:id', async (req: AuthRequest, res: Response) =>
     });
     if (!category) return res.status(404).json({ error: 'Category not found' });
 
-    const serviceCount = await prisma.service.count({ where: { categoryId: category.id } });
+    // Count all services tagged to this category (active and inactive).
+    const serviceCount = await prisma.service.count({
+      where: { categoryId: category.id, businessId: req.owner!.businessId },
+    });
     if (serviceCount > 0) {
-      return res.status(400).json({ error: 'Category has services. Move or delete them first.' });
+      return res.status(400).json({
+        error: `Cannot delete category while ${serviceCount} service${serviceCount === 1 ? ' is' : 's are'} tagged to it (including inactive). Reassign or delete those services first.`,
+      });
     }
     await prisma.serviceCategory.delete({ where: { id: category.id } });
     res.json({ success: true });
