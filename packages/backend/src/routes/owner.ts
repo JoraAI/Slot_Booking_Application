@@ -3291,6 +3291,8 @@ const createWalkInInvoiceSchema = z.object({
   notes: z.string().trim().max(1000).optional().nullable(),
   paymentMethod: z.enum(['cash', 'upi', 'card', 'other']).optional(),
   paymentRef: z.string().trim().max(200).optional().nullable(),
+  discountType: z.enum(['PERCENTAGE', 'FLAT']).optional().nullable(),
+  discountValue: z.number().min(0).max(1_000_000).optional().nullable(),
 }).strict();
 
 const issueBookingInvoiceSchema = z.object({
@@ -3465,7 +3467,7 @@ ownerRouter.get('/invoices/:id/html', async (req: AuthRequest, res: Response) =>
     });
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-    const html = invoiceService.renderInvoiceHtml(invoice, business);
+    const html = await invoiceService.renderInvoiceHtmlAsync(invoice, business);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.html"`);
     res.send(html);

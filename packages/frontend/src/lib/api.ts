@@ -799,6 +799,8 @@ class ApiClient {
     notes?: string | null
     paymentMethod?: string
     paymentRef?: string | null
+    discountType?: 'PERCENTAGE' | 'FLAT' | null
+    discountValue?: number | null
   }) {
     return this.request<import('../types').InvoiceListItem>('/owner/invoices', {
       method: 'POST',

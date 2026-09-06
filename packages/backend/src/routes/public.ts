@@ -914,7 +914,7 @@ publicRouter.get('/:identifier/bookings/:id/manage/invoice', async (req: Request
       return res.status(403).json({ error: 'Invoice is only available for paid bookings' });
     }
     const invoice = await invoiceService.getOrCreatePaidBookingInvoice(business.id, booking.id);
-    const html = invoiceService.renderInvoiceHtml({ ...invoice, booking }, business);
+    const html = await invoiceService.renderInvoiceHtmlAsync({ ...invoice, booking }, business);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.html"`);
     res.send(html);

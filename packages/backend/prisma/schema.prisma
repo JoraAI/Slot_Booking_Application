@@ -739,6 +739,9 @@ model Invoice {
   lineItems     Json     // [{ description, quantity, unitPrice, amount }]
   subtotal      Float
   taxAmount     Float    @default(0)
+  discountType  DiscountType?
+  discountValue Float?   // entered % or flat amount
+  discountAmount Float   @default(0) // computed INR deducted from subtotal
   total         Float
   currency      String   @default("INR")
   notes         String?
