@@ -235,12 +235,14 @@ export const ServicesPage: React.FC = () => {
   const label = 'block text-sm font-medium mb-1'
   const filteredServices = useMemo(() => {
     const query = search.trim().toLowerCase()
-    return services.filter((service) => {
-      const matchesSearch = !query || service.name.toLowerCase().includes(query) || (service.description || '').toLowerCase().includes(query)
-      const matchesCategory = categoryFilter === 'all' || service.categoryId === categoryFilter
-      const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? service.isActive : !service.isActive)
-      return matchesSearch && matchesCategory && matchesStatus
-    })
+    return services
+      .filter((service) => {
+        const matchesSearch = !query || service.name.toLowerCase().includes(query) || (service.description || '').toLowerCase().includes(query)
+        const matchesCategory = categoryFilter === 'all' || service.categoryId === categoryFilter
+        const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? service.isActive : !service.isActive)
+        return matchesSearch && matchesCategory && matchesStatus
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
   }, [services, search, categoryFilter, statusFilter])
 
   const activeCount = services.filter((service) => service.isActive).length
@@ -412,15 +414,20 @@ export const ServicesPage: React.FC = () => {
                     )}
                   </div>
                   <div className="p-4 flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold truncate">{svc.name}</h3>
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${svc.isActive ? 'bg-emerald-500' : 'bg-gray-400'}`} title={svc.isActive ? 'Active' : 'Inactive'} />
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-2">
+                          <h3 className="font-semibold break-words [overflow-wrap:anywhere] leading-snug">
+                            {svc.name}
+                          </h3>
+                          <span
+                            className={`w-2 h-2 mt-1.5 rounded-full shrink-0 ${svc.isActive ? 'bg-emerald-500' : 'bg-gray-400'}`}
+                            title={svc.isActive ? 'Active' : 'Inactive'}
+                          />
                         </div>
-                        <p className="text-xs text-primary font-medium mt-0.5">{category?.name || 'Uncategorized'}</p>
+                        <p className="text-xs text-primary font-medium mt-0.5 break-words">{category?.name || 'Uncategorized'}</p>
                       </div>
-                      <p className="font-bold whitespace-nowrap">{formatPrice(svc.price)}</p>
+                      <p className="font-bold whitespace-nowrap shrink-0 pt-0.5">{formatPrice(svc.price)}</p>
                     </div>
 
                     {svc.description && <p className="text-sm text-gray-500 mt-2 line-clamp-2">{svc.description}</p>}

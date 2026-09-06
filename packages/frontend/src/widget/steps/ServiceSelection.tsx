@@ -26,7 +26,7 @@ export const ServiceSelection: React.FC<ServiceSelectionProps> = ({
     () =>
       config.services
         .filter((s) => s.isActive && (!selectedCategoryId || s.categoryId === selectedCategoryId))
-        .sort((a, b) => a.displayOrder - b.displayOrder),
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
     [config.services, selectedCategoryId]
   )
 
@@ -104,7 +104,7 @@ export const ServiceSelection: React.FC<ServiceSelectionProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium">{service.name}</div>
+                      <div className="font-medium break-words [overflow-wrap:anywhere] leading-snug">{service.name}</div>
                       {service.description && (
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{service.description}</p>
                       )}
