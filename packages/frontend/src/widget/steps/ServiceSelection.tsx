@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { PublicConfig } from '../../types'
 
 interface ServiceSelectionProps {
@@ -17,18 +17,69 @@ export const ServiceSelection: React.FC<ServiceSelectionProps> = ({
   onSelectCategory,
   onSelectService,
 }) => {
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
+  const categoryMenuRef = useRef<HTMLDivElement>(null)
+
   const categories = useMemo(
     () => config.serviceCategories.filter((c) => c.isActive).sort((a, b) => a.displayOrder - b.displayOrder),
     [config.serviceCategories]
   )
 
+  const activeServices = useMemo(
+    () => config.services.filter((s) => s.isActive),
+    [config.services]
+  )
+
   const services = useMemo(
     () =>
-      config.services
-        .filter((s) => s.isActive && (!selectedCategoryId || s.categoryId === selectedCategoryId))
+      activeServices
+        .filter((s) => !selectedCategoryId || s.categoryId === selectedCategoryId)
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
-    [config.services, selectedCategoryId]
+    [activeServices, selectedCategoryId]
   )
+
+  const selectedCategoryLabel = useMemo(() => {
+    if (!selectedCategoryId) return 'All categories'
+    return categories.find((c) => c.id === selectedCategoryId)?.name || 'All categories'
+  }, [categories, selectedCategoryId])
+
+  const categoryOptions = useMemo(() => {
+    const allCount = activeServices.length
+    return [
+      { id: '', name: 'All categories', count: allCount },
+      ...categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        count: activeServices.filter((s) => s.categoryId === cat.id).length,
+      })),
+    ]
+  }, [activeServices, categories])
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null
+      if (target && categoryMenuRef.current && !categoryMenuRef.current.contains(target)) {
+        setCategoryMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCategoryMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [categoryMenuOpen])
+
+  const pickCategory = (id: string) => {
+    onSelectCategory(id)
+    setCategoryMenuOpen(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -38,30 +89,86 @@ export const ServiceSelection: React.FC<ServiceSelectionProps> = ({
       </div>
 
       {categories.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div ref={categoryMenuRef} className="relative">
+          <label htmlFor="service-category" className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+            Category
+          </label>
           <button
-            onClick={() => onSelectCategory('')}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              !selectedCategoryId
-                ? 'bg-primary text-white border-primary'
-                : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+            id="service-category"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={categoryMenuOpen}
+            onClick={() => setCategoryMenuOpen((open) => !open)}
+            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-white dark:bg-gray-900 text-left transition shadow-sm ${
+              categoryMenuOpen
+                ? 'border-primary ring-2 ring-primary/20'
+                : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
             }`}
           >
-            All
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => onSelectCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                selectedCategoryId === cat.id
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 text-sm font-semibold">
+              ▦
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100 break-words [overflow-wrap:anywhere] leading-snug">
+                {selectedCategoryLabel}
+              </span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {services.length} service{services.length === 1 ? '' : 's'} shown
+              </span>
+            </span>
+            <span
+              className={`text-gray-400 transition-transform duration-200 shrink-0 ${categoryMenuOpen ? 'rotate-180' : ''}`}
+              aria-hidden
             >
-              {cat.name}
-            </button>
-          ))}
+              ▾
+            </span>
+          </button>
+
+          <AnimatePresence>
+            {categoryMenuOpen && (
+              <motion.ul
+                role="listbox"
+                aria-label="Service categories"
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                transition={{ duration: 0.16 }}
+                className="absolute z-20 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl py-1.5"
+              >
+                {categoryOptions.map((option) => {
+                  const selected =
+                    (!selectedCategoryId && option.id === '') || selectedCategoryId === option.id
+                  return (
+                    <li key={option.id || 'all'} role="option" aria-selected={selected}>
+                      <button
+                        type="button"
+                        onClick={() => pickCategory(option.id)}
+                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition ${
+                          selected
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] text-sm font-medium leading-snug">
+                          {option.name}
+                        </span>
+                        <span
+                          className={`shrink-0 text-xs tabular-nums px-2 py-0.5 rounded-full ${
+                            selected
+                              ? 'bg-primary/15 text-primary'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-500'
+                          }`}
+                        >
+                          {option.count}
+                        </span>
+                        {selected && <span className="shrink-0 text-primary text-sm" aria-hidden>✓</span>}
+                      </button>
+                    </li>
+                  )
+                })}
+              </motion.ul>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
