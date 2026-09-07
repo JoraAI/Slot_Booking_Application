@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import {
   addMonthsUtc,
   commissionDueAndCycle,
+  computePlanSwitch,
   fixedPlanDueAndCycle,
 } from './SubscriptionService';
 
@@ -146,4 +147,188 @@ test('fixed monthly plan: trial prepay then paidThrough wins', () => {
 test('addMonthsUtc advances calendar months', () => {
   const d = addMonthsUtc(new Date('2026-09-07T12:00:00Z'), 1);
   assert.strictEqual(d.toISOString().startsWith('2026-10-07'), true);
+});
+
+const periodEnd = new Date('2026-09-30T23:59:59.999Z');
+const paidUntilYear = new Date('2027-09-07T12:00:00Z');
+const now = new Date('2026-09-07T12:00:00Z');
+
+const baseSwitch = {
+  now,
+  commissionPeriodEndsAt: periodEnd,
+  commissionMonthSettled: false as boolean,
+};
+
+test('plan switch: yearly → monthly keeps paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'YEARLY_799',
+    toPlan: 'MONTHLY_799',
+    paidUntil: paidUntilYear,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: now,
+  });
+  assert.strictEqual(r.subscriptionPlan, 'MONTHLY_799');
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilYear.toISOString());
+  assert.strictEqual(r.subscriptionCommissionPaidForMonth, null);
+});
+
+test('plan switch: monthly → yearly keeps paidUntil', () => {
+  const paidUntilMonth = addMonthsUtc(now, 1);
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'MONTHLY_799',
+    toPlan: 'YEARLY_799',
+    paidUntil: paidUntilMonth,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: now,
+  });
+  assert.strictEqual(r.subscriptionPlan, 'YEARLY_799');
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilMonth.toISOString());
+});
+
+test('plan switch: yearly → commission keeps prepaid paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'YEARLY_799',
+    toPlan: 'COMMISSION',
+    paidUntil: paidUntilYear,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: now,
+  });
+  assert.strictEqual(r.subscriptionPlan, 'COMMISSION');
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilYear.toISOString());
+});
+
+test('plan switch: monthly → commission keeps prepaid paidUntil', () => {
+  const paidUntilMonth = addMonthsUtc(now, 1);
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'MONTHLY_799',
+    toPlan: 'COMMISSION',
+    paidUntil: paidUntilMonth,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: now,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilMonth.toISOString());
+});
+
+test('plan switch: commission settled → monthly converts to month-end paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'COMMISSION',
+    toPlan: 'MONTHLY_799',
+    paidUntil: null,
+    commissionPaidForMonth: '2026-09',
+    commissionPaidInr: 120,
+    lastPaidAt: now,
+    commissionMonthSettled: true,
+  });
+  assert.strictEqual(r.subscriptionPlan, 'MONTHLY_799');
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), periodEnd.toISOString());
+  assert.strictEqual(r.subscriptionCommissionPaidForMonth, null);
+  assert.strictEqual(r.subscriptionCommissionPaidInr, 0);
+});
+
+test('plan switch: commission settled → yearly converts to month-end paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'COMMISSION',
+    toPlan: 'YEARLY_799',
+    paidUntil: null,
+    commissionPaidForMonth: '2026-09',
+    commissionPaidInr: 120,
+    lastPaidAt: now,
+    commissionMonthSettled: true,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), periodEnd.toISOString());
+});
+
+test('plan switch: commission partial pay does NOT convert to paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'COMMISSION',
+    toPlan: 'MONTHLY_799',
+    paidUntil: null,
+    commissionPaidForMonth: '2026-09',
+    commissionPaidInr: 40,
+    lastPaidAt: now,
+    commissionMonthSettled: false,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil, null);
+});
+
+test('plan switch: commission (unpaid) → yearly has no paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'COMMISSION',
+    toPlan: 'YEARLY_799',
+    paidUntil: null,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: null,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil, null);
+  assert.strictEqual(r.subscriptionPlan, 'YEARLY_799');
+});
+
+test('plan switch: monthly unpaid → commission keeps null paidUntil', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'MONTHLY_799',
+    toPlan: 'COMMISSION',
+    paidUntil: null,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: null,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil, null);
+  assert.strictEqual(r.subscriptionPlan, 'COMMISSION');
+});
+
+test('plan switch: same plan is a no-op on payment fields', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'YEARLY_799',
+    toPlan: 'YEARLY_799',
+    paidUntil: paidUntilYear,
+    commissionPaidForMonth: '2026-08',
+    commissionPaidInr: 50,
+    lastPaidAt: now,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilYear.toISOString());
+  assert.strictEqual(r.subscriptionCommissionPaidForMonth, '2026-08');
+  assert.strictEqual(r.subscriptionCommissionPaidInr, 50);
+});
+
+test('plan switch: expired paidUntil is not carried', () => {
+  const expired = new Date('2026-08-01T00:00:00Z');
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'YEARLY_799',
+    toPlan: 'MONTHLY_799',
+    paidUntil: expired,
+    commissionPaidForMonth: null,
+    commissionPaidInr: 0,
+    lastPaidAt: expired,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil, null);
+});
+
+test('plan switch: active prepaid beats commission settlement conversion', () => {
+  const r = computePlanSwitch({
+    ...baseSwitch,
+    fromPlan: 'COMMISSION',
+    toPlan: 'MONTHLY_799',
+    paidUntil: paidUntilYear,
+    commissionPaidForMonth: '2026-09',
+    commissionPaidInr: 120,
+    lastPaidAt: now,
+    commissionMonthSettled: true,
+  });
+  assert.strictEqual(r.subscriptionPaidUntil?.toISOString(), paidUntilYear.toISOString());
 });
