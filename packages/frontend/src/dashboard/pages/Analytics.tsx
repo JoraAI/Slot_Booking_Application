@@ -14,6 +14,15 @@ const RANGES = [
   { value: 'past-upcoming', label: 'Last 30 Days + Upcoming' },
 ]
 
+type CollectionFocus = 'all' | 'services' | 'products' | 'walkins'
+
+const COLLECTION_FOCUSES: { value: CollectionFocus; label: string }[] = [
+  { value: 'all', label: 'All collections' },
+  { value: 'services', label: 'Services' },
+  { value: 'products', label: 'Products' },
+  { value: 'walkins', label: 'Walk-ins' },
+]
+
 const iso = (d: Date) => {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -58,10 +67,17 @@ export const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [collectionFocus, setCollectionFocus] = useState<CollectionFocus>('all')
 
   const preset = rangeDays(range, upcomingDays)
   const dateFrom = customFrom || preset.dateFrom
   const dateTo = customTo || preset.dateTo
+
+  const serviceCollected = data?.revenueMetrics?.totalCollected ?? 0
+  const productCollected = data?.revenueMetrics?.productCollected ?? data?.productMetrics?.totalRevenue ?? 0
+  const walkInCollected = data?.revenueMetrics?.invoiceCollected ?? 0
+  const totalCollections = data?.revenueMetrics?.totalCollections
+    ?? (serviceCollected + productCollected + walkInCollected)
 
   // Drill to Bookings pre-filtered by this Analytics range (+ optional filters).
   const drillBookings = (extra?: Record<string, string>) => {
@@ -113,7 +129,7 @@ export const Analytics: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            By appointment date · {dateFrom} to {dateTo}
+            Bookings by appointment date · {dateFrom} to {dateTo}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
@@ -162,47 +178,178 @@ export const Analytics: React.FC = () => {
             <Kpi label="Busiest Day" value={data.busiestDay || '--'} icon="📅" onClick={() => drillBookings()} hint="Click to see bookings in this range" />
           </div>
 
-          {/* Collections: service + walk-in invoices + product */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <Kpi
-              label="Total collections"
-              hint="Paid bookings + invoices + product sales"
-              value={`₹${(
-                data.revenueMetrics?.totalCollections
-                ?? (
-                  (data.revenueMetrics?.totalCollected ?? 0)
-                  + (data.revenueMetrics?.invoiceCollected ?? 0)
-                  + (data.productMetrics?.totalRevenue ?? 0)
-                )
-              ).toLocaleString('en-IN')}`}
-              icon="🏦"
-            />
-            <Kpi
-              label="Service collections"
-              hint="Paid bookings and cash invoices for bookings"
-              value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`}
-              icon="💰"
-              onClick={() => drillBookings()}
-              drillLabel="View bookings →"
-            />
-            <Kpi
-              label="Product collections"
-              hint="Retail sales in this range"
-              value={`₹${(
-                data.revenueMetrics?.productCollected ?? data.productMetrics?.totalRevenue ?? 0
-              ).toLocaleString('en-IN')}`}
-              icon="🛍️"
-              onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)}
-              drillLabel="View products →"
-            />
-            <Kpi
-              label="Walk-in invoices"
-              hint="Walk-in / manual invoices issued in this range"
-              value={`₹${(data.revenueMetrics?.invoiceCollected ?? 0).toLocaleString('en-IN')}`}
-              icon="🧾"
-              onClick={() => navigate('/dashboard/invoices')}
-              drillLabel="View invoices →"
-            />
+          {/* Collections focus + KPIs */}
+          <div className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Collections</h2>
+              <div className="flex flex-wrap gap-1.5 rounded-xl bg-gray-100 dark:bg-gray-800/80 p-1">
+                {COLLECTION_FOCUSES.map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setCollectionFocus(f.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                      collectionFocus === f.value
+                        ? 'bg-white dark:bg-gray-900 text-primary shadow-sm'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <Kpi
+                label="Total collections"
+                hint="Services + products + walk-ins"
+                value={`₹${totalCollections.toLocaleString('en-IN')}`}
+                icon="🏦"
+                selected={collectionFocus === 'all'}
+                onClick={() => setCollectionFocus('all')}
+                drillLabel="Show all →"
+              />
+              <Kpi
+                label="Service collections"
+                hint="Paid bookings and cash booking invoices"
+                value={`₹${serviceCollected.toLocaleString('en-IN')}`}
+                icon="💰"
+                selected={collectionFocus === 'services'}
+                onClick={() => setCollectionFocus('services')}
+                drillLabel="Focus services →"
+              />
+              <Kpi
+                label="Product collections"
+                hint="Retail sales in this range"
+                value={`₹${productCollected.toLocaleString('en-IN')}`}
+                icon="🛍️"
+                selected={collectionFocus === 'products'}
+                onClick={() => setCollectionFocus('products')}
+                drillLabel="Focus products →"
+              />
+              <Kpi
+                label="Walk-in invoices"
+                hint="Walk-in / manual invoices issued in this range"
+                value={`₹${walkInCollected.toLocaleString('en-IN')}`}
+                icon="🧾"
+                selected={collectionFocus === 'walkins'}
+                onClick={() => setCollectionFocus('walkins')}
+                drillLabel="Focus walk-ins →"
+              />
+            </div>
+
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {collectionFocus === 'all' && 'Collections breakdown'}
+                      {collectionFocus === 'services' && 'Service collections'}
+                      {collectionFocus === 'products' && 'Product collections'}
+                      {collectionFocus === 'walkins' && 'Walk-in invoice collections'}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">{dateFrom} → {dateTo}</p>
+                  </div>
+                  {collectionFocus === 'services' && (
+                    <button type="button" onClick={() => drillBookings()} className="text-xs text-primary hover:underline text-left">
+                      View bookings →
+                    </button>
+                  )}
+                  {collectionFocus === 'products' && (
+                    <button type="button" onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)} className="text-xs text-primary hover:underline text-left">
+                      Manage products →
+                    </button>
+                  )}
+                  {collectionFocus === 'walkins' && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/invoices?dateFrom=${dateFrom}&dateTo=${dateTo}`)}
+                      className="text-xs text-primary hover:underline text-left"
+                    >
+                      View invoices →
+                    </button>
+                  )}
+                </div>
+
+                {collectionFocus === 'all' && (
+                  <div className="space-y-3">
+                    <CollectionBar
+                      parts={[
+                        { label: 'Services', amount: serviceCollected, color: 'bg-primary' },
+                        { label: 'Products', amount: productCollected, color: 'bg-emerald-500' },
+                        { label: 'Walk-ins', amount: walkInCollected, color: 'bg-amber-500' },
+                      ]}
+                      total={totalCollections}
+                    />
+                    <div className="grid sm:grid-cols-3 gap-2 text-sm">
+                      <BreakdownRow label="Services" amount={serviceCollected} total={totalCollections} onSelect={() => setCollectionFocus('services')} />
+                      <BreakdownRow label="Products" amount={productCollected} total={totalCollections} onSelect={() => setCollectionFocus('products')} />
+                      <BreakdownRow label="Walk-ins" amount={walkInCollected} total={totalCollections} onSelect={() => setCollectionFocus('walkins')} />
+                    </div>
+                  </div>
+                )}
+
+                {collectionFocus === 'services' && (
+                  <div className="space-y-2">
+                    <p className="text-2xl font-bold">₹{serviceCollected.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500">From paid bookings and cash invoices linked to bookings.</p>
+                    {(data.revenueByService || []).filter((s) => s.revenue > 0).length === 0 ? (
+                      <p className="text-sm text-gray-400 pt-2">No service collections in this range.</p>
+                    ) : (
+                      <div className="space-y-1.5 pt-2">
+                        {(data.revenueByService || []).filter((s) => s.revenue > 0).map((s) => (
+                          <div key={s.name} className="flex items-center justify-between gap-3 text-sm px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                            <span className="break-words min-w-0">{s.name}</span>
+                            <span className="font-medium shrink-0">₹{s.revenue.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {collectionFocus === 'products' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-6">
+                      <div>
+                        <p className="text-2xl font-bold">₹{productCollected.toLocaleString('en-IN')}</p>
+                        <p className="text-xs text-gray-500">Product revenue</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{data.productMetrics?.totalUnits ?? 0}</p>
+                        <p className="text-xs text-gray-500">Units sold</p>
+                      </div>
+                    </div>
+                    {(!data.productMetrics || data.productMetrics.totalUnits === 0) ? (
+                      <p className="text-sm text-gray-400">No product sales in this range.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(data.productMetrics.byProduct || []).map((p) => (
+                          <div key={p.id} className="flex items-center justify-between gap-3 text-sm px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-800/60">
+                            <div className="min-w-0">
+                              <p className="font-medium break-words">{p.name}</p>
+                              <p className="text-xs text-gray-500">{p.units} units</p>
+                            </div>
+                            <span className="font-medium shrink-0">₹{p.revenue.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {collectionFocus === 'walkins' && (
+                  <div className="space-y-2">
+                    <p className="text-2xl font-bold">₹{walkInCollected.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500">
+                      Walk-in and manual invoices issued in this date range. Open Invoices for line-item detail.
+                    </p>
+                    {walkInCollected <= 0 && (
+                      <p className="text-sm text-gray-400 pt-1">No walk-in invoices in this range.</p>
+                    )}
+                  </div>
+                )}
+              </div>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -270,7 +417,8 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-          {/* Services & sources */}
+          {/* Services & sources — always useful for booking ops; revenue column is service collections */}
+          {(collectionFocus === 'all' || collectionFocus === 'services') && (
           <div className="grid lg:grid-cols-2 gap-4">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h2 className="text-lg font-semibold mb-4">By Service</h2>
@@ -302,8 +450,10 @@ export const Analytics: React.FC = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Product sales */}
+          {/* Product sales — shown for All; Products focus already has a compact list above */}
+          {(collectionFocus === 'all') && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -362,19 +512,74 @@ export const Analytics: React.FC = () => {
               </>
             )}
           </div>
+          )}
         </>
       )}
     </div>
   )
 }
 
-function Kpi({ label, value, icon, hint, onClick, drillLabel }: {
+function CollectionBar({ parts, total }: {
+  parts: { label: string; amount: number; color: string }[]
+  total: number
+}) {
+  if (total <= 0) {
+    return <p className="text-sm text-gray-400">No collections in this range yet.</p>
+  }
+  const visible = parts.filter((p) => p.amount > 0)
+  return (
+    <div className="space-y-2">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+        {visible.map((p) => (
+          <div
+            key={p.label}
+            className={`${p.color} h-full min-w-0`}
+            style={{ width: `${(p.amount / total) * 100}%` }}
+            title={`${p.label}: ₹${p.amount.toLocaleString('en-IN')}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 text-[11px] text-gray-500">
+        {parts.map((p) => (
+          <span key={p.label} className="inline-flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${p.color}`} />
+            {p.label}
+            <span className="text-gray-400">₹{p.amount.toLocaleString('en-IN')}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BreakdownRow({ label, amount, total, onSelect }: {
+  label: string
+  amount: number
+  total: number
+  onSelect: () => void
+}) {
+  const pct = total > 0 ? Math.round((amount / total) * 100) : 0
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="text-left rounded-lg border border-gray-100 dark:border-gray-800 px-3 py-2 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-semibold">₹{amount.toLocaleString('en-IN')}</p>
+      <p className="text-[11px] text-gray-400">{pct}% of total</p>
+    </button>
+  )
+}
+
+function Kpi({ label, value, icon, hint, onClick, drillLabel, selected }: {
   label: string
   value: string
   icon: string
   hint?: string
   onClick?: () => void
   drillLabel?: string
+  selected?: boolean
 }) {
   const inner = (
     <>
@@ -388,8 +593,16 @@ function Kpi({ label, value, icon, hint, onClick, drillLabel }: {
     return <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4">{inner}</div>
   }
   return (
-    <button onClick={onClick} type="button" title={drillLabel || `View details for ${label.toLowerCase()}`}
-      className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 sm:p-4 hover:border-primary/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
+    <button
+      onClick={onClick}
+      type="button"
+      title={drillLabel || `View details for ${label.toLowerCase()}`}
+      className={`text-left rounded-xl border p-3 sm:p-4 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition ${
+        selected
+          ? 'bg-primary/5 border-primary shadow-sm'
+          : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 hover:border-primary/50'
+      }`}
+    >
       {inner}
       <p className="text-[10px] text-primary mt-0.5">{drillLabel || 'View bookings →'}</p>
     </button>

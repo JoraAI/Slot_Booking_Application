@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 import type {
@@ -9,7 +10,12 @@ import type {
   Service,
 } from '../../types'
 
-const iso = (d: Date) => d.toISOString().slice(0, 10)
+const iso = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 const SOURCE_LABELS: Record<string, string> = {
   booking_paid: 'Paid booking',
@@ -32,13 +38,16 @@ function hasContact(inv: { customerPhone?: string | null; customerEmail?: string
 }
 
 export const InvoicesPage: React.FC = () => {
+  const [searchParams] = useSearchParams()
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
   const [eligible, setEligible] = useState<EligibleBookingForInvoice[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateFrom, setDateFrom] = useState(iso(new Date(Date.now() - 30 * 86400000)))
-  const [dateTo, setDateTo] = useState(iso(new Date()))
+  const [dateFrom, setDateFrom] = useState(
+    searchParams.get('dateFrom') || iso(new Date(Date.now() - 30 * 86400000)),
+  )
+  const [dateTo, setDateTo] = useState(searchParams.get('dateTo') || iso(new Date()))
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
