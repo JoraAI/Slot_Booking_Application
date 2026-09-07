@@ -26,7 +26,9 @@ async function main() {
   if (typeof rm.productCollected !== 'number') throw new Error('productCollected missing');
   if (typeof rm.totalCollections !== 'number') throw new Error('totalCollections missing');
 
-  const expected = Math.round((rm.totalCollected + rm.productCollected) * 100) / 100;
+  const expected = Math.round(
+    ((rm.totalCollected || 0) + (rm.invoiceCollected || 0) + (rm.productCollected || 0)) * 100
+  ) / 100;
   if (rm.totalCollections !== expected) {
     throw new Error(`totalCollections mismatch: ${rm.totalCollections} !== ${expected}`);
   }
@@ -36,6 +38,7 @@ async function main() {
 
   console.log('Analytics collections OK:', {
     service: rm.totalCollected,
+    invoices: rm.invoiceCollected ?? 0,
     product: rm.productCollected,
     total: rm.totalCollections,
   });
