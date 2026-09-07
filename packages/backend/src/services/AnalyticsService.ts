@@ -1,6 +1,6 @@
 import prisma from '../lib/prisma';
 import { timeService } from './TimeService';
-import { netCollectedAmount } from './analyticsCollected';
+import { invoiceCollectedAmount, netCollectedAmount } from './analyticsCollected';
 
 class AnalyticsService {
   async getAnalytics(businessId: string, dateFrom: string, dateTo: string, staffId?: string) {
@@ -263,14 +263,108 @@ class AnalyticsService {
       },
     });
 
-    const totalCollected = revenueRows.reduce((sum, b) => sum + netCollectedAmount(b), 0);
+    const bookingCollected = revenueRows.reduce((sum, b) => sum + netCollectedAmount(b), 0);
     const activeRows = revenueRows.filter(b => b.status !== 'CANCELLED');
     const totalListed = activeRows.reduce((sum, b) => sum + (b.originalPrice || 0), 0);
-    const discountsGiven = activeRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
-    const avgBookingValue = activeRows.length > 0
-      ? Math.round((totalCollected / activeRows.length) * 100) / 100
-      : 0;
+    let discountsGiven = activeRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
     const discountUsageCount = activeRows.filter(b => (b.discountAmount || 0) > 0).length;
+
+    // Cash / walk-in invoices — Analytics previously ignored these, so salon-floor
+    // collections never moved. Booking cash invoices use appointment date (same as
+    // Razorpay); walk-ins use issuedAt. De-dupe against already-paid bookings.
+    const bookingInvoiceWhere: any = {
+      businessId,
+      source: 'booking_completed',
+      booking: {
+        date: { gte: from, lte: to },
+        ...(staffId ? { staffId } : {}),
+      },
+    };
+    const walkInInvoiceWhere: any = {
+      businessId,
+      source: { in: ['walk_in', 'manual'] },
+      issuedAt: { gte: from, lte: to },
+    };
+    // Walk-ins have no staff — omit them when a staff filter is active.
+    const [bookingInvoiceRows, walkInInvoiceRows] = await Promise.all([
+      prisma.invoice.findMany({
+        where: bookingInvoiceWhere,
+        select: {
+          total: true,
+          discountAmount: true,
+          source: true,
+          bookingId: true,
+          booking: {
+            select: {
+              status: true,
+              paymentStatus: true,
+              paymentAmount: true,
+              serviceId: true,
+              serviceNameSnapshot: true,
+            },
+          },
+        },
+      }),
+      staffId
+        ? Promise.resolve([])
+        : prisma.invoice.findMany({
+            where: walkInInvoiceWhere,
+            select: {
+              total: true,
+              discountAmount: true,
+              source: true,
+              bookingId: true,
+              booking: {
+                select: {
+                  status: true,
+                  paymentStatus: true,
+                  paymentAmount: true,
+                  serviceId: true,
+                  serviceNameSnapshot: true,
+                },
+              },
+            },
+          }),
+    ]);
+
+    let cashBookingInvoiceTotal = 0;
+    let walkInInvoiceTotal = 0;
+    let invoiceDiscountTotal = 0;
+    const invoiceServiceBoost: Record<string, { id: string | null; name: string; revenue: number }> = {};
+
+    for (const inv of bookingInvoiceRows) {
+      const amount = invoiceCollectedAmount(inv);
+      if (amount <= 0) continue;
+      cashBookingInvoiceTotal += amount;
+      invoiceDiscountTotal += inv.discountAmount || 0;
+      const svcId = inv.booking?.serviceId || '__legacy__';
+      if (!invoiceServiceBoost[svcId]) {
+        invoiceServiceBoost[svcId] = {
+          id: inv.booking?.serviceId || null,
+          name: inv.booking?.serviceNameSnapshot || 'Legacy/Unassigned',
+          revenue: 0,
+        };
+      }
+      invoiceServiceBoost[svcId].revenue += amount;
+    }
+    for (const inv of walkInInvoiceRows) {
+      const amount = invoiceCollectedAmount(inv);
+      if (amount <= 0) continue;
+      walkInInvoiceTotal += amount;
+      invoiceDiscountTotal += inv.discountAmount || 0;
+    }
+
+    const totalCollected = Math.round((bookingCollected + cashBookingInvoiceTotal) * 100) / 100;
+    discountsGiven = Math.round((discountsGiven + invoiceDiscountTotal) * 100) / 100;
+
+    const cashInvoicedBookingCount = bookingInvoiceRows.filter(
+      (inv) => invoiceCollectedAmount(inv) > 0,
+    ).length;
+    const paidBookingCount =
+      revenueRows.filter((b) => netCollectedAmount(b) > 0).length + cashInvoicedBookingCount;
+    const avgBookingValue = paidBookingCount > 0
+      ? Math.round((totalCollected / paidBookingCount) * 100) / 100
+      : 0;
 
     // Bookings by service (legacy rows appear under "Legacy/Unassigned")
     const byServiceMap: Record<string, { id: string | null; name: string; count: number; revenue: number }> = {};
@@ -281,6 +375,12 @@ class AnalyticsService {
       }
       byServiceMap[key].count += 1;
       byServiceMap[key].revenue += netCollectedAmount(b);
+    });
+    Object.entries(invoiceServiceBoost).forEach(([key, boost]) => {
+      if (!byServiceMap[key]) {
+        byServiceMap[key] = { id: boost.id, name: boost.name, count: 0, revenue: 0 };
+      }
+      byServiceMap[key].revenue += boost.revenue;
     });
     const bookingsByService = Object.values(byServiceMap).sort((a, b) => b.count - a.count);
 
@@ -361,13 +461,19 @@ class AnalyticsService {
       staffPerformance,
       // New v4 analytics
       revenueMetrics: {
-        totalCollected: Math.round(totalCollected * 100) / 100,
+        // Paid bookings (Razorpay) + cash invoices for completed unpaid bookings.
+        totalCollected,
         totalListed: Math.round(totalListed * 100) / 100,
-        discountsGiven: Math.round(discountsGiven * 100) / 100,
+        discountsGiven,
         avgBookingValue,
         discountUsageCount,
         productCollected: Math.round(productTotalRevenue * 100) / 100,
-        totalCollections: Math.round((totalCollected + productTotalRevenue) * 100) / 100,
+        // Walk-in / manual invoices in the issuedAt window (excluded when staff filter set).
+        invoiceCollected: Math.round(walkInInvoiceTotal * 100) / 100,
+        // Service + walk-in invoices + retail product sales.
+        totalCollections: Math.round(
+          (totalCollected + walkInInvoiceTotal + productTotalRevenue) * 100
+        ) / 100,
       },
       bookingsByService,
       revenueByService,

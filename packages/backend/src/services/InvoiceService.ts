@@ -335,7 +335,7 @@ class InvoiceService {
       amount,
     }];
 
-    return this.createInvoiceRecord(businessId, {
+    const invoice = await this.createInvoiceRecord(businessId, {
       bookingId: booking.id,
       customerName: booking.customerName,
       customerPhone: booking.customerPhone,
@@ -345,6 +345,17 @@ class InvoiceService {
       source: 'booking_completed',
       notes: opts.notes || `Completed booking on ${this.formatDate(booking.date)}`,
     });
+
+    // Mark booking collected so Analytics "Service collections" updates (same path as Razorpay).
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        paymentStatus: 'paid',
+        paymentAmount: invoice.total,
+      },
+    });
+
+    return invoice;
   }
 
   async createWalkInInvoice(

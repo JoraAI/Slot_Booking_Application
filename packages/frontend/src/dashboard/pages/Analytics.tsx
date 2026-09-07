@@ -14,7 +14,12 @@ const RANGES = [
   { value: 'past-upcoming', label: 'Last 30 Days + Upcoming' },
 ]
 
-const iso = (d: Date) => d.toISOString().slice(0, 10)
+const iso = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 // Metrics are keyed on the appointment date, so any range ending today excludes
 // bookings that have not happened yet. `upcomingDays` matches the bookable horizon.
@@ -157,20 +162,24 @@ export const Analytics: React.FC = () => {
             <Kpi label="Busiest Day" value={data.busiestDay || '--'} icon="📅" onClick={() => drillBookings()} hint="Click to see bookings in this range" />
           </div>
 
-          {/* Collections: service + product */}
+          {/* Collections: service + walk-in invoices + product */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <Kpi
               label="Total collections"
-              hint="Services + product sales"
+              hint="Paid bookings + invoices + product sales"
               value={`₹${(
                 data.revenueMetrics?.totalCollections
-                ?? ((data.revenueMetrics?.totalCollected ?? 0) + (data.productMetrics?.totalRevenue ?? 0))
+                ?? (
+                  (data.revenueMetrics?.totalCollected ?? 0)
+                  + (data.revenueMetrics?.invoiceCollected ?? 0)
+                  + (data.productMetrics?.totalRevenue ?? 0)
+                )
               ).toLocaleString('en-IN')}`}
               icon="🏦"
             />
             <Kpi
               label="Service collections"
-              hint="Paid bookings (not cancelled/refunded)"
+              hint="Paid bookings and cash invoices for bookings"
               value={`₹${(data.revenueMetrics?.totalCollected ?? 0).toLocaleString('en-IN')}`}
               icon="💰"
               onClick={() => drillBookings()}
@@ -186,11 +195,19 @@ export const Analytics: React.FC = () => {
               onClick={() => navigate(`/dashboard/products?dateFrom=${dateFrom}&dateTo=${dateTo}`)}
               drillLabel="View products →"
             />
-            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" onClick={() => drillBookings({ source: 'QR' })} hint="QR-sourced bookings" />
+            <Kpi
+              label="Walk-in invoices"
+              hint="Walk-in / manual invoices issued in this range"
+              value={`₹${(data.revenueMetrics?.invoiceCollected ?? 0).toLocaleString('en-IN')}`}
+              icon="🧾"
+              onClick={() => navigate('/dashboard/invoices')}
+              drillLabel="View invoices →"
+            />
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <Kpi label="Avg Booking Value" value={`₹${(data.avgBookingValue ?? 0).toLocaleString('en-IN')}`} icon="🧾" />
+            <Kpi label="QR Bookings" value={`${data.qrBooking?.count ?? 0} (${data.qrBooking?.rate ?? 0}%)`} icon="🔳" onClick={() => drillBookings({ source: 'QR' })} hint="QR-sourced bookings" />
+            <Kpi label="Avg Booking Value" value={`₹${(data.avgBookingValue ?? data.revenueMetrics?.avgBookingValue ?? 0).toLocaleString('en-IN')}`} icon="🧾" hint="Among paid / invoiced bookings" />
             <Kpi label="Discounts Given" value={`₹${(data.revenueMetrics?.discountsGiven ?? 0).toLocaleString('en-IN')}`} icon="🏷️" />
           </div>
 

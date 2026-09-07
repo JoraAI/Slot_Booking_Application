@@ -429,6 +429,8 @@ export interface AnalyticsData {
     avgBookingValue: number
     discountUsageCount: number
     productCollected?: number
+    /** Walk-in / manual invoice totals in the date range */
+    invoiceCollected?: number
     totalCollections?: number
   }
   bookingsByService?: { id?: string | null; name: string; count: number; revenue: number }[]
