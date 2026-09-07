@@ -38,6 +38,96 @@ export function addMonthsUtc(at: Date, months: number): Date {
   return d;
 }
 
+export type PlanSwitchInput = {
+  fromPlan: SubscriptionPlan;
+  toPlan: SubscriptionPlan;
+  now: Date;
+  paidUntil: Date | null;
+  commissionPaidForMonth: string | null;
+  commissionPaidInr: number;
+  lastPaidAt: Date | null;
+  /** End of current commission billing month. */
+  commissionPeriodEndsAt: Date;
+  /**
+   * True when commission for the current month is fully settled (remaining due ₹0)
+   * and the paid-for-month marker matches the current month.
+   */
+  commissionMonthSettled: boolean;
+};
+
+export type PlanSwitchResult = {
+  subscriptionPlan: SubscriptionPlan;
+  subscriptionStatus: 'ACTIVE';
+  subscriptionPaidUntil: Date | null;
+  subscriptionCommissionPaidForMonth: string | null;
+  subscriptionCommissionPaidInr: number;
+  subscriptionLastPaidAt: Date | null;
+};
+
+/**
+ * Plan-change rules (preserve prepaid time; never wipe an active cycle):
+ * - MONTHLY ↔ YEARLY: keep subscriptionPaidUntil if still in the future.
+ * - Fixed → COMMISSION: keep paidUntil as prepaid credit (no commission due until it ends).
+ * - COMMISSION → Fixed: if this month’s commission is fully settled and there is no
+ *   future paidUntil, convert remaining month into paidUntil = month end.
+ * - Same plan: no payment-field changes.
+ */
+export function computePlanSwitch(input: PlanSwitchInput): PlanSwitchResult {
+  const {
+    fromPlan,
+    toPlan,
+    now,
+    paidUntil,
+    commissionPaidForMonth,
+    commissionPaidInr,
+    lastPaidAt,
+    commissionPeriodEndsAt,
+    commissionMonthSettled,
+  } = input;
+
+  if (fromPlan === toPlan) {
+    return {
+      subscriptionPlan: toPlan,
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: paidUntil,
+      subscriptionCommissionPaidForMonth: commissionPaidForMonth,
+      subscriptionCommissionPaidInr: commissionPaidInr,
+      subscriptionLastPaidAt: lastPaidAt,
+    };
+  }
+
+  const activePaidUntil =
+    paidUntil && paidUntil.getTime() > now.getTime() ? paidUntil : null;
+
+  if (toPlan === 'COMMISSION') {
+    // Keep prepaid fixed credit; keep any commission-month payment rows as history.
+    return {
+      subscriptionPlan: 'COMMISSION',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionPaidUntil: activePaidUntil,
+      subscriptionCommissionPaidForMonth: commissionPaidForMonth,
+      subscriptionCommissionPaidInr: commissionPaidInr,
+      subscriptionLastPaidAt: lastPaidAt,
+    };
+  }
+
+  // Switching to MONTHLY_799 or YEARLY_799
+  let nextPaidUntil = activePaidUntil;
+  if (!nextPaidUntil && commissionMonthSettled) {
+    // Carry remaining commission month as a short fixed credit.
+    nextPaidUntil = commissionPeriodEndsAt;
+  }
+
+  return {
+    subscriptionPlan: toPlan,
+    subscriptionStatus: 'ACTIVE',
+    subscriptionPaidUntil: nextPaidUntil,
+    subscriptionCommissionPaidForMonth: null,
+    subscriptionCommissionPaidInr: 0,
+    subscriptionLastPaidAt: lastPaidAt,
+  };
+}
+
 /** Pure helpers for unit tests — same rules as getSubscriptionView for fixed plans. */
 export function fixedPlanDueAndCycle(input: {
   plan: 'MONTHLY_799' | 'YEARLY_799';
@@ -176,6 +266,22 @@ class SubscriptionService {
         isTrial,
       });
 
+      // Prepaid credit from a previous monthly/yearly plan — no commission due until it ends.
+      const paidUntil = business.subscriptionPaidUntil
+        ? new Date(business.subscriptionPaidUntil)
+        : null;
+      if (paidUntil && paidUntil.getTime() > now.getTime()) {
+        return {
+          plan,
+          status: 'ACTIVE',
+          isActive: true,
+          dueInr: 0,
+          paidInr: computed.paidInr,
+          currentMonthKey: computed.currentMonthKey,
+          currentCycleEndsAt: paidUntil.toISOString(),
+        };
+      }
+
       return {
         plan,
         ...computed,
@@ -200,22 +306,70 @@ class SubscriptionService {
     };
   }
 
-  async selectPlan(businessId: string, plan: SubscriptionPlan): Promise<void> {
+  async selectPlan(businessId: string, plan: SubscriptionPlan): Promise<SubscriptionView> {
     const allowed: SubscriptionPlan[] = ['COMMISSION', 'MONTHLY_799', 'YEARLY_799'];
     if (!allowed.includes(plan)) throw new Error('Invalid subscription plan');
 
-    // Reset payment trackers when changing plan so activation is recomputed correctly.
+    const now = new Date();
+    const business = await prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: {
+        timezone: true,
+        subscriptionPlan: true,
+        subscriptionPaidUntil: true,
+        subscriptionCommissionPaidForMonth: true,
+        subscriptionCommissionPaidInr: true,
+        subscriptionLastPaidAt: true,
+      },
+    });
+
+    const tz = business.timezone || 'Asia/Kolkata';
+    const fromPlan = (business.subscriptionPlan || 'COMMISSION') as SubscriptionPlan;
+    const monthKey = currentMonthKey(tz, now);
+    const { lte: commissionPeriodEndsAt } = monthUtcRange(tz, now);
+
+    // Evaluate settlement on the current plan before switching (prepaid fixed credit
+    // already yields dueInr=0 on commission; only treat as commission-month settled
+    // when the month marker matches and there is no active prepaid fixed credit).
+    const before = await this.getSubscriptionView(businessId, now);
+    const hasActivePrepaid =
+      !!business.subscriptionPaidUntil &&
+      new Date(business.subscriptionPaidUntil).getTime() > now.getTime();
+    const commissionMonthSettled =
+      fromPlan === 'COMMISSION' &&
+      !hasActivePrepaid &&
+      business.subscriptionCommissionPaidForMonth === monthKey &&
+      before.dueInr === 0;
+
+    const switched = computePlanSwitch({
+      fromPlan,
+      toPlan: plan,
+      now,
+      paidUntil: business.subscriptionPaidUntil
+        ? new Date(business.subscriptionPaidUntil)
+        : null,
+      commissionPaidForMonth: business.subscriptionCommissionPaidForMonth,
+      commissionPaidInr: Number(business.subscriptionCommissionPaidInr ?? 0),
+      lastPaidAt: business.subscriptionLastPaidAt
+        ? new Date(business.subscriptionLastPaidAt)
+        : null,
+      commissionPeriodEndsAt,
+      commissionMonthSettled,
+    });
+
     await prisma.business.update({
       where: { id: businessId },
       data: {
-        subscriptionPlan: plan,
-        subscriptionStatus: 'ACTIVE',
-        subscriptionPaidUntil: null,
-        subscriptionCommissionPaidForMonth: null,
-        subscriptionCommissionPaidInr: 0,
-        subscriptionLastPaidAt: null,
+        subscriptionPlan: switched.subscriptionPlan,
+        subscriptionStatus: switched.subscriptionStatus,
+        subscriptionPaidUntil: switched.subscriptionPaidUntil,
+        subscriptionCommissionPaidForMonth: switched.subscriptionCommissionPaidForMonth,
+        subscriptionCommissionPaidInr: switched.subscriptionCommissionPaidInr,
+        subscriptionLastPaidAt: switched.subscriptionLastPaidAt,
       },
     });
+
+    return this.getSubscriptionView(businessId, now);
   }
 
   async markPaid(businessId: string, now: Date = new Date()): Promise<{

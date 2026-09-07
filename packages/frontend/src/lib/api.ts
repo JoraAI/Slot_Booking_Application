@@ -566,7 +566,16 @@ class ApiClient {
   }
 
   selectOwnerSubscriptionPlan(plan: 'COMMISSION' | 'MONTHLY_799' | 'YEARLY_799') {
-    return this.request<{ ok: boolean }>('/owner/subscription/select', {
+    return this.request<{
+      ok: boolean
+      plan: 'COMMISSION' | 'MONTHLY_799' | 'YEARLY_799'
+      status: 'ACTIVE' | 'PAST_DUE'
+      isActive: boolean
+      dueInr: number
+      paidInr: number
+      currentMonthKey: string | null
+      currentCycleEndsAt: string | null
+    }>('/owner/subscription/select', {
       method: 'POST',
       body: JSON.stringify({ plan }),
     })

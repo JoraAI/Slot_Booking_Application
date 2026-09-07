@@ -78,9 +78,22 @@ export const SubscriptionPage: React.FC = () => {
   const choosePlan = async (plan: Plan) => {
     setBusy(true)
     try {
-      await api.selectOwnerSubscriptionPlan(plan)
-      toast.success('Plan selected')
-      await refresh()
+      const next = await api.selectOwnerSubscriptionPlan(plan)
+      setView(next as any)
+      const ends = next.currentCycleEndsAt
+        ? new Date(next.currentCycleEndsAt).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })
+        : null
+      if (ends && next.dueInr === 0) {
+        toast.success(`Switched plan — paid through ${ends}`)
+      } else if (ends) {
+        toast.success(`Switched plan — cycle ends ${ends}`)
+      } else {
+        toast.success('Plan selected')
+      }
     } catch (e: any) {
       toast.error(e.message || 'Could not update plan')
     } finally {
@@ -266,7 +279,8 @@ export const SubscriptionPage: React.FC = () => {
 
       <p className="text-xs text-gray-400">
         Payments are securely processed via Razorpay. Commission is calculated on all bookings for the current month.
-        If payment is overdue, booking services are paused until payment is completed — you still have full access to the dashboard.
+        Switching plans keeps any remaining paid period (cycle end date). If payment is overdue, booking services are
+        paused until payment is completed — you still have full access to the dashboard.
       </p>
     </div>
   )

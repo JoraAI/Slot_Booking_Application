@@ -2042,8 +2042,8 @@ ownerRouter.post('/subscription/select', async (req: AuthRequest, res: Response)
       plan: z.enum(['COMMISSION', 'MONTHLY_799', 'YEARLY_799']),
     });
     const parsed = schema.parse(req.body);
-    await subscriptionService.selectPlan(req.owner!.businessId, parsed.plan as any);
-    res.json({ ok: true });
+    const view = await subscriptionService.selectPlan(req.owner!.businessId, parsed.plan as any);
+    res.json({ ok: true, ...view });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
