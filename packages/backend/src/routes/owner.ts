@@ -2139,7 +2139,13 @@ ownerRouter.post('/subscription/verify', async (req: AuthRequest, res: Response)
     }
     // Idempotent: period already paid — do not activate again (order ownership already verified).
     if (view.dueInr <= 0) {
-      return res.json({ ok: true, dueInr: 0, plan: view.plan, alreadyPaid: true });
+      return res.json({
+        ok: true,
+        dueInr: 0,
+        plan: view.plan,
+        alreadyPaid: true,
+        currentCycleEndsAt: view.currentCycleEndsAt,
+      });
     }
     if (orderPaise !== expectedPaise) {
       return res.status(400).json({ error: 'Payment amount does not match subscription due' });

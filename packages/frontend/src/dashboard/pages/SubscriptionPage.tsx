@@ -111,12 +111,19 @@ export const SubscriptionPage: React.FC = () => {
         order_id: res.orderId,
         handler: async (response: any) => {
           try {
-            await api.verifySubscriptionPayment({
+            const verified = await api.verifySubscriptionPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             })
-            toast.success('Payment verified — subscription activated!')
+            const ends = verified.currentCycleEndsAt
+              ? new Date(verified.currentCycleEndsAt).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : null
+            toast.success(ends ? `Payment verified — cycle ends ${ends}` : 'Payment verified — subscription activated!')
             await refresh()
           } catch (e: any) {
             toast.error(e.message || 'Payment verification failed')
@@ -168,14 +175,39 @@ export const SubscriptionPage: React.FC = () => {
               </p>
             </div>
           </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 grid sm:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Amount Due</p>
+              <p className="text-2xl font-bold">
+                {view.dueInr > 0 ? `₹${view.dueInr}` : '₹0'}
+              </p>
+              {view.paidInr > 0 && (
+                <p className="text-xs text-gray-400 mt-1">Paid this cycle: ₹{view.paidInr}</p>
+              )}
+              {view.currentMonthKey && (
+                <p className="text-xs text-gray-400 mt-1">Billing month: {view.currentMonthKey}</p>
+              )}
+            </div>
+            <div className="sm:text-right">
+              <p className="text-sm text-gray-500">Cycle ends</p>
+              <p className="text-lg font-semibold">
+                {view.currentCycleEndsAt
+                  ? new Date(view.currentCycleEndsAt).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })
+                  : '—'}
+              </p>
+              {view.isActive && view.dueInr === 0 && (
+                <p className="text-xs text-green-600 mt-1">Paid through this cycle</p>
+              )}
+            </div>
+          </div>
+
           {view.dueInr > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <p className="text-sm text-gray-500">Amount Due</p>
-                <p className="text-2xl font-bold">₹{view.dueInr}</p>
-                {view.currentMonthKey && <p className="text-xs text-gray-400 mt-1">For: {view.currentMonthKey}</p>}
-                {view.currentCycleEndsAt && <p className="text-xs text-gray-400">Cycle ends: {new Date(view.currentCycleEndsAt).toLocaleDateString()}</p>}
-              </div>
+            <div className="mt-4 flex justify-end">
               <button
                 onClick={handlePay}
                 disabled={busy}

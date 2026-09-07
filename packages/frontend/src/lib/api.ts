@@ -585,7 +585,13 @@ class ApiClient {
   }
 
   verifySubscriptionPayment(data: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
-    return this.request<{ ok: boolean; dueInr: number; plan: string }>('/owner/subscription/verify', {
+    return this.request<{
+      ok: boolean
+      dueInr: number
+      plan: string
+      currentCycleEndsAt?: string | null
+      alreadyPaid?: boolean
+    }>('/owner/subscription/verify', {
       method: 'POST',
       body: JSON.stringify(data),
     })
