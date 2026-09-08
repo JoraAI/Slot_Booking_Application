@@ -49,14 +49,23 @@ export const LoginPage: React.FC = () => {
     navigate('/dashboard')
   }
 
-  // Google Identity Services button (login view only). Skip on native WebView —
-  // GIS often fails in Capacitor; email/password (and OTP signup) remain available.
+  // Google Identity Services — Sign In and Create Business (email step).
+  // Skip on native WebView — GIS often fails in Capacitor.
+  const showGoogleButton =
+    !!GOOGLE_CLIENT_ID &&
+    !isNativePlatform() &&
+    !forgotOpen &&
+    !googlePending &&
+    ((mode === 'login' && signupStep !== 'details') ||
+      (mode === 'signup' && signupStep === 'email'))
+
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || mode !== 'login' || isNativePlatform()) return
+    if (!showGoogleButton) return
     let cancelled = false
     const render = () => {
       if (cancelled || !googleBtnRef.current || !window.google?.accounts) return
       try {
+        googleBtnRef.current.innerHTML = ''
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: (response: any) => { void handleGoogleCredential(response?.credential) },
@@ -77,7 +86,7 @@ export const LoginPage: React.FC = () => {
     }
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, GOOGLE_CLIENT_ID])
+  }, [showGoogleButton, mode, signupStep, GOOGLE_CLIENT_ID])
 
   useEffect(() => {
     if (resendCountdown <= 0) return
@@ -220,7 +229,7 @@ export const LoginPage: React.FC = () => {
         {!forgotOpen && (
           <div className="flex rounded-lg bg-gray-100 dark:bg-gray-800 p-1 mb-5">
             <button onClick={() => { setMode('login'); setSignupStep('email'); setGooglePending(null) }} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'login' && signupStep !== 'details' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500'}`}>Sign In</button>
-            <button onClick={() => { setMode('signup'); setSignupStep('email') }} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'signup' && signupStep !== 'details' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500'}`}>Create Business</button>
+            <button onClick={() => { setMode('signup'); setSignupStep('email'); setGooglePending(null) }} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'signup' && signupStep !== 'details' ? 'bg-white dark:bg-gray-700 shadow-sm' : 'text-gray-500'}`}>Create Business</button>
           </div>
         )}
 
@@ -245,7 +254,7 @@ export const LoginPage: React.FC = () => {
           </form>
         )}
 
-        {mode === 'login' && !forgotOpen && GOOGLE_CLIENT_ID && !isNativePlatform() && (
+        {showGoogleButton && mode === 'login' && (
           <div className="mt-4">
             <div className="flex items-center gap-3 my-3">
               <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
@@ -304,7 +313,17 @@ export const LoginPage: React.FC = () => {
           <div className="space-y-4">
             {signupStep === 'email' && (
               <>
-                <p className="text-sm text-gray-500">We'll email you a one-time verification code, then you create your workspace.</p>
+                <p className="text-sm text-gray-500">Create a workspace with Google, or verify your email with a one-time code.</p>
+                {showGoogleButton && (
+                  <div>
+                    <div ref={googleBtnRef} className="flex justify-center" />
+                    <div className="flex items-center gap-3 my-4">
+                      <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                      <span className="text-xs text-gray-400">or continue with email</span>
+                      <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-1">Work email</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />

@@ -257,6 +257,40 @@ class ApiClient {
     })
   }
 
+  listMembers() {
+    return this.request<{
+      members: Array<{
+        userId: string
+        email: string
+        role: 'MANAGER'
+        passwordSet: boolean
+        googleLinked: boolean
+        createdAt: string
+        shops: Array<{ id: string; name: string; slug: string; isPrimary: boolean }>
+      }>
+    }>('/owner/members')
+  }
+
+  updateMember(userId: string, data: { businessIds: string[] }) {
+    return this.request<{ ok: boolean; userId: string; shopIds: string[] }>(`/owner/members/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  removeMember(userId: string) {
+    return this.request<{ ok: boolean }>(`/owner/members/${userId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  resetMemberPassword(userId: string, temporaryPassword: string) {
+    return this.request<{ ok: boolean; email: string }>(`/owner/members/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporaryPassword }),
+    })
+  }
+
   ownerSignup(data: { signupToken: string; name: string; ownerPassword: string; timezone?: string }) {
     return this.request<{ token: string; business: { id: string; name: string; slug: string; publicCode: string; email: string } }>('/signup', {
       method: 'POST',

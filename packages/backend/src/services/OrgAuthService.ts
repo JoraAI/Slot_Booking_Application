@@ -424,7 +424,7 @@ export const orgAuthService = {
             emailVerifiedAt: new Date(),
           },
         });
-      } else if (!user.passwordHash) {
+      } else {
         user = await tx.user.update({
           where: { id: user.id },
           data: { passwordHash },
@@ -448,21 +448,210 @@ export const orgAuthService = {
         });
       }
 
+      const orgShopIds = (
+        await tx.business.findMany({
+          where: { organizationId: args.orgId },
+          select: { id: true },
+        })
+      ).map((b) => b.id);
+
+      await tx.businessMembership.deleteMany({
+        where: { userId: user.id, businessId: { in: orgShopIds } },
+      });
+
       for (const shop of shops) {
-        await tx.businessMembership.upsert({
-          where: { businessId_userId: { businessId: shop.id, userId: user.id } },
-          create: {
+        await tx.businessMembership.create({
+          data: {
             id: newId(),
             businessId: shop.id,
             userId: user.id,
             role: OrgRole.MANAGER,
           },
-          update: { role: OrgRole.MANAGER },
         });
       }
 
       return { userId: user.id, email: user.email, shopIds: shops.map((s) => s.id) };
     });
+  },
+
+  async listManagers(args: { ownerUserId: string; orgId: string }) {
+    const orgMember = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.ownerUserId } },
+    });
+    if (!orgMember || orgMember.role !== OrgRole.OWNER) {
+      throw Object.assign(new Error('Only owners can manage team members'), { status: 403 });
+    }
+
+    const managers = await prisma.orgMember.findMany({
+      where: { organizationId: args.orgId, role: OrgRole.MANAGER },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            passwordHash: true,
+            googleSub: true,
+            createdAt: true,
+            businessMemberships: {
+              where: { business: { organizationId: args.orgId } },
+              include: {
+                business: {
+                  select: { id: true, name: true, slug: true, isPrimary: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return managers.map((m) => ({
+      userId: m.user.id,
+      email: m.user.email,
+      role: 'MANAGER' as const,
+      passwordSet: !!m.user.passwordHash,
+      googleLinked: !!m.user.googleSub,
+      createdAt: m.createdAt,
+      shops: m.user.businessMemberships.map((bm) => ({
+        id: bm.business.id,
+        name: bm.business.name,
+        slug: bm.business.slug,
+        isPrimary: bm.business.isPrimary,
+      })),
+    }));
+  },
+
+  async updateManagerShops(args: {
+    ownerUserId: string;
+    orgId: string;
+    userId: string;
+    businessIds: string[];
+  }) {
+    const orgMember = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.ownerUserId } },
+    });
+    if (!orgMember || orgMember.role !== OrgRole.OWNER) {
+      throw Object.assign(new Error('Only owners can manage team members'), { status: 403 });
+    }
+
+    const target = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.userId } },
+    });
+    if (!target || target.role !== OrgRole.MANAGER) {
+      throw Object.assign(new Error('Manager not found'), { status: 404 });
+    }
+    if (args.businessIds.length === 0) {
+      throw Object.assign(new Error('Select at least one shop'), { status: 400 });
+    }
+
+    const shops = await prisma.business.findMany({
+      where: { id: { in: args.businessIds }, organizationId: args.orgId },
+      select: { id: true },
+    });
+    if (shops.length !== args.businessIds.length) {
+      throw Object.assign(new Error('One or more shops are invalid'), { status: 400 });
+    }
+
+    const orgShopIds = (
+      await prisma.business.findMany({
+        where: { organizationId: args.orgId },
+        select: { id: true },
+      })
+    ).map((b) => b.id);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.businessMembership.deleteMany({
+        where: {
+          userId: args.userId,
+          businessId: { in: orgShopIds },
+        },
+      });
+      for (const shop of shops) {
+        await tx.businessMembership.create({
+          data: {
+            id: newId(),
+            businessId: shop.id,
+            userId: args.userId,
+            role: OrgRole.MANAGER,
+          },
+        });
+      }
+    });
+
+    return { userId: args.userId, shopIds: shops.map((s) => s.id) };
+  },
+
+  async removeManager(args: { ownerUserId: string; orgId: string; userId: string }) {
+    const orgMember = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.ownerUserId } },
+    });
+    if (!orgMember || orgMember.role !== OrgRole.OWNER) {
+      throw Object.assign(new Error('Only owners can manage team members'), { status: 403 });
+    }
+    if (args.userId === args.ownerUserId) {
+      throw Object.assign(new Error('Cannot remove yourself'), { status: 400 });
+    }
+
+    const target = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.userId } },
+    });
+    if (!target || target.role !== OrgRole.MANAGER) {
+      throw Object.assign(new Error('Manager not found'), { status: 404 });
+    }
+
+    const orgShopIds = (
+      await prisma.business.findMany({
+        where: { organizationId: args.orgId },
+        select: { id: true },
+      })
+    ).map((b) => b.id);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.businessMembership.deleteMany({
+        where: { userId: args.userId, businessId: { in: orgShopIds } },
+      });
+      await tx.orgMember.delete({
+        where: { organizationId_userId: { organizationId: args.orgId, userId: args.userId } },
+      });
+
+      const remaining = await tx.orgMember.count({ where: { userId: args.userId } });
+      const remainingShops = await tx.businessMembership.count({ where: { userId: args.userId } });
+      if (remaining === 0 && remainingShops === 0) {
+        await tx.user.delete({ where: { id: args.userId } }).catch(() => {});
+      }
+    });
+
+    return { ok: true };
+  },
+
+  async resetManagerPassword(args: {
+    ownerUserId: string;
+    orgId: string;
+    userId: string;
+    temporaryPassword: string;
+  }) {
+    const orgMember = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.ownerUserId } },
+    });
+    if (!orgMember || orgMember.role !== OrgRole.OWNER) {
+      throw Object.assign(new Error('Only owners can manage team members'), { status: 403 });
+    }
+
+    const target = await prisma.orgMember.findUnique({
+      where: { organizationId_userId: { organizationId: args.orgId, userId: args.userId } },
+      include: { user: true },
+    });
+    if (!target || target.role !== OrgRole.MANAGER) {
+      throw Object.assign(new Error('Manager not found'), { status: 404 });
+    }
+
+    const passwordHash = await hashOwnerPassword(args.temporaryPassword);
+    await prisma.user.update({
+      where: { id: args.userId },
+      data: { passwordHash },
+    });
+    return { ok: true, email: target.user.email };
   },
 
   async setPasswordForEmail(email: string, passwordHash: string) {
