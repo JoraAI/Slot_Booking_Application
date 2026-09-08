@@ -96,14 +96,14 @@ export const DashboardLayout: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex shrink-0 items-center gap-2 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
           <span className="font-bold text-lg">Reservly</span>
         </div>
 
         {shops.length > 0 && (
-          <div className="px-3 pt-3 pb-1 border-b border-gray-100 dark:border-gray-800 space-y-2">
+          <div className="shrink-0 px-3 pt-3 pb-1 border-b border-gray-100 dark:border-gray-800 space-y-2">
             <label className="block text-[11px] uppercase tracking-wide text-gray-400 px-1">Shop</label>
             <select
               className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1.5"
@@ -139,7 +139,7 @@ export const DashboardLayout: React.FC = () => {
           </div>
         )}
 
-        <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-220px)]">
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-1">
           {navItems.map((item) => {
             if ((item as any).ownerOnly && !isOwner) return null
             const content = (
@@ -166,7 +166,7 @@ export const DashboardLayout: React.FC = () => {
             return content
           })}
         </nav>
-        <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+        <div className="shrink-0 p-3 border-t border-gray-200 dark:border-gray-800">
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
             <span>🚪</span>
             <span>Logout</span>
