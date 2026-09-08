@@ -47,6 +47,23 @@ async function makeTenant(label: string) {
   });
   createdIds.push(b.id);
 
+  // Multi-shop auth: wrap legacy Business in Organization + User + memberships
+  const { orgAuthService } = await import('./OrgAuthService');
+  await orgAuthService.ensureOrgForBusiness(b.id);
+  const user = await prisma.user.findUnique({ where: { email: b.ownerEmail.toLowerCase() } });
+  const business = await prisma.business.findUnique({ where: { id: b.id } });
+  const token = jwt.sign(
+    {
+      businessId: b.id,
+      email: b.ownerEmail,
+      userId: user?.id,
+      orgId: business?.organizationId || undefined,
+      role: 'OWNER',
+    },
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: '1h' } as any
+  );
+
   const cat = await prisma.serviceCategory.create({ data: { businessId: b.id, name: 'Cat' } });
   const staff = await prisma.staff.create({ data: { businessId: b.id, name: 'Staff' } });
   const svc = await prisma.service.create({
@@ -64,7 +81,6 @@ async function makeTenant(label: string) {
   const waitlistEntry = await prisma.waitlistEntry.create({
     data: { businessId: b.id, serviceId: svc.id, date: timeService.dateToUtcMidnight(dateStr()), startTime: '11:00', customerName: 'Test', customerPhone: '+911111111111' },
   });
-  const token = jwt.sign({ businessId: b.id, email: b.ownerEmail }, process.env.JWT_SECRET || 'fallback-secret', { expiresIn: '1h' } as any);
 
   return { b, cat, staff, svc, section, booking, waitlistEntry, token };
 }

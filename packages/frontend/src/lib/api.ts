@@ -199,9 +199,61 @@ class ApiClient {
   // ---------- Owner auth ----------
 
   ownerLogin(email: string, password: string) {
-    return this.request<{ token: string; business: { id: string; name: string; slug: string; email: string } }>('/owner/login', {
+    return this.request<{
+      token: string
+      business: { id: string; name: string; slug: string; email: string; publicCode?: string }
+      role?: 'OWNER' | 'MANAGER'
+      orgId?: string
+      userId?: string
+    }>('/owner/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    })
+  }
+
+  listShops() {
+    return this.request<{
+      shops: Array<{
+        id: string
+        name: string
+        slug: string
+        publicCode: string
+        isPrimary: boolean
+        role: 'OWNER' | 'MANAGER'
+      }>
+    }>('/owner/shops')
+  }
+
+  switchShop(businessId: string) {
+    return this.request<{
+      token: string
+      business: { id: string; name: string; slug: string; email: string; publicCode?: string }
+      role: 'OWNER' | 'MANAGER'
+      orgId: string
+      userId: string
+    }>('/owner/shops/switch', {
+      method: 'POST',
+      body: JSON.stringify({ businessId }),
+    })
+  }
+
+  createShop(data: { name: string; timezone?: string; copyHoursFromPrimary?: boolean }) {
+    return this.request<{
+      token: string
+      business: { id: string; name: string; slug: string; email: string; publicCode?: string }
+      role: 'OWNER' | 'MANAGER'
+      orgId: string
+      userId: string
+    }>('/owner/shops', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  inviteManager(data: { email: string; businessIds: string[]; temporaryPassword: string }) {
+    return this.request<{ ok: boolean; userId: string; email: string; shopIds: string[] }>('/owner/members/invite', {
+      method: 'POST',
+      body: JSON.stringify(data),
     })
   }
 

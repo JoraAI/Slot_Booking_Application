@@ -260,6 +260,7 @@ class AnalyticsService {
         serviceId: true,
         serviceNameSnapshot: true,
         durationMinutesSnapshot: true,
+        staffId: true,
       },
     });
 
@@ -292,6 +293,9 @@ class AnalyticsService {
         select: {
           total: true,
           discountAmount: true,
+          taxAmount: true,
+          paymentMethod: true,
+          staffId: true,
           source: true,
           bookingId: true,
           booking: {
@@ -301,6 +305,7 @@ class AnalyticsService {
               paymentAmount: true,
               serviceId: true,
               serviceNameSnapshot: true,
+              staffId: true,
             },
           },
         },
@@ -312,6 +317,9 @@ class AnalyticsService {
             select: {
               total: true,
               discountAmount: true,
+              taxAmount: true,
+              paymentMethod: true,
+              staffId: true,
               source: true,
               bookingId: true,
               booking: {
@@ -321,6 +329,7 @@ class AnalyticsService {
                   paymentAmount: true,
                   serviceId: true,
                   serviceNameSnapshot: true,
+                  staffId: true,
                 },
               },
             },
@@ -486,6 +495,68 @@ class AnalyticsService {
       popularServices,
       avgBookingValue,
       productMetrics,
+      gstCollected: Math.round(
+        [...bookingInvoiceRows, ...walkInInvoiceRows].reduce((s, inv) => s + (Number(inv.taxAmount) || 0), 0) * 100
+      ) / 100,
+      paymentMethodMix: (() => {
+        const mix: Record<string, number> = { razorpay: 0, cash: 0, upi: 0, card: 0, other: 0 };
+        for (const b of revenueRows) {
+          const amt = netCollectedAmount(b);
+          if (amt > 0) mix.razorpay += amt;
+        }
+        for (const inv of [...bookingInvoiceRows, ...walkInInvoiceRows]) {
+          const amt = invoiceCollectedAmount(inv);
+          if (amt <= 0) continue;
+          const key = String(inv.paymentMethod || 'other').toLowerCase();
+          if (key in mix) mix[key] += amt;
+          else mix.other += amt;
+        }
+        return Object.entries(mix)
+          .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 }))
+          .filter((r) => r.amount > 0)
+          .sort((a, b) => b.amount - a.amount);
+      })(),
+      staffCollections: await (async () => {
+        const staffRows = await prisma.staff.findMany({
+          where: { businessId, ...(staffId ? { id: staffId } : {}) },
+          select: { id: true, name: true, commissionPercent: true, salary: true },
+        });
+        const byStaff: Record<string, { id: string; name: string; collected: number; commissionPercent: number | null; commissionEarned: number }> = {};
+        for (const s of staffRows) {
+          byStaff[s.id] = {
+            id: s.id,
+            name: s.name,
+            collected: 0,
+            commissionPercent: s.commissionPercent,
+            commissionEarned: 0,
+          };
+        }
+        for (const b of revenueRows) {
+          if (!b.staffId || !byStaff[b.staffId]) continue;
+          const amt = netCollectedAmount(b);
+          byStaff[b.staffId].collected += amt;
+        }
+        for (const inv of [...bookingInvoiceRows, ...walkInInvoiceRows]) {
+          const sid = inv.staffId || inv.booking?.staffId;
+          if (!sid || !byStaff[sid]) continue;
+          byStaff[sid].collected += invoiceCollectedAmount(inv);
+        }
+        return Object.values(byStaff)
+          .map((row) => {
+            const pct = row.commissionPercent != null ? Number(row.commissionPercent) : 0;
+            return {
+              ...row,
+              collected: Math.round(row.collected * 100) / 100,
+              commissionEarned: Math.round((row.collected * pct) / 100 * 100) / 100,
+            };
+          })
+          .sort((a, b) => b.collected - a.collected);
+      })(),
+      noShowRate: (() => {
+        const denom = totalBookings || 1;
+        const noShows = statusBreakdown?.noShow || 0;
+        return Math.round((noShows / denom) * 1000) / 10;
+      })(),
     };
   }
 }

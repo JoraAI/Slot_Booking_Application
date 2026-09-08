@@ -67,6 +67,10 @@ export interface BusinessConfig {
   address: string | null
   latitude: number | null
   longitude: number | null
+  gstin?: string | null
+  legalName?: string | null
+  stateCode?: string | null
+  defaultGstPercent?: number | null
   workingHours: WorkingHour[]
   formFields: FormField[]
   staff: Staff[]
@@ -74,6 +78,18 @@ export interface BusinessConfig {
   services: Service[]
   pageSections: PageSection[]
   staffWorkingHours: StaffWorkingHour[]
+  role?: 'OWNER' | 'MANAGER'
+  orgId?: string | null
+  userId?: string | null
+  shops?: Array<{
+    id: string
+    name: string
+    slug: string
+    publicCode: string
+    isPrimary: boolean
+    role: 'OWNER' | 'MANAGER'
+  }>
+  isPrimary?: boolean
 }
 
 export interface PublicConfig {
@@ -445,6 +461,16 @@ export interface AnalyticsData {
     totalRevenue: number
     byProduct: { id: string; name: string; units: number; revenue: number }[]
   }
+  gstCollected?: number
+  paymentMethodMix?: { method: string; amount: number }[]
+  staffCollections?: {
+    id: string
+    name: string
+    collected: number
+    commissionPercent: number | null
+    commissionEarned: number
+  }[]
+  noShowRate?: number
 }
 
 export interface BookingWizardState {
@@ -502,6 +528,9 @@ export interface Product {
   sku: string | null
   price: number
   cost: number | null
+  stockQty?: number | null
+  hsnCode?: string | null
+  gstPercent?: number | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -517,6 +546,8 @@ export interface ProductSale {
   soldAt: string
   note: string | null
   bookingId: string | null
+  invoiceId?: string | null
+  staffId?: string | null
   createdAt: string
   product?: { id: string; name: string }
 }
@@ -526,6 +557,10 @@ export interface InvoiceLineItem {
   quantity: number
   unitPrice: number
   amount: number
+  productId?: string | null
+  serviceId?: string | null
+  sacOrHsn?: string | null
+  gstRate?: number | null
 }
 
 export interface InvoiceListItem {

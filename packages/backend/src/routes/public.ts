@@ -1,5 +1,4 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { hashOwnerPassword } from '../services/OwnerPassword';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -24,6 +23,8 @@ import { subscriptionService } from '../services/SubscriptionService';
 import { serveMediaAsset } from '../services/MediaService';
 import { ownerAuthOtpService } from '../services/OwnerAuthOtpService';
 import { googleTokenVerifier } from '../services/GoogleTokenVerifier';
+import { orgAuthService } from '../services/OrgAuthService';
+import { hashOwnerPassword } from '../services/OwnerPassword';
 
 export const publicRouter = Router();
 
@@ -164,88 +165,6 @@ const paymentVerifySchema = z.object({
 
 // ---------- Signup (public) ----------
 
-/** Sign an owner JWT (same shape as before — { businessId, email }). */
-function issueOwnerJwt(business: { id: string; ownerEmail: string }): string {
-  return jwt.sign(
-    { businessId: business.id, email: business.ownerEmail },
-    process.env.JWT_SECRET || 'fallback-secret',
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
-  );
-}
-
-/**
- * Create a business workspace with the same defaults as the legacy signup
- * (slug, public code, working hours, form fields). Used by OTP-verified signup
- * and Google completion.
- */
-async function createOwnerWorkspace(input: {
-  name: string;
-  email: string;
-  timezone: string;
-  password?: string;
-  googleSub?: string;
-  emailVerifiedAt: Date;
-}) {
-  // Unique slug
-  let base = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-  if (!base) base = 'business';
-  let slug = base;
-  let suffix = 2;
-  while (await prisma.business.findUnique({ where: { slug } })) {
-    slug = `${base}-${suffix++}`;
-  }
-
-  // Opaque public code (96+ bits entropy, URL-safe)
-  let publicCode = '';
-  for (let i = 0; i < 10; i++) {
-    const candidate = require('crypto').randomBytes(16).toString('base64url');
-    if (!(await prisma.business.findUnique({ where: { publicCode: candidate } }))) {
-      publicCode = candidate;
-      break;
-    }
-  }
-  if (!publicCode) {
-    const err: any = new Error('Could not generate a unique public code');
-    err.status = 500;
-    throw err;
-  }
-
-  const hashedPassword = input.password ? await hashOwnerPassword(input.password) : null;
-
-  return prisma.business.create({
-    data: {
-      name: input.name.trim(),
-      slug,
-      publicCode,
-      timezone: input.timezone,
-      ownerEmail: input.email,
-      ownerPassword: hashedPassword,
-      ...(input.googleSub ? { googleSub: input.googleSub } : {}),
-      emailVerifiedAt: input.emailVerifiedAt,
-      slotGranularityMinutes: 15,
-      workingHours: {
-        create: [
-          { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
-          { dayOfWeek: 1, openTime: '09:00', closeTime: '20:00', isOpen: true },
-          { dayOfWeek: 2, openTime: '09:00', closeTime: '20:00', isOpen: true },
-          { dayOfWeek: 3, openTime: '09:00', closeTime: '20:00', isOpen: true },
-          { dayOfWeek: 4, openTime: '09:00', closeTime: '20:00', isOpen: true },
-          { dayOfWeek: 5, openTime: '09:00', closeTime: '20:00', isOpen: true },
-          { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
-        ],
-      },
-      formFields: {
-        create: [
-          { label: 'Full Name', fieldType: 'text', required: true, order: 1, visible: true, placeholder: 'Enter your full name' },
-          { label: 'Phone Number', fieldType: 'tel', required: true, order: 2, visible: true, placeholder: 'Enter your phone number' },
-          { label: 'Email Address', fieldType: 'email', required: false, order: 3, visible: true, placeholder: 'Enter your email address' },
-          { label: 'Notes / Special Requests', fieldType: 'textarea', required: false, order: 4, visible: true, placeholder: 'Any special requests?' },
-        ],
-      },
-    },
-  });
-}
-
 /** Map a service error (may carry .status) to an HTTP response. */
 function mapAuthError(error: any, res: Response) {
   const status = typeof error?.status === 'number' ? error.status : 400;
@@ -259,11 +178,14 @@ function mapAuthError(error: any, res: Response) {
 publicRouter.post('/auth/signup/request-otp', async (req: Request, res: Response) => {
   try {
     const { email } = z.object({ email: z.string().trim().email() }).parse(req.body);
-    const existing = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
-      select: { id: true },
-    });
-    if (existing) {
+    const existingUser = await orgAuthService.findUserByEmail(email);
+    const existingBusiness = existingUser
+      ? null
+      : await prisma.business.findFirst({
+          where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+          select: { id: true },
+        });
+    if (existingUser || existingBusiness) {
       return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
     }
     await ownerAuthOtpService.requestOtp(email, 'SIGNUP', req.ip || null);
@@ -299,10 +221,8 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
     const parsed = signupSchema.parse(req.body);
     const email = ownerAuthOtpService.verifyToken(parsed.signupToken, 'owner_signup');
 
-    const existing = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
-    });
-    if (existing) {
+    const existingUser = await orgAuthService.findUserByEmail(email);
+    if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
     }
 
@@ -311,7 +231,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid timezone' });
     }
 
-    const business = await createOwnerWorkspace({
+    const { user, org, business } = await orgAuthService.createOwnerWorkspace({
       name: parsed.name,
       email,
       timezone: tz,
@@ -319,16 +239,14 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
       emailVerifiedAt: new Date(),
     });
 
-    res.status(201).json({
-      token: issueOwnerJwt(business),
-      business: {
-        id: business.id,
-        name: business.name,
-        slug: business.slug,
-        publicCode: business.publicCode,
-        email: business.ownerEmail,
-      },
-    });
+    res.status(201).json(
+      orgAuthService.sessionPayload({
+        userId: user.id,
+        orgId: org.id,
+        business,
+        role: 'OWNER',
+      })
+    );
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
@@ -540,17 +458,17 @@ publicRouter.post('/auth/forgot/reset', async (req: Request, res: Response) => {
       newPassword: z.string().min(8).max(72),
     }).parse(req.body);
     const email = ownerAuthOtpService.verifyToken(resetToken, 'owner_password_reset');
-    const business = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
-      select: { id: true },
-    });
-    if (!business) {
+    const user = await orgAuthService.findUserByEmail(email);
+    const business = user
+      ? true
+      : await prisma.business.findFirst({
+          where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+          select: { id: true },
+        });
+    if (!user && !business) {
       return res.status(400).json({ error: 'Account not found' });
     }
-    await prisma.business.update({
-      where: { id: business.id },
-      data: { ownerPassword: await hashOwnerPassword(newPassword) },
-    });
+    await orgAuthService.setPasswordForEmail(email, await hashOwnerPassword(newPassword));
     res.json({ ok: true });
   } catch (error: any) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: 'A valid token and new password are required' });
@@ -567,45 +485,61 @@ publicRouter.post('/auth/forgot/reset', async (req: Request, res: Response) => {
 publicRouter.post('/auth/google', async (req: Request, res: Response) => {
   try {
     const { credential } = z.object({ credential: z.string().min(1) }).parse(req.body);
-    const user = await googleTokenVerifier.verifyCredential(credential);
+    const googleUser = await googleTokenVerifier.verifyCredential(credential);
+    const email = googleUser.email.trim().toLowerCase();
 
-    const existing = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: user.email, mode: 'insensitive' } },
-    });
-    if (existing) {
-      // Auto-link: record the Google subject if it isn't linked already.
-      if (!existing.googleSub) {
-        await prisma.business.update({
-          where: { id: existing.id },
-          data: { googleSub: user.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() },
+    let user = await orgAuthService.findUserByEmail(email);
+    if (!user) {
+      const existingBiz = await prisma.business.findFirst({
+        where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+      });
+      if (existingBiz) {
+        await orgAuthService.ensureOrgForBusiness(existingBiz.id);
+        user = await orgAuthService.findUserByEmail(email);
+      }
+    }
+
+    if (user) {
+      if (!user.googleSub) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { googleSub: googleUser.sub, emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
         });
-      } else if (existing.googleSub !== user.sub) {
+        await prisma.business.updateMany({
+          where: { ownerEmail: { equals: email, mode: 'insensitive' } },
+          data: { googleSub: googleUser.sub, emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
+        });
+      } else if (user.googleSub !== googleUser.sub) {
         return res.status(409).json({
           error: 'This email is already linked to a different Google account. Sign in with email and password, or use Forgot password.',
         });
       }
+
+      const shop = await orgAuthService.resolveLoginShop(user.id);
+      if (!shop) {
+        return res.status(401).json({ error: 'No shop access for this account' });
+      }
       return res.json({
         needsSignupCompletion: false,
-        token: issueOwnerJwt(existing),
-        business: {
-          id: existing.id,
-          name: existing.name,
-          slug: existing.slug,
-          email: existing.ownerEmail,
-        },
+        ...orgAuthService.sessionPayload({
+          userId: user.id,
+          orgId: shop.orgId,
+          business: shop.business,
+          role: shop.role,
+        }),
       });
     }
 
     const googleSignupToken = jwt.sign(
-      { typ: 'owner_google_signup', email: user.email, sub: user.sub },
+      { typ: 'owner_google_signup', email, sub: googleUser.sub },
       process.env.JWT_SECRET || 'fallback-secret',
       { expiresIn: 30 * 60 } as any
     );
     res.json({
       needsSignupCompletion: true,
       googleSignupToken,
-      email: user.email,
-      name: user.name || '',
+      email,
+      name: googleUser.name || '',
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: 'Missing Google credential' });
@@ -638,24 +572,23 @@ publicRouter.post('/auth/google/complete', async (req: Request, res: Response) =
       return res.status(400).json({ error: 'Invalid timezone' });
     }
 
-    const existing = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: email, mode: 'insensitive' } },
-    });
-    if (existing) {
-      // Race: the workspace appeared after the Google step — auto-link instead.
-      if (!existing.googleSub) {
-        await prisma.business.update({
-          where: { id: existing.id },
-          data: { googleSub: decoded.sub, emailVerifiedAt: existing.emailVerifiedAt ?? new Date() },
-        });
+    const existingUser = await orgAuthService.findUserByEmail(email);
+    if (existingUser) {
+      const shop = await orgAuthService.resolveLoginShop(existingUser.id);
+      if (!shop) {
+        return res.status(401).json({ error: 'No shop access for this account' });
       }
-      return res.json({
-        token: issueOwnerJwt(existing),
-        business: { id: existing.id, name: existing.name, slug: existing.slug, email: existing.ownerEmail },
-      });
+      return res.json(
+        orgAuthService.sessionPayload({
+          userId: existingUser.id,
+          orgId: shop.orgId,
+          business: shop.business,
+          role: shop.role,
+        })
+      );
     }
 
-    const business = await createOwnerWorkspace({
+    const { user, org, business } = await orgAuthService.createOwnerWorkspace({
       name: parsed.name,
       email,
       timezone: tz,
@@ -663,16 +596,14 @@ publicRouter.post('/auth/google/complete', async (req: Request, res: Response) =
       emailVerifiedAt: new Date(),
     });
 
-    res.status(201).json({
-      token: issueOwnerJwt(business),
-      business: {
-        id: business.id,
-        name: business.name,
-        slug: business.slug,
-        publicCode: business.publicCode,
-        email: business.ownerEmail,
-      },
-    });
+    res.status(201).json(
+      orgAuthService.sessionPayload({
+        userId: user.id,
+        orgId: org.id,
+        business,
+        role: 'OWNER',
+      })
+    );
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });

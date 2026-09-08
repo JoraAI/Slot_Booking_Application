@@ -65,8 +65,64 @@ enum PaymentRefundStatus {
   FAILED
 }
 
+enum OrgRole {
+  OWNER
+  MANAGER
+}
+
+/// Login identity (one email → many shops via org/memberships).
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  passwordHash        String?
+  googleSub           String?              @unique
+  emailVerifiedAt     DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  orgMemberships      OrgMember[]
+  businessMemberships BusinessMembership[]
+}
+
+model Organization {
+  id         String     @id @default(cuid())
+  name       String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  members    OrgMember[]
+  businesses Business[]
+}
+
+model OrgMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           OrgRole      @default(OWNER)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model BusinessMembership {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       OrgRole  @default(OWNER)
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, userId])
+  @@index([userId])
+}
+
 model Business {
   id                      String    @id @default(cuid())
+  organizationId          String?
+  organization            Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  isPrimary               Boolean   @default(true)
   name                    String
   slug                    String    @unique
   publicCode              String    @unique
@@ -100,8 +156,15 @@ model Business {
   ownerEmail              String
   ownerWhatsapp           String?
   ownerPassword           String?
-  googleSub               String?   @unique // Google subject id (auto-linked / Google-only signup)
+  /// Legacy Google link on Business; new auth uses User.googleSub. Kept for dual-write/migration.
+  googleSub               String?
   emailVerifiedAt         DateTime? // set on OTP-verified signup or Google email verify (null = legacy trusted)
+
+  // GST profile (India)
+  gstin                   String?
+  legalName               String?
+  stateCode               String?   // GST state code, e.g. "27"
+  defaultGstPercent       Float?    // e.g. 18; null/0 = no auto GST on invoices
 
   // Per-owner delivery credentials (secrets encrypted at rest)
   smtpHost                String?
@@ -163,8 +226,11 @@ model Business {
   invoices                Invoice[]
   customerNotifications   CustomerNotification[]
   mediaAssets             MediaAsset[]
+  memberships             BusinessMembership[]
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
+
+  @@index([organizationId])
 }
 
 model MediaAsset {
@@ -220,6 +286,8 @@ model CustomerContact {
   lastServiceName String?
   /// Intake answers useful for targeting (gender, etc.) — keyed by normalized label.
   attributes      Json     @default("{}")
+  tags            String[] @default([])
+  birthday        DateTime?
   notifications   CustomerNotification[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -264,6 +332,7 @@ model Staff {
   color        String         @default("#7C3AED") // hex color for calendar display
   isActive     Boolean        @default(true)
   salary       Float?         // optional monthly/lump salary (INR); owner-only, never exposed publicly
+  commissionPercent Float?    // optional service commission %; owner-only
   bookings     Booking[]
   blockedSlots BlockedSlot[]
   services     StaffService[]
@@ -700,6 +769,9 @@ model Product {
   sku        String?
   price      Float         // INR, mirrors Service.price / finalPrice style
   cost       Float?
+  stockQty   Int?          // null = stock not tracked
+  hsnCode    String?
+  gstPercent Float?
   isActive   Boolean       @default(true)
   sales      ProductSale[]
   createdAt  DateTime      @default(now())
@@ -720,10 +792,13 @@ model ProductSale {
   soldAt      DateTime @default(now())
   note        String?
   bookingId   String?  // optional link to a booking
+  invoiceId   String?
+  staffId     String?
   createdAt   DateTime @default(now())
 
   @@index([businessId, soldAt])
   @@index([businessId, productId])
+  @@index([invoiceId])
 }
 
 model Invoice {
@@ -739,6 +814,9 @@ model Invoice {
   lineItems     Json     // [{ description, quantity, unitPrice, amount }]
   subtotal      Float
   taxAmount     Float    @default(0)
+  cgstAmount    Float    @default(0)
+  sgstAmount    Float    @default(0)
+  igstAmount    Float    @default(0)
   discountType  DiscountType?
   discountValue Float?   // entered % or flat amount
   discountAmount Float   @default(0) // computed INR deducted from subtotal
@@ -748,6 +826,7 @@ model Invoice {
   paymentMethod String?  // 'razorpay' | 'cash' | 'upi' | 'card' | 'other'
   paymentRef    String?
   source        String   @default("manual") // 'booking_paid' | 'booking_completed' | 'walk_in' | 'manual'
+  staffId       String?
   issuedAt      DateTime @default(now())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

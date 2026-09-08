@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, requireOwnerRole, AuthRequest } from '../middleware/auth';
+import { orgAuthService } from '../services/OrgAuthService';
 import { bookingService } from '../services/BookingService';
 import { waitlistService } from '../services/WaitlistService';
 import { recurringService } from '../services/RecurringService';
@@ -98,48 +98,65 @@ ownerRouter.post('/login', async (req, res: Response) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const business = await prisma.business.findFirst({
-      where: { ownerEmail: { equals: String(email).trim(), mode: 'insensitive' } },
-    });
+    const normalized = String(email).trim().toLowerCase();
+    let user = await orgAuthService.findUserByEmail(normalized);
 
-    if (!business) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    // Legacy fallback: Business credentials not yet migrated to User
+    if (!user) {
+      const business = await prisma.business.findFirst({
+        where: { ownerEmail: { equals: normalized, mode: 'insensitive' } },
+      });
+      if (!business) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      if (!business.ownerPassword) {
+        return res.status(401).json({
+          error: 'No password is set for this account. Sign in with Google, or use “Forgot password” to set one.',
+          code: 'NO_PASSWORD',
+        });
+      }
+      const isValid = await verifyOwnerPassword(business.ownerPassword, password);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      await orgAuthService.ensureOrgForBusiness(business.id);
+      user = await orgAuthService.findUserByEmail(normalized);
+      if (!user) {
+        return res.status(500).json({ error: 'Account migration failed' });
+      }
     }
 
-    if (!business.ownerPassword) {
+    if (!user.passwordHash) {
       return res.status(401).json({
         error: 'No password is set for this account. Sign in with Google, or use “Forgot password” to set one.',
         code: 'NO_PASSWORD',
       });
     }
 
-    const isValid = await verifyOwnerPassword(business.ownerPassword, password);
+    const isValid = await verifyOwnerPassword(user.passwordHash, password);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!isHashedOwnerPassword(business.ownerPassword)) {
-      await prisma.business.update({
-        where: { id: business.id },
-        data: { ownerPassword: await hashOwnerPassword(password) },
-      });
+    if (!isHashedOwnerPassword(user.passwordHash)) {
+      const hashed = await hashOwnerPassword(password);
+      await orgAuthService.setPasswordForEmail(normalized, hashed);
+      user = (await orgAuthService.findUserByEmail(normalized))!;
     }
 
-    const token = jwt.sign(
-      { businessId: business.id, email: business.ownerEmail },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" } as any
-    );
+    const shop = await orgAuthService.resolveLoginShop(user.id);
+    if (!shop) {
+      return res.status(401).json({ error: 'No shop access for this account' });
+    }
 
-    res.json({
-      token,
-      business: {
-        id: business.id,
-        name: business.name,
-        slug: business.slug,
-        email: business.ownerEmail,
-      },
-    });
+    res.json(
+      orgAuthService.sessionPayload({
+        userId: user.id,
+        orgId: shop.orgId,
+        business: shop.business,
+        role: shop.role,
+      })
+    );
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -189,9 +206,151 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Business not found' });
     }
 
-    res.json(toOwnerConfig(business));
+    const role = req.owner!.role || 'OWNER';
+    let shops: Awaited<ReturnType<typeof orgAuthService.listShopsForUser>> = [];
+    if (req.owner!.userId && (req.owner!.orgId || business.organizationId)) {
+      const orgId = req.owner!.orgId || business.organizationId!;
+      shops = await orgAuthService.listShopsForUser(req.owner!.userId, orgId);
+    } else {
+      shops = [{
+        id: business.id,
+        name: business.name,
+        slug: business.slug,
+        publicCode: business.publicCode,
+        isPrimary: business.isPrimary,
+        role,
+      }];
+    }
+
+    let passwordSet = !!business.ownerPassword;
+    let googleLinked = !!business.googleSub;
+    if (req.owner!.userId) {
+      const user = await prisma.user.findUnique({ where: { id: req.owner!.userId } });
+      if (user) {
+        passwordSet = !!user.passwordHash;
+        googleLinked = !!user.googleSub;
+      }
+    }
+
+    res.json({
+      ...toOwnerConfig(business),
+      passwordSet,
+      googleLinked,
+      role,
+      orgId: req.owner!.orgId || business.organizationId,
+      userId: req.owner!.userId,
+      shops,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /owner/shops — list shops the current user can access.
+ */
+ownerRouter.get('/shops', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      const b = await prisma.business.findUnique({
+        where: { id: req.owner!.businessId },
+        select: { id: true, name: true, slug: true, publicCode: true, isPrimary: true },
+      });
+      if (!b) return res.status(404).json({ error: 'Shop not found' });
+      return res.json({ shops: [{ ...b, role: req.owner!.role || 'OWNER' }] });
+    }
+    const shops = await orgAuthService.listShopsForUser(req.owner!.userId, req.owner!.orgId);
+    res.json({ shops });
+  } catch (error: any) {
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/shops/switch { businessId } — re-issue JWT for another shop.
+ */
+ownerRouter.post('/shops/switch', async (req: AuthRequest, res: Response) => {
+  try {
+    const businessId = z.string().min(1).parse(req.body?.businessId);
+    if (!req.owner!.userId) {
+      return res.status(400).json({ error: 'Re-login required to switch shops' });
+    }
+    const access = await orgAuthService.assertShopAccess(req.owner!.userId, businessId);
+    res.json(
+      orgAuthService.sessionPayload({
+        userId: req.owner!.userId,
+        orgId: access.orgId,
+        business: access.business,
+        role: access.role,
+      })
+    );
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: 'businessId is required' });
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/shops — owner creates an additional shop (non-primary).
+ */
+ownerRouter.post('/shops', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to add shops' });
+    }
+    const parsed = z.object({
+      name: z.string().trim().min(2).max(120),
+      timezone: z.string().optional(),
+      copyHoursFromPrimary: z.boolean().optional(),
+    }).parse(req.body);
+
+    const business = await orgAuthService.createAdditionalShop({
+      userId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+      name: parsed.name,
+      timezone: parsed.timezone,
+      copyHoursFromPrimary: parsed.copyHoursFromPrimary,
+    });
+
+    res.status(201).json(
+      orgAuthService.sessionPayload({
+        userId: req.owner!.userId,
+        orgId: req.owner!.orgId,
+        business,
+        role: 'OWNER',
+      })
+    );
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/members/invite — owner invites a manager to selected shops.
+ */
+ownerRouter.post('/members/invite', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to invite managers' });
+    }
+    const parsed = z.object({
+      email: z.string().trim().email(),
+      businessIds: z.array(z.string().min(1)).min(1),
+      temporaryPassword: z.string().min(8).max(72),
+    }).parse(req.body);
+
+    const result = await orgAuthService.inviteManager({
+      ownerUserId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+      email: parsed.email,
+      businessIds: parsed.businessIds,
+      temporaryPassword: parsed.temporaryPassword,
+    });
+    res.status(201).json({ ok: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    res.status(error?.status || 500).json({ error: error.message });
   }
 });
 
@@ -227,26 +386,29 @@ ownerRouter.put('/password', async (req: AuthRequest, res: Response) => {
       newPassword: z.string().min(8, 'New password must be at least 8 characters').max(72),
     }).parse(req.body);
 
+    const email = req.owner!.email;
+    const user = req.owner!.userId
+      ? await prisma.user.findUnique({ where: { id: req.owner!.userId } })
+      : await orgAuthService.findUserByEmail(email);
+
     const business = await prisma.business.findUnique({
       where: { id: req.owner!.businessId },
       select: { id: true, ownerPassword: true },
     });
     if (!business) return res.status(404).json({ error: 'Business not found' });
 
-    if (!business.ownerPassword) {
+    const currentHash = user?.passwordHash || business.ownerPassword;
+    if (!currentHash) {
       return res.status(400).json({ error: 'No password is set yet. Use “Set password” to add one.' });
     }
 
-    const matches = await verifyOwnerPassword(business.ownerPassword, input.currentPassword);
+    const matches = await verifyOwnerPassword(currentHash, input.currentPassword);
     if (!matches) return res.status(401).json({ error: 'Current password is incorrect' });
     if (input.currentPassword === input.newPassword) {
       return res.status(400).json({ error: 'Choose a different new password' });
     }
 
-    await prisma.business.update({
-      where: { id: business.id },
-      data: { ownerPassword: await hashOwnerPassword(input.newPassword) },
-    });
+    await orgAuthService.setPasswordForEmail(email, await hashOwnerPassword(input.newPassword));
     res.json({ success: true });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -267,19 +429,20 @@ ownerRouter.post('/password/set', async (req: AuthRequest, res: Response) => {
       newPassword: z.string().min(8, 'New password must be at least 8 characters').max(72),
     }).parse(req.body);
 
+    const email = req.owner!.email;
+    const user = req.owner!.userId
+      ? await prisma.user.findUnique({ where: { id: req.owner!.userId } })
+      : await orgAuthService.findUserByEmail(email);
     const business = await prisma.business.findUnique({
       where: { id: req.owner!.businessId },
       select: { id: true, ownerPassword: true },
     });
     if (!business) return res.status(404).json({ error: 'Business not found' });
-    if (business.ownerPassword) {
+    if (user?.passwordHash || business.ownerPassword) {
       return res.status(400).json({ error: 'A password is already set. Use “Change password” instead.' });
     }
 
-    await prisma.business.update({
-      where: { id: business.id },
-      data: { ownerPassword: await hashOwnerPassword(input.newPassword) },
-    });
+    await orgAuthService.setPasswordForEmail(email, await hashOwnerPassword(input.newPassword));
     res.json({ success: true });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -813,6 +976,16 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
     }
 
+    const role = req.owner!.role || 'OWNER';
+    const ownerOnlyBodyKeys = [
+      'razorpayKeyId', 'razorpayKeySecret', 'clearRazorpayKeySecret', 'razorpayTestMode',
+      'ownerEmail', 'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
+      'smtpPass', 'clearSmtpPass',
+    ];
+    if (role !== 'OWNER' && ownerOnlyBodyKeys.some((k) => req.body[k] !== undefined)) {
+      return res.status(403).json({ error: 'Owner role required to change billing or delivery credentials' });
+    }
+
     const allowedFields = [
       'name', 'description', 'timezone', 'primaryColor', 'secondaryColor', 'accentColor',
       'logoUrl', 'logoPublicId', 'coverImageUrl', 'coverImagePublicId',
@@ -827,6 +1000,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'razorpayTestMode',
       'address', 'latitude', 'longitude',
       'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
+      'gstin', 'legalName', 'stateCode', 'defaultGstPercent',
       // Shared-platform WhatsApp: owners do NOT supply Meta Phone Number ID / tokens.
     ];
     // Explicitly ignore any client-supplied DIY Meta credential fields.
@@ -873,6 +1047,27 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'Earliest booking notice must be between 0 and 168 hours' });
       }
       updateData.minBookingNoticeHours = hours;
+    }
+    if (updateData.defaultGstPercent !== undefined) {
+      if (updateData.defaultGstPercent === '' || updateData.defaultGstPercent === null) {
+        updateData.defaultGstPercent = null;
+      } else {
+        const pct = Number(updateData.defaultGstPercent);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+          return res.status(400).json({ error: 'Default GST % must be between 0 and 100' });
+        }
+        updateData.defaultGstPercent = pct;
+      }
+    }
+    if (updateData.gstin !== undefined) {
+      const g = String(updateData.gstin || '').trim().toUpperCase();
+      updateData.gstin = g || null;
+    }
+    if (updateData.legalName !== undefined) {
+      updateData.legalName = String(updateData.legalName || '').trim() || null;
+    }
+    if (updateData.stateCode !== undefined) {
+      updateData.stateCode = String(updateData.stateCode || '').trim() || null;
     }
     // subscription is intentionally managed via dedicated subscription endpoints
 
@@ -1206,6 +1401,7 @@ const customerInputSchema = z.object({
   notes: z.string().trim().max(2000).optional().nullable(),
   lastServiceName: z.string().trim().max(160).optional().nullable().or(z.literal('')),
   lastBookedAt: z.string().trim().max(40).optional().nullable().or(z.literal('')),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 }).refine((value) => !!(value.phone || value.email), {
   message: 'Add at least a phone number or email address',
 });
@@ -1302,6 +1498,13 @@ ownerRouter.put('/customers/:id', async (req: AuthRequest, res: Response) => {
       lastServiceName: input.lastServiceName || null,
       lastBookedAt: parseOwnerBookedAt(input.lastBookedAt ?? null),
     }, { keepId: existing.id });
+    if (input.tags) {
+      const updated = await prisma.customerContact.update({
+        where: { id: customer.id },
+        data: { tags: input.tags.map((t) => t.trim()).filter(Boolean) },
+      });
+      return res.json(updated);
+    }
     res.json(customer);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -1907,7 +2110,7 @@ ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: R
  * platform Razorpay keys (mirror of /subscription/pay). Min recharge ₹100.
  * Order notes bind the payment to this business (anti cross-tenant credit).
  */
-ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/whatsapp-wallet/recharge', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
     const schema = z.object({ amountPaise: z.number().int().min(500) }); // min ₹5 (500 paise)
@@ -1957,7 +2160,7 @@ ownerRouter.post('/whatsapp-wallet/recharge', async (req: AuthRequest, res: Resp
  * businessId notes binding + idempotent ledger credit. Never credits from the
  * frontend "success" alone.
  */
-ownerRouter.post('/whatsapp-wallet/verify', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/whatsapp-wallet/verify', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
     const schema = z.object({
@@ -2036,7 +2239,7 @@ ownerRouter.get('/subscription', async (req: AuthRequest, res: Response) => {
   }
 });
 
-ownerRouter.post('/subscription/select', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/subscription/select', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
       plan: z.enum(['COMMISSION', 'MONTHLY_799', 'YEARLY_799']),
@@ -2049,7 +2252,7 @@ ownerRouter.post('/subscription/select', async (req: AuthRequest, res: Response)
   }
 });
 
-ownerRouter.post('/subscription/pay', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/subscription/pay', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
     const view = await subscriptionService.getSubscriptionView(businessId);
@@ -2098,7 +2301,7 @@ ownerRouter.post('/subscription/pay', async (req: AuthRequest, res: Response) =>
   }
 });
 
-ownerRouter.post('/subscription/verify', async (req: AuthRequest, res: Response) => {
+ownerRouter.post('/subscription/verify', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
     const businessId = req.owner!.businessId;
     const schema = z.object({
@@ -2319,6 +2522,7 @@ ownerRouter.post('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthReq
       color: z.string().trim().max(20).optional(),
       isActive: z.boolean().optional(),
       salary: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      commissionPercent: z.number().min(0).max(100).nullable().optional(),
     }).parse(req.body);
 
     const staff = await prisma.staff.create({
@@ -2331,6 +2535,7 @@ ownerRouter.post('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthReq
         color: parsed.color || '#7C3AED',
         isActive: parsed.isActive !== undefined ? parsed.isActive : true,
         salary: parsed.salary ?? null,
+        commissionPercent: parsed.commissionPercent ?? null,
       },
     });
     res.status(201).json(staff);
@@ -2387,9 +2592,10 @@ ownerRouter.put('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: Auth
       color: z.string().trim().max(20).optional(),
       isActive: z.boolean().optional(),
       salary: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      commissionPercent: z.number().min(0).max(100).nullable().optional(),
     }).parse(req.body);
 
-    // Pass explicit null for salary to clear it.
+    // Pass explicit null for salary/commission to clear them.
     const data: any = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (value !== undefined) data[key] = value;
@@ -3137,6 +3343,9 @@ ownerRouter.post('/products', async (req: AuthRequest, res: Response) => {
       sku: z.string().trim().max(80).nullable().optional(),
       price: z.number().min(0).max(1_000_000_000),
       cost: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      stockQty: z.number().int().min(0).nullable().optional(),
+      hsnCode: z.string().trim().max(20).nullable().optional(),
+      gstPercent: z.number().min(0).max(100).nullable().optional(),
       isActive: z.boolean().optional(),
     }).parse(req.body);
     const product = await prisma.product.create({
@@ -3146,6 +3355,9 @@ ownerRouter.post('/products', async (req: AuthRequest, res: Response) => {
         sku: parsed.sku || null,
         price: parsed.price,
         cost: parsed.cost ?? null,
+        stockQty: parsed.stockQty ?? null,
+        hsnCode: parsed.hsnCode || null,
+        gstPercent: parsed.gstPercent ?? null,
         isActive: parsed.isActive ?? true,
       },
     });
@@ -3172,6 +3384,9 @@ ownerRouter.put('/products/:id', async (req: AuthRequest, res: Response) => {
       sku: z.string().trim().max(80).nullable().optional(),
       price: z.number().min(0).max(1_000_000_000).optional(),
       cost: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      stockQty: z.number().int().min(0).nullable().optional(),
+      hsnCode: z.string().trim().max(20).nullable().optional(),
+      gstPercent: z.number().min(0).max(100).nullable().optional(),
       isActive: z.boolean().optional(),
     }).parse(req.body);
 
@@ -3286,6 +3501,10 @@ const invoiceLineItemSchema = z.object({
   quantity: z.number().int().min(1).max(999),
   unitPrice: z.number().min(0),
   amount: z.number().min(0),
+  productId: z.string().min(1).optional().nullable(),
+  serviceId: z.string().min(1).optional().nullable(),
+  sacOrHsn: z.string().trim().max(20).optional().nullable(),
+  gstRate: z.number().min(0).max(100).optional().nullable(),
 });
 
 const createWalkInInvoiceSchema = z.object({
@@ -3294,11 +3513,14 @@ const createWalkInInvoiceSchema = z.object({
   customerEmail: z.string().trim().email().max(254).optional().nullable(),
   lineItems: z.array(invoiceLineItemSchema).min(1).max(20),
   taxAmount: z.number().min(0).optional(),
+  applyGst: z.boolean().optional(),
+  gstPercent: z.number().min(0).max(100).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   paymentMethod: z.enum(['cash', 'upi', 'card', 'other']).optional(),
   paymentRef: z.string().trim().max(200).optional().nullable(),
   discountType: z.enum(['PERCENTAGE', 'FLAT']).optional().nullable(),
   discountValue: z.number().min(0).max(1_000_000).optional().nullable(),
+  staffId: z.string().min(1).optional().nullable(),
 }).strict();
 
 const issueBookingInvoiceSchema = z.object({
