@@ -355,6 +355,91 @@ ownerRouter.post('/members/invite', requireOwnerRole, async (req: AuthRequest, r
 });
 
 /**
+ * GET /owner/members — list managers in the org.
+ */
+ownerRouter.get('/members', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to manage team' });
+    }
+    const members = await orgAuthService.listManagers({
+      ownerUserId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+    });
+    res.json({ members });
+  } catch (error: any) {
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /owner/members/:userId — update which shops a manager can access.
+ */
+ownerRouter.put('/members/:userId', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to manage team' });
+    }
+    const parsed = z.object({
+      businessIds: z.array(z.string().min(1)).min(1),
+    }).parse(req.body);
+    const result = await orgAuthService.updateManagerShops({
+      ownerUserId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+      userId: req.params.userId,
+      businessIds: parsed.businessIds,
+    });
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /owner/members/:userId — remove a manager from the org.
+ */
+ownerRouter.delete('/members/:userId', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to manage team' });
+    }
+    await orgAuthService.removeManager({
+      ownerUserId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+      userId: req.params.userId,
+    });
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/members/:userId/reset-password — set a new temporary password for a manager.
+ */
+ownerRouter.post('/members/:userId/reset-password', requireOwnerRole, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.owner!.userId || !req.owner!.orgId) {
+      return res.status(400).json({ error: 'Re-login required to manage team' });
+    }
+    const parsed = z.object({
+      temporaryPassword: z.string().min(8).max(72),
+    }).parse(req.body);
+    const result = await orgAuthService.resetManagerPassword({
+      ownerUserId: req.owner!.userId,
+      orgId: req.owner!.orgId,
+      userId: req.params.userId,
+      temporaryPassword: parsed.temporaryPassword,
+    });
+    res.json(result);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    res.status(error?.status || 500).json({ error: error.message });
+  }
+});
+
+/**
  * @openapi
  * /owner/password:
  *   put:

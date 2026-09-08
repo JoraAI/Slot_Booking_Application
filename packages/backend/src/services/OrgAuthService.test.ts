@@ -57,18 +57,52 @@ test('createOwnerWorkspace creates org + primary shop + OWNER memberships', asyn
   });
   cleanupUserIds.push(invited.userId);
 
+  const listed = await orgAuthService.listManagers({ ownerUserId: user.id, orgId: org.id });
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].email, `mgr-${tag}@test.com`);
+  assert.equal(listed[0].shops.length, 1);
+
+  await orgAuthService.updateManagerShops({
+    ownerUserId: user.id,
+    orgId: org.id,
+    userId: invited.userId,
+    businessIds: [business.id, extra.id],
+  });
+  const listed2 = await orgAuthService.listManagers({ ownerUserId: user.id, orgId: org.id });
+  assert.equal(listed2[0].shops.length, 2);
+
+  await orgAuthService.resetManagerPassword({
+    ownerUserId: user.id,
+    orgId: org.id,
+    userId: invited.userId,
+    temporaryPassword: 'newmanager1',
+  });
+
   const mgrShops = await orgAuthService.listShopsForUser(invited.userId, org.id);
-  assert.equal(mgrShops.length, 1);
-  assert.equal(mgrShops[0].id, extra.id);
-  assert.equal(mgrShops[0].role, 'MANAGER');
+  assert.equal(mgrShops.length, 2);
 
   await assert.rejects(
-    () => orgAuthService.assertShopAccess(invited.userId, business.id),
+    () => orgAuthService.assertShopAccess(invited.userId, business.id).then(() =>
+      orgAuthService.updateManagerShops({
+        ownerUserId: invited.userId,
+        orgId: org.id,
+        userId: invited.userId,
+        businessIds: [business.id],
+      })
+    ),
     (e: any) => e.status === 403
   );
 
-  const access = await orgAuthService.assertShopAccess(invited.userId, extra.id);
-  assert.equal(access.role, 'MANAGER');
+  await orgAuthService.removeManager({
+    ownerUserId: user.id,
+    orgId: org.id,
+    userId: invited.userId,
+  });
+  const listed3 = await orgAuthService.listManagers({ ownerUserId: user.id, orgId: org.id });
+  assert.equal(listed3.length, 0);
+  // user was cleaned up — drop from cleanup list
+  const idx = cleanupUserIds.indexOf(invited.userId);
+  if (idx >= 0) cleanupUserIds.splice(idx, 1);
 });
 
 test('ensureOrgForBusiness wraps legacy business', async () => {

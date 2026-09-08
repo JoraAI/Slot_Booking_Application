@@ -50,6 +50,22 @@ export const Settings: React.FC = () => {
   })
   const [inviting, setInviting] = useState(false)
   const [inviteInitialized, setInviteInitialized] = useState(false)
+  type TeamMember = {
+    userId: string
+    email: string
+    role: 'MANAGER'
+    passwordSet: boolean
+    googleLinked: boolean
+    createdAt: string
+    shops: Array<{ id: string; name: string; slug: string; isPrimary: boolean }>
+  }
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+  const [editShopIds, setEditShopIds] = useState<string[]>([])
+  const [savingMember, setSavingMember] = useState(false)
+  const [resetPasswordFor, setResetPasswordFor] = useState<string | null>(null)
+  const [resetPasswordValue, setResetPasswordValue] = useState('')
   const [form, setForm] = useState({
     name: config?.name || '',
     description: config?.description || '',
@@ -170,6 +186,39 @@ export const Settings: React.FC = () => {
     setInviteInitialized(true)
   }, [config, inviteInitialized])
 
+  const loadMembers = async () => {
+    if ((config?.role || 'OWNER') !== 'OWNER') return
+    setMembersLoading(true)
+    try {
+      const res = await api.listMembers()
+      setMembers(res.members || [])
+    } catch {
+      setMembers([])
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if ((config?.role || 'OWNER') === 'OWNER' && config?.orgId) {
+      void loadMembers()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.orgId, config?.role])
+
+  const allShops = config?.shops?.length
+    ? config.shops
+    : config?.id
+      ? [{
+          id: config.id,
+          name: config.name,
+          slug: config.slug,
+          publicCode: config.publicCode,
+          isPrimary: config.isPrimary ?? true,
+          role: 'OWNER' as const,
+        }]
+      : []
+
   const handleInviteManager = async () => {
     const email = inviteForm.email.trim().toLowerCase()
     if (!email || !email.includes('@')) {
@@ -202,10 +251,71 @@ export const Settings: React.FC = () => {
         temporaryPassword: '',
         confirmPassword: '',
       }))
+      await loadMembers()
     } catch (err: any) {
       toast.error(err.message || 'Could not invite manager')
     } finally {
       setInviting(false)
+    }
+  }
+
+  const startEditMember = (m: TeamMember) => {
+    setEditingMemberId(m.userId)
+    setEditShopIds(m.shops.map((s) => s.id))
+    setResetPasswordFor(null)
+    setResetPasswordValue('')
+  }
+
+  const saveMemberShops = async () => {
+    if (!editingMemberId) return
+    if (editShopIds.length === 0) {
+      toast.error('Select at least one shop')
+      return
+    }
+    setSavingMember(true)
+    try {
+      await api.updateMember(editingMemberId, { businessIds: editShopIds })
+      toast.success('Shop access updated')
+      setEditingMemberId(null)
+      await loadMembers()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update manager')
+    } finally {
+      setSavingMember(false)
+    }
+  }
+
+  const removeMember = async (userId: string, email: string) => {
+    if (!window.confirm(`Remove manager ${email}? They will lose dashboard access.`)) return
+    setSavingMember(true)
+    try {
+      await api.removeMember(userId)
+      toast.success('Manager removed')
+      if (editingMemberId === userId) setEditingMemberId(null)
+      await loadMembers()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not remove manager')
+    } finally {
+      setSavingMember(false)
+    }
+  }
+
+  const saveResetPassword = async () => {
+    if (!resetPasswordFor) return
+    if (resetPasswordValue.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+    setSavingMember(true)
+    try {
+      const res = await api.resetMemberPassword(resetPasswordFor, resetPasswordValue)
+      toast.success(`Password reset for ${res.email}. Share the new temporary password securely.`)
+      setResetPasswordFor(null)
+      setResetPasswordValue('')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not reset password')
+    } finally {
+      setSavingMember(false)
     }
   }
 
@@ -478,92 +588,206 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">Team</h2>
             <p className="text-sm text-gray-500">
-              Invite a manager to run day-to-day ops on selected shops. Managers cannot change subscription, Razorpay secrets, or WhatsApp wallet.
-              Share the temporary password securely — there is no email invite link yet.
+              Invite managers for day-to-day ops on selected shops. Managers cannot change subscription, Razorpay secrets, or WhatsApp wallet.
+              Share temporary passwords securely — there is no email invite link yet.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium mb-1">Manager email</label>
-              <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
-                placeholder="manager@salon.com"
-                autoComplete="off"
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-              />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Managers</h3>
+              <button type="button" onClick={() => void loadMembers()} className="text-xs text-primary hover:underline" disabled={membersLoading}>
+                {membersLoading ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+            {membersLoading && members.length === 0 ? (
+              <p className="text-sm text-gray-400">Loading…</p>
+            ) : members.length === 0 ? (
+              <p className="text-sm text-gray-400">No managers yet. Invite one below.</p>
+            ) : (
+              <div className="space-y-3">
+                {members.map((m) => (
+                  <div key={m.userId} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">{m.email}</p>
+                        <p className="text-xs text-gray-500">
+                          {m.shops.map((s) => s.name).join(', ') || 'No shops'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => startEditMember(m)} className="text-xs text-primary hover:underline">
+                          Edit shops
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetPasswordFor(m.userId)
+                            setResetPasswordValue('')
+                            setEditingMemberId(null)
+                          }}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Reset password
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeMember(m.userId, m.email)}
+                          disabled={savingMember}
+                          className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    {editingMemberId === m.userId && (
+                      <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <p className="text-xs font-medium text-gray-500">Shop access</p>
+                        {allShops.map((shop) => {
+                          const checked = editShopIds.includes(shop.id)
+                          return (
+                            <label key={shop.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setEditShopIds((prev) =>
+                                    checked ? prev.filter((id) => id !== shop.id) : [...prev, shop.id]
+                                  )
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              {shop.name}
+                              {shop.isPrimary ? <span className="text-xs text-gray-400">Primary</span> : null}
+                            </label>
+                          )
+                        })}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => void saveMemberShops()}
+                            disabled={savingMember}
+                            className="px-3 py-1.5 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50"
+                          >
+                            {savingMember ? 'Saving…' : 'Save shops'}
+                          </button>
+                          <button type="button" onClick={() => setEditingMemberId(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:underline">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {resetPasswordFor === m.userId && (
+                      <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <label className="block text-xs font-medium text-gray-500">New temporary password</label>
+                        <input
+                          type="password"
+                          value={resetPasswordValue}
+                          onChange={(e) => setResetPasswordValue(e.target.value)}
+                          autoComplete="new-password"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void saveResetPassword()}
+                            disabled={savingMember}
+                            className="px-3 py-1.5 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50"
+                          >
+                            {savingMember ? 'Saving…' : 'Set password'}
+                          </button>
+                          <button type="button" onClick={() => setResetPasswordFor(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:underline">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-4">
+            <h3 className="text-sm font-semibold">Invite manager</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium mb-1">Manager email</label>
+                <input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
+                  placeholder="manager@salon.com"
+                  autoComplete="off"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Temporary password</label>
+                <input
+                  type="password"
+                  value={inviteForm.temporaryPassword}
+                  onChange={(e) => setInviteForm((p) => ({ ...p, temporaryPassword: e.target.value }))}
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Confirm password</label>
+                <input
+                  type="password"
+                  value={inviteForm.confirmPassword}
+                  onChange={(e) => setInviteForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+                />
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Temporary password</label>
-              <input
-                type="password"
-                value={inviteForm.temporaryPassword}
-                onChange={(e) => setInviteForm((p) => ({ ...p, temporaryPassword: e.target.value }))}
-                autoComplete="new-password"
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-              />
+              <p className="text-sm font-medium mb-2">Shops they can access</p>
+              <div className="space-y-2">
+                {allShops.map((shop) => {
+                  const checked = inviteForm.businessIds.includes(shop.id)
+                  return (
+                    <label
+                      key={shop.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setInviteForm((p) => ({
+                            ...p,
+                            businessIds: checked
+                              ? p.businessIds.filter((id) => id !== shop.id)
+                              : [...p.businessIds, shop.id],
+                          }))
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm">
+                        {shop.name}
+                        {shop.isPrimary ? (
+                          <span className="text-xs text-gray-400 ml-2">Primary</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Confirm password</label>
-              <input
-                type="password"
-                value={inviteForm.confirmPassword}
-                onChange={(e) => setInviteForm((p) => ({ ...p, confirmPassword: e.target.value }))}
-                autoComplete="new-password"
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={handleInviteManager}
+              disabled={inviting}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {inviting ? 'Inviting…' : 'Invite manager'}
+            </button>
           </div>
-          <div>
-            <p className="text-sm font-medium mb-2">Shops they can access</p>
-            <div className="space-y-2">
-              {(config?.shops?.length ? config.shops : config?.id ? [{
-                id: config.id,
-                name: config.name,
-                slug: config.slug,
-                publicCode: config.publicCode,
-                isPrimary: config.isPrimary ?? true,
-                role: 'OWNER' as const,
-              }] : []).map((shop) => {
-                const checked = inviteForm.businessIds.includes(shop.id)
-                return (
-                  <label
-                    key={shop.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setInviteForm((p) => ({
-                          ...p,
-                          businessIds: checked
-                            ? p.businessIds.filter((id) => id !== shop.id)
-                            : [...p.businessIds, shop.id],
-                        }))
-                      }}
-                      className="rounded border-gray-300"
-                    />
-                    <span className="text-sm">
-                      {shop.name}
-                      {shop.isPrimary ? (
-                        <span className="text-xs text-gray-400 ml-2">Primary</span>
-                      ) : null}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleInviteManager}
-            disabled={inviting}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
-          >
-            {inviting ? 'Inviting…' : 'Invite manager'}
-          </button>
         </div>
       )}
 
