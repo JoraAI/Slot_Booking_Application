@@ -37,7 +37,13 @@ import {
   normalizeCustomerPhone,
 } from '../services/CustomerService';
 import { hashOwnerPassword, isHashedOwnerPassword, verifyOwnerPassword } from '../services/OwnerPassword';
-import { createMediaAsset, decodeImageBase64, publicMediaUrl } from '../services/MediaService';
+import {
+  createMediaAsset,
+  decodeImageBase64,
+  deleteReplacedMediaAsset,
+  mediaIdFromUrl,
+  publicMediaUrl,
+} from '../services/MediaService';
 import { attributeKeyFromLabel, attributesFromFormData, contactMatchesFilters } from '../services/CustomerAttributes';
 
 export const ownerRouter = Router();
@@ -1251,6 +1257,31 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       if (hasAmount && amount <= 0) {
         return res.status(400).json({ error: 'Deposit amount must be positive' });
       }
+    }
+
+    // Branding images: empty string clears; keep publicId in sync; free replaced media rows.
+    for (const [urlField, idField] of [
+      ['logoUrl', 'logoPublicId'],
+      ['coverImageUrl', 'coverImagePublicId'],
+    ] as const) {
+      if (updateData[urlField] === undefined) continue;
+      const parsed = optionalImageUrl.safeParse(updateData[urlField]);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || `Invalid ${urlField}` });
+      }
+      updateData[urlField] = parsed.data ?? null;
+      if (updateData[idField] !== undefined) {
+        updateData[idField] = String(updateData[idField] || '').trim() || null;
+      } else if (!updateData[urlField]) {
+        updateData[idField] = null;
+      } else {
+        updateData[idField] = mediaIdFromUrl(updateData[urlField]) || null;
+      }
+      await deleteReplacedMediaAsset(
+        req.owner!.businessId,
+        (existing as any)[urlField],
+        updateData[urlField]
+      );
     }
 
     // Batch 4 — salon location validation (address ≤ 500; lat/lng pair; bounds).

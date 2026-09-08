@@ -195,3 +195,31 @@ export async function serveMediaAsset(req: Request, res: Response) {
   if (req.headers['if-none-match'] === `"${id}"`) return res.status(304).end();
   return res.status(200).send(buf);
 }
+
+/** Extract media asset id from a `/api/media/:id` (or absolute) URL. */
+export function mediaIdFromUrl(url: string | null | undefined): string | null {
+  const raw = String(url || '').trim();
+  if (!raw) return null;
+  const match = raw.match(/\/api\/media\/([a-zA-Z0-9_-]+)/);
+  return match?.[1] || null;
+}
+
+/** Delete a media asset if it belongs to the business (no-op when missing). */
+export async function deleteOwnedMediaAsset(businessId: string, mediaId: string | null | undefined) {
+  const id = String(mediaId || '').trim();
+  if (!id) return;
+  await prisma.mediaAsset.deleteMany({ where: { id, businessId } });
+}
+
+/** If `previousUrl` pointed at owned `/api/media/:id` and differs from `nextUrl`, delete the old asset. */
+export async function deleteReplacedMediaAsset(
+  businessId: string,
+  previousUrl: string | null | undefined,
+  nextUrl: string | null | undefined
+) {
+  const prevId = mediaIdFromUrl(previousUrl);
+  if (!prevId) return;
+  const nextId = mediaIdFromUrl(nextUrl);
+  if (nextId && nextId === prevId) return;
+  await deleteOwnedMediaAsset(businessId, prevId);
+}
