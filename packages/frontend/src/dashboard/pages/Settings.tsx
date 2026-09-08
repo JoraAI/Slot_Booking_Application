@@ -74,7 +74,9 @@ export const Settings: React.FC = () => {
     secondaryColor: config?.secondaryColor || '',
     accentColor: config?.accentColor || '',
     logoUrl: config?.logoUrl || '',
+    logoPublicId: config?.logoPublicId || '',
     coverImageUrl: config?.coverImageUrl || '',
+    coverImagePublicId: config?.coverImagePublicId || '',
     address: config?.address || '',
     latitude: config?.latitude ?? null,
     longitude: config?.longitude ?? null,
@@ -129,7 +131,9 @@ export const Settings: React.FC = () => {
         secondaryColor: config.secondaryColor || '',
         accentColor: config.accentColor || '',
         logoUrl: config.logoUrl || '',
+        logoPublicId: config.logoPublicId || '',
         coverImageUrl: config.coverImageUrl || '',
+        coverImagePublicId: config.coverImagePublicId || '',
         address: config.address || '',
         latitude: config.latitude ?? null,
         longitude: config.longitude ?? null,
@@ -1174,22 +1178,47 @@ export const Settings: React.FC = () => {
           <div>
             <label className="block text-sm font-medium mb-1">Logo URL</label>
             <div className="flex gap-2">
-              <input value={form.logoUrl} onChange={(e) => setForm(p => ({ ...p, logoUrl: e.target.value }))} placeholder="https://..." className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-              <MediaUploadButton onUploaded={(url) => setForm(p => ({ ...p, logoUrl: url }))} label="⬆ Upload" />
+              <input value={form.logoUrl} onChange={(e) => setForm(p => ({ ...p, logoUrl: e.target.value, logoPublicId: '' }))} placeholder="https://..." className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <MediaUploadButton
+                onUploaded={(url, publicId) => setForm(p => ({ ...p, logoUrl: url, logoPublicId: publicId || '' }))}
+                label="⬆ Upload"
+              />
             </div>
-            {form.logoUrl && <img src={form.logoUrl} alt="Logo preview" className="mt-2 w-14 h-14 rounded-lg object-cover" />}
+            {form.logoUrl && (
+              <div className="mt-2 flex items-center gap-3">
+                <img src={form.logoUrl} alt="Logo preview" className="w-14 h-14 rounded-lg object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, logoUrl: '', logoPublicId: '' }))}
+                  className="text-xs text-red-600 underline"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Cover image</label>
             <div className="flex gap-2">
-              <input value={form.coverImageUrl} onChange={(e) => setForm(p => ({ ...p, coverImageUrl: e.target.value }))} placeholder="Upload or paste image link" className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+              <input value={form.coverImageUrl} onChange={(e) => setForm(p => ({ ...p, coverImageUrl: e.target.value, coverImagePublicId: '' }))} placeholder="Upload or paste image link" className="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
               <MediaUploadButton
-                onUploaded={(url) => setForm(p => ({ ...p, coverImageUrl: url }))}
+                onUploaded={(url, publicId) => setForm(p => ({ ...p, coverImageUrl: url, coverImagePublicId: publicId || '' }))}
                 label="⬆ Upload"
               />
             </div>
             <p className="text-xs text-gray-400 mt-1">Shown at the top of your public booking page.</p>
-            {form.coverImageUrl && <img src={form.coverImageUrl} alt="Cover preview" className="mt-2 w-full h-20 rounded-lg object-cover" />}
+            {form.coverImageUrl && (
+              <div className="mt-2 flex items-start gap-3">
+                <img src={form.coverImageUrl} alt="Cover preview" className="flex-1 min-w-0 h-20 rounded-lg object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, coverImageUrl: '', coverImagePublicId: '' }))}
+                  className="shrink-0 text-xs text-red-600 underline mt-1"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
