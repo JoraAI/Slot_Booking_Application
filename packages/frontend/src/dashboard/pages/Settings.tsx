@@ -42,6 +42,14 @@ export const Settings: React.FC = () => {
   const [newPasswordForm, setNewPasswordForm] = useState({ newPassword: '', confirmPassword: '' })
   const [savingSetPassword, setSavingSetPassword] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [inviteForm, setInviteForm] = useState({
+    email: '',
+    temporaryPassword: '',
+    confirmPassword: '',
+    businessIds: [] as string[],
+  })
+  const [inviting, setInviting] = useState(false)
+  const [inviteInitialized, setInviteInitialized] = useState(false)
   const [form, setForm] = useState({
     name: config?.name || '',
     description: config?.description || '',
@@ -88,6 +96,10 @@ export const Settings: React.FC = () => {
     clearRazorpayKeySecret: false,
     razorpayTestMode: config?.razorpayTestMode ?? true,
     refundPolicy: config?.refundPolicy || '',
+    gstin: config?.gstin || '',
+    legalName: config?.legalName || '',
+    stateCode: config?.stateCode || '',
+    defaultGstPercent: config?.defaultGstPercent ?? '',
   })
 
   // Sync form state when config loads asynchronously (e.g. from DashboardLayout fetch)
@@ -139,9 +151,63 @@ export const Settings: React.FC = () => {
         clearRazorpayKeySecret: false,
         razorpayTestMode: config.razorpayTestMode ?? true,
         refundPolicy: config.refundPolicy || '',
+        gstin: config.gstin || '',
+        legalName: config.legalName || '',
+        stateCode: config.stateCode || '',
+        defaultGstPercent: config.defaultGstPercent ?? '',
       })
     }
   }, [config])
+
+  // Prefill invite shop selection with current shop once config loads
+  useEffect(() => {
+    if (!config?.id || inviteInitialized) return
+    const shopIds = (config.shops?.length ? config.shops.map((s) => s.id) : [config.id])
+    setInviteForm((p) => ({
+      ...p,
+      businessIds: shopIds.includes(config.id) ? [config.id] : [shopIds[0]].filter(Boolean),
+    }))
+    setInviteInitialized(true)
+  }, [config, inviteInitialized])
+
+  const handleInviteManager = async () => {
+    const email = inviteForm.email.trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      toast.error('Enter a valid manager email')
+      return
+    }
+    if (inviteForm.temporaryPassword.length < 8) {
+      toast.error('Temporary password must be at least 8 characters')
+      return
+    }
+    if (inviteForm.temporaryPassword !== inviteForm.confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+    if (inviteForm.businessIds.length === 0) {
+      toast.error('Select at least one shop')
+      return
+    }
+    setInviting(true)
+    try {
+      await api.inviteManager({
+        email,
+        businessIds: inviteForm.businessIds,
+        temporaryPassword: inviteForm.temporaryPassword,
+      })
+      toast.success(`Manager invited. Share the login email and temporary password with ${email}.`)
+      setInviteForm((p) => ({
+        ...p,
+        email: '',
+        temporaryPassword: '',
+        confirmPassword: '',
+      }))
+    } catch (err: any) {
+      toast.error(err.message || 'Could not invite manager')
+    } finally {
+      setInviting(false)
+    }
+  }
 
   // Load delivery-provider status so the OTP UI can surface config errors
   useEffect(() => {
@@ -311,6 +377,45 @@ export const Settings: React.FC = () => {
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
         <div>
+          <h2 className="text-lg font-semibold">GST profile</h2>
+          <p className="text-sm text-gray-500">
+            Shown on tax invoices. When a default GST % is set, walk-in invoices auto-apply CGST + SGST on the taxable amount (after discount).
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Legal name</label>
+            <input value={form.legalName} onChange={(e) => setForm(p => ({ ...p, legalName: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">GSTIN</label>
+            <input value={form.gstin} onChange={(e) => setForm(p => ({ ...p, gstin: e.target.value.toUpperCase() }))}
+              placeholder="22AAAAA0000A1Z5"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">State code</label>
+            <input value={form.stateCode} onChange={(e) => setForm(p => ({ ...p, stateCode: e.target.value }))}
+              placeholder="27"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Default GST %</label>
+            <input type="number" min={0} max={100} step={0.01}
+              value={form.defaultGstPercent === '' || form.defaultGstPercent == null ? '' : form.defaultGstPercent}
+              onChange={(e) => setForm(p => ({
+                ...p,
+                defaultGstPercent: e.target.value === '' ? '' : Number(e.target.value),
+              }))}
+              placeholder="18"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div>
           <h2 className="text-lg font-semibold">Dashboard password</h2>
           <p className="text-sm text-gray-500">
             {config?.passwordSet === false
@@ -367,6 +472,100 @@ export const Settings: React.FC = () => {
           </button>
         )}
       </div>
+
+      {(config?.role || 'OWNER') === 'OWNER' && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Team</h2>
+            <p className="text-sm text-gray-500">
+              Invite a manager to run day-to-day ops on selected shops. Managers cannot change subscription, Razorpay secrets, or WhatsApp wallet.
+              Share the temporary password securely — there is no email invite link yet.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium mb-1">Manager email</label>
+              <input
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm((p) => ({ ...p, email: e.target.value }))}
+                placeholder="manager@salon.com"
+                autoComplete="off"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Temporary password</label>
+              <input
+                type="password"
+                value={inviteForm.temporaryPassword}
+                onChange={(e) => setInviteForm((p) => ({ ...p, temporaryPassword: e.target.value }))}
+                autoComplete="new-password"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Confirm password</label>
+              <input
+                type="password"
+                value={inviteForm.confirmPassword}
+                onChange={(e) => setInviteForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                autoComplete="new-password"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-2">Shops they can access</p>
+            <div className="space-y-2">
+              {(config?.shops?.length ? config.shops : config?.id ? [{
+                id: config.id,
+                name: config.name,
+                slug: config.slug,
+                publicCode: config.publicCode,
+                isPrimary: config.isPrimary ?? true,
+                role: 'OWNER' as const,
+              }] : []).map((shop) => {
+                const checked = inviteForm.businessIds.includes(shop.id)
+                return (
+                  <label
+                    key={shop.id}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setInviteForm((p) => ({
+                          ...p,
+                          businessIds: checked
+                            ? p.businessIds.filter((id) => id !== shop.id)
+                            : [...p.businessIds, shop.id],
+                        }))
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm">
+                      {shop.name}
+                      {shop.isPrimary ? (
+                        <span className="text-xs text-gray-400 ml-2">Primary</span>
+                      ) : null}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleInviteManager}
+            disabled={inviting}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            {inviting ? 'Inviting…' : 'Invite manager'}
+          </button>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
         <div className="flex items-start justify-between gap-3">

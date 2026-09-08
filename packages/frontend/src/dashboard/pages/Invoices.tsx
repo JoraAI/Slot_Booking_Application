@@ -210,6 +210,8 @@ export const InvoicesPage: React.FC = () => {
       quantity: row.quantity,
       unitPrice: row.unitPrice,
       amount: Number((row.quantity * row.unitPrice).toFixed(2)),
+      productId: row.kind === 'product' ? row.id || null : null,
+      serviceId: row.kind === 'service' ? row.id || null : null,
     }))
     if (lineItems.some((row) => row.amount < 0) || total <= 0) {
       toast.error('Invoice total must be greater than zero')

@@ -1,12 +1,17 @@
 import PDFDocument from 'pdfkit';
 import sharp from 'sharp';
 import prisma from '../lib/prisma';
+import { customerService } from './CustomerService';
 
 export type InvoiceLineItem = {
   description: string;
   quantity: number;
   unitPrice: number;
   amount: number;
+  productId?: string | null;
+  serviceId?: string | null;
+  sacOrHsn?: string | null;
+  gstRate?: number | null;
 };
 
 export type InvoiceDiscountInput = {
@@ -73,6 +78,27 @@ class InvoiceService {
       discountValue: this.round2(rawValue),
       discountAmount: amount,
     };
+  }
+
+  /** Compute CGST/SGST (same-state) or IGST from taxable base. */
+  computeGst(
+    taxable: number,
+    gstPercent: number,
+    opts?: { interState?: boolean }
+  ): { cgstAmount: number; sgstAmount: number; igstAmount: number; taxAmount: number; gstPercent: number } {
+    const rate = Math.max(0, Number(gstPercent) || 0);
+    const base = Math.max(0, this.round2(taxable));
+    if (rate <= 0 || base <= 0) {
+      return { cgstAmount: 0, sgstAmount: 0, igstAmount: 0, taxAmount: 0, gstPercent: 0 };
+    }
+    const taxAmount = this.round2((base * rate) / 100);
+    if (opts?.interState) {
+      return { cgstAmount: 0, sgstAmount: 0, igstAmount: taxAmount, taxAmount, gstPercent: rate };
+    }
+    const half = this.round2(taxAmount / 2);
+    const cgstAmount = half;
+    const sgstAmount = this.round2(taxAmount - half);
+    return { cgstAmount, sgstAmount, igstAmount: 0, taxAmount, gstPercent: rate };
   }
 
   private absolutePublicUrl(pathOrUrl: string): string | null {
@@ -197,6 +223,9 @@ class InvoiceService {
       customerEmail?: string | null;
       lineItems: InvoiceLineItem[];
       taxAmount?: number;
+      applyGst?: boolean;
+      gstPercent?: number | null;
+      interState?: boolean;
       currency?: string;
       notes?: string | null;
       paymentMethod?: string | null;
@@ -205,15 +234,50 @@ class InvoiceService {
       issuedAt?: Date;
       discountType?: 'PERCENTAGE' | 'FLAT' | null;
       discountValue?: number | null;
+      staffId?: string | null;
+      /** When true (walk-in), create ProductSale rows + decrement stock for product lines. */
+      syncProductSales?: boolean;
     }
   ) {
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) {
+      const err: any = new Error('Business not found');
+      err.status = 404;
+      throw err;
+    }
+
     const subtotal = this.round2(this.sumLineItems(data.lineItems));
-    const taxAmount = this.round2(data.taxAmount ?? 0);
     const discount = this.computeDiscount(subtotal, {
       discountType: data.discountType,
       discountValue: data.discountValue,
     });
-    const total = this.round2(subtotal - discount.discountAmount + taxAmount);
+    const taxable = this.round2(subtotal - discount.discountAmount);
+
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
+    let taxAmount = this.round2(data.taxAmount ?? 0);
+
+    const shouldAutoGst =
+      data.applyGst === true ||
+      (data.applyGst !== false &&
+        (data.source === 'walk_in' || data.source === 'manual') &&
+        (data.gstPercent != null || (Number(business.defaultGstPercent) || 0) > 0));
+    if (shouldAutoGst && (data.taxAmount == null || data.applyGst === true)) {
+      const rate = data.gstPercent != null ? Number(data.gstPercent) : Number(business.defaultGstPercent || 0);
+      const gst = this.computeGst(taxable, rate, { interState: !!data.interState });
+      cgstAmount = gst.cgstAmount;
+      sgstAmount = gst.sgstAmount;
+      igstAmount = gst.igstAmount;
+      taxAmount = gst.taxAmount;
+    } else if (taxAmount > 0 && !cgstAmount && !sgstAmount && !igstAmount) {
+      // Legacy lump tax → treat as CGST+SGST split for display.
+      const half = this.round2(taxAmount / 2);
+      cgstAmount = half;
+      sgstAmount = this.round2(taxAmount - half);
+    }
+
+    const total = this.round2(taxable + taxAmount);
     if (total <= 0) {
       const err: any = new Error(
         discount.discountAmount > 0
@@ -224,37 +288,87 @@ class InvoiceService {
       throw err;
     }
     const invoiceNumber = await this.nextInvoiceNumber(businessId);
-    return prisma.invoice.create({
-      data: {
-        businessId,
-        bookingId: data.bookingId ?? null,
-        invoiceNumber,
-        customerName: data.customerName,
-        customerPhone: data.customerPhone ?? null,
-        customerEmail: data.customerEmail ?? null,
-        lineItems: data.lineItems as any,
-        subtotal,
-        taxAmount,
-        discountType: discount.discountType,
-        discountValue: discount.discountValue,
-        discountAmount: discount.discountAmount,
-        total,
-        currency: data.currency || 'INR',
-        notes: data.notes ?? null,
-        paymentMethod: data.paymentMethod ?? null,
-        paymentRef: data.paymentRef ?? null,
-        source: data.source,
-        issuedAt: data.issuedAt ?? new Date(),
-      },
-      include: {
-        booking: {
-          select: {
-            id: true, date: true, startTime: true, endTime: true, status: true,
-            serviceNameSnapshot: true, paymentStatus: true,
+
+    const invoice = await prisma.$transaction(async (tx) => {
+      const created = await tx.invoice.create({
+        data: {
+          businessId,
+          bookingId: data.bookingId ?? null,
+          invoiceNumber,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone ?? null,
+          customerEmail: data.customerEmail ?? null,
+          lineItems: data.lineItems as any,
+          subtotal,
+          taxAmount,
+          cgstAmount,
+          sgstAmount,
+          igstAmount,
+          discountType: discount.discountType,
+          discountValue: discount.discountValue,
+          discountAmount: discount.discountAmount,
+          total,
+          currency: data.currency || 'INR',
+          notes: data.notes ?? null,
+          paymentMethod: data.paymentMethod ?? null,
+          paymentRef: data.paymentRef ?? null,
+          source: data.source,
+          staffId: data.staffId ?? null,
+          issuedAt: data.issuedAt ?? new Date(),
+        },
+        include: {
+          booking: {
+            select: {
+              id: true, date: true, startTime: true, endTime: true, status: true,
+              serviceNameSnapshot: true, paymentStatus: true,
+            },
           },
         },
-      },
+      });
+
+      if (data.syncProductSales) {
+        for (const line of data.lineItems) {
+          if (!line.productId) continue;
+          const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+          const unitPrice = this.round2(Number(line.unitPrice) || 0);
+          await tx.productSale.create({
+            data: {
+              businessId,
+              productId: line.productId,
+              quantity: qty,
+              unitPrice,
+              totalAmount: this.round2(qty * unitPrice),
+              invoiceId: created.id,
+              staffId: data.staffId ?? null,
+              note: `Invoice ${created.invoiceNumber}`,
+            },
+          });
+          const product = await tx.product.findFirst({
+            where: { id: line.productId, businessId },
+            select: { id: true, stockQty: true },
+          });
+          if (product && product.stockQty != null) {
+            await tx.product.update({
+              where: { id: product.id },
+              data: { stockQty: Math.max(0, product.stockQty - qty) },
+            });
+          }
+        }
+      }
+
+      // Upsert customer phonebook from walk-in / manual invoices
+      if (data.source === 'walk_in' || data.source === 'manual') {
+        await customerService.upsertContact(businessId, {
+          name: data.customerName,
+          phone: data.customerPhone,
+          email: data.customerEmail,
+        }, { db: tx }).catch(() => {});
+      }
+
+      return created;
     });
+
+    return invoice;
   }
 
   async getOrCreatePaidBookingInvoice(businessId: string, bookingId: string) {
@@ -366,11 +480,14 @@ class InvoiceService {
       customerEmail?: string | null;
       lineItems: InvoiceLineItem[];
       taxAmount?: number;
+      applyGst?: boolean;
+      gstPercent?: number | null;
       notes?: string | null;
       paymentMethod?: string | null;
       paymentRef?: string | null;
       discountType?: 'PERCENTAGE' | 'FLAT' | null;
       discountValue?: number | null;
+      staffId?: string | null;
     }
   ) {
     if (!payload.customerName?.trim()) {
@@ -389,13 +506,17 @@ class InvoiceService {
       customerPhone: payload.customerPhone ?? null,
       customerEmail: payload.customerEmail ?? null,
       lineItems: payload.lineItems,
-      taxAmount: payload.taxAmount ?? 0,
+      taxAmount: payload.taxAmount,
+      applyGst: payload.applyGst,
+      gstPercent: payload.gstPercent,
       notes: payload.notes ?? null,
       paymentMethod: payload.paymentMethod ?? 'cash',
       paymentRef: payload.paymentRef ?? null,
       source: 'walk_in',
       discountType: payload.discountType ?? null,
       discountValue: payload.discountValue ?? null,
+      staffId: payload.staffId ?? null,
+      syncProductSales: true,
     });
   }
 
@@ -556,9 +677,22 @@ class InvoiceService {
       doc.fillColor('#111827');
     }
     if (invoice.taxAmount > 0) {
-      doc.text('Tax', totalsX, y, { width: 80 });
-      doc.text(this.formatMoneyPdf(invoice.taxAmount, invoice.currency), colAmt, y, { width: 80, align: 'right' });
-      y += 16;
+      if ((invoice.cgstAmount || 0) > 0 || (invoice.sgstAmount || 0) > 0) {
+        doc.text('CGST', totalsX, y, { width: 80 });
+        doc.text(this.formatMoneyPdf(invoice.cgstAmount || 0, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+        y += 16;
+        doc.text('SGST', totalsX, y, { width: 80 });
+        doc.text(this.formatMoneyPdf(invoice.sgstAmount || 0, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+        y += 16;
+      } else if ((invoice.igstAmount || 0) > 0) {
+        doc.text('IGST', totalsX, y, { width: 80 });
+        doc.text(this.formatMoneyPdf(invoice.igstAmount || 0, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+        y += 16;
+      } else {
+        doc.text('Tax', totalsX, y, { width: 80 });
+        doc.text(this.formatMoneyPdf(invoice.taxAmount, invoice.currency), colAmt, y, { width: 80, align: 'right' });
+        y += 16;
+      }
     }
     doc.fontSize(12).text('Total', totalsX, y, { width: 80 });
     doc.fontSize(12).text(this.formatMoneyPdf(invoice.total, invoice.currency), colAmt, y, {
@@ -611,6 +745,18 @@ class InvoiceService {
     const bookingMeta = invoice.booking ? `
       <p class="meta">Appointment: ${this.esc(this.formatDate(invoice.booking.date, tz))} · ${this.esc(invoice.booking.startTime)}${invoice.booking.endTime ? ` – ${this.esc(invoice.booking.endTime)}` : ''}</p>
     ` : '';
+
+    const taxRows = (() => {
+      if (!(invoice.taxAmount > 0)) return '';
+      if ((invoice.cgstAmount || 0) > 0 || (invoice.sgstAmount || 0) > 0) {
+        return `<div><span>CGST</span><span>${this.esc(this.formatMoney(invoice.cgstAmount || 0, invoice.currency))}</span></div>
+        <div><span>SGST</span><span>${this.esc(this.formatMoney(invoice.sgstAmount || 0, invoice.currency))}</span></div>`;
+      }
+      if ((invoice.igstAmount || 0) > 0) {
+        return `<div><span>IGST</span><span>${this.esc(this.formatMoney(invoice.igstAmount || 0, invoice.currency))}</span></div>`;
+      }
+      return `<div><span>Tax</span><span>${this.esc(this.formatMoney(invoice.taxAmount, invoice.currency))}</span></div>`;
+    })();
 
     const discountRow = discountAmount > 0
       ? `<div class="disc"><span>${
@@ -715,6 +861,8 @@ class InvoiceService {
           <h2>From</h2>
           <p><strong>${this.esc(business.name)}</strong></p>
           ${business.address ? `<p class="muted">${this.esc(business.address)}</p>` : ''}
+          ${business.legalName ? `<p class="muted">${this.esc(business.legalName)}</p>` : ''}
+          ${business.gstin ? `<p class="muted">GSTIN: ${this.esc(business.gstin)}</p>` : ''}
           ${business.ownerEmail ? `<p class="muted">${this.esc(business.ownerEmail)}</p>` : ''}
         </div>
         <div class="card">
@@ -734,7 +882,7 @@ class InvoiceService {
       <div class="totals">
         <div><span>Subtotal</span><span>${this.esc(this.formatMoney(invoice.subtotal, invoice.currency))}</span></div>
         ${discountRow}
-        ${invoice.taxAmount > 0 ? `<div><span>Tax</span><span>${this.esc(this.formatMoney(invoice.taxAmount, invoice.currency))}</span></div>` : ''}
+        ${taxRows}
         <div class="grand"><span>Total</span><span>${this.esc(this.formatMoney(invoice.total, invoice.currency))}</span></div>
       </div>
       ${invoice.paymentMethod ? `<p class="muted" style="margin-top:16px">Payment: ${this.esc(invoice.paymentMethod)}${invoice.paymentRef ? ` · Ref ${this.esc(invoice.paymentRef)}` : ''}</p>` : ''}

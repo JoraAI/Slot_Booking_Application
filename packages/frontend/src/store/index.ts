@@ -5,7 +5,7 @@ import { getOwnerTokenSync } from '../lib/tokenStorage'
 interface AppState {
   // Owner business config (dashboard)
   config: BusinessConfig | null
-  setConfig: (config: BusinessConfig) => void
+  setConfig: (config: BusinessConfig | null) => void
 
   // Public config (customer widget)
   publicConfig: PublicConfig | null

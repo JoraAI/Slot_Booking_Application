@@ -286,6 +286,43 @@ export const Analytics: React.FC = () => {
                       <BreakdownRow label="Products" amount={productCollected} total={totalCollections} onSelect={() => setCollectionFocus('products')} />
                       <BreakdownRow label="Walk-ins" amount={walkInCollected} total={totalCollections} onSelect={() => setCollectionFocus('walkins')} />
                     </div>
+                    {(data.gstCollected != null || (data.paymentMethodMix && data.paymentMethodMix.length > 0)) && (
+                      <div className="grid sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <div>
+                          <p className="text-xs text-gray-500">GST collected</p>
+                          <p className="text-lg font-semibold">₹{(data.gstCollected || 0).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Payment mix</p>
+                          <div className="space-y-1">
+                            {(data.paymentMethodMix || []).map((row) => (
+                              <div key={row.method} className="flex justify-between text-sm">
+                                <span className="capitalize text-gray-600 dark:text-gray-400">{row.method}</span>
+                                <span>₹{row.amount.toLocaleString('en-IN')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {(data.staffCollections || []).some((s) => s.collected > 0) && (
+                      <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                        <p className="text-xs text-gray-500 mb-2">Staff collections & commission</p>
+                        <div className="space-y-1.5">
+                          {(data.staffCollections || []).filter((s) => s.collected > 0).slice(0, 8).map((s) => (
+                            <div key={s.id} className="flex justify-between text-sm gap-2">
+                              <span className="truncate">{s.name}</span>
+                              <span className="shrink-0 text-right">
+                                ₹{s.collected.toLocaleString('en-IN')}
+                                {s.commissionPercent != null && s.commissionPercent > 0 && (
+                                  <span className="text-xs text-gray-400 ml-2">comm ₹{s.commissionEarned.toLocaleString('en-IN')}</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
