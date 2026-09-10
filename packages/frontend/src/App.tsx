@@ -24,6 +24,7 @@ import { CustomersPage } from './dashboard/pages/Customers'
 import { SetupGuide } from './dashboard/pages/SetupGuide'
 import { SubscriptionPage } from './dashboard/pages/SubscriptionPage'
 import { OwnerAppInfoPage } from './dashboard/pages/OwnerAppInfoPage'
+import { SupportPage } from './dashboard/pages/SupportPage'
 import { useStore } from './store'
 import { useEmbedMode } from './hooks'
 import { PageSections } from './widget/PageSections'
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="subscription" element={<SubscriptionPage />} />
         <Route path="app-info" element={<OwnerAppInfoPage />} />
+        <Route path="support" element={<SupportPage />} />
         <Route path="setup-guide" element={<SetupGuide />} />
       </Route>
 

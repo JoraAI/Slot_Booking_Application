@@ -923,6 +923,48 @@ class NotificationService {
     );
   }
 
+  /**
+   * Owner support ticket → platform inbox. Uses platform Resend/SMTP only (no salon SMTP),
+   * so delivery does not depend on the shop's mail settings. Reply-To is the owner email.
+   */
+  async sendSupportTicketEmail(args: {
+    to: string;
+    replyTo: string;
+    category: string;
+    subject: string;
+    message: string;
+    ownerEmail: string;
+    ownerRole?: string;
+    businessName: string;
+    businessId: string;
+    businessSlug?: string | null;
+    shopPublicCode?: string | null;
+  }): Promise<void> {
+    const categoryLabel = this.esc(args.category);
+    const subjectLine = `[Reservly Support · ${args.category}] ${args.subject}`.slice(0, 200);
+    const html = `
+      <div style="font-family: Inter, system-ui, sans-serif; max-width: 640px; margin: 0 auto; color: #111827;">
+        <h2 style="color:#7C3AED; margin-bottom: 8px;">New owner support ticket</h2>
+        <p style="color:#6B7280; font-size:14px; margin-top:0;">Submitted from the Reservly owner dashboard.</p>
+        <table style="width:100%; border-collapse:collapse; font-size:14px; margin:16px 0;">
+          <tr><td style="padding:6px 0; color:#6B7280; width:140px;">Category</td><td style="padding:6px 0;"><strong>${categoryLabel}</strong></td></tr>
+          <tr><td style="padding:6px 0; color:#6B7280;">Subject</td><td style="padding:6px 0;">${this.esc(args.subject)}</td></tr>
+          <tr><td style="padding:6px 0; color:#6B7280;">Owner</td><td style="padding:6px 0;">${this.esc(args.ownerEmail)}${args.ownerRole ? ` (${this.esc(args.ownerRole)})` : ''}</td></tr>
+          <tr><td style="padding:6px 0; color:#6B7280;">Business</td><td style="padding:6px 0;">${this.esc(args.businessName)}</td></tr>
+          <tr><td style="padding:6px 0; color:#6B7280;">Business ID</td><td style="padding:6px 0; font-family:monospace; font-size:12px;">${this.esc(args.businessId)}</td></tr>
+          ${args.businessSlug ? `<tr><td style="padding:6px 0; color:#6B7280;">Slug</td><td style="padding:6px 0;">${this.esc(args.businessSlug)}</td></tr>` : ''}
+          ${args.shopPublicCode ? `<tr><td style="padding:6px 0; color:#6B7280;">Public code</td><td style="padding:6px 0; font-family:monospace; font-size:12px;">${this.esc(args.shopPublicCode)}</td></tr>` : ''}
+        </table>
+        <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:8px; padding:14px 16px; white-space:pre-wrap; font-size:14px; line-height:1.5;">${this.esc(args.message)}</div>
+        <p style="color:#9CA3AF; font-size:12px; margin-top:20px;">Reply to this email to respond to the owner (${this.esc(args.replyTo)}).</p>
+      </div>`;
+    await this.sendEmail(args.to, subjectLine, html, {
+      throwOnError: true,
+      replyTo: args.replyTo,
+      // intentionally no business → platform Resend/SMTP only
+    });
+  }
+
   async sendBookingConfirmation(booking: any, business: any): Promise<void> {
     const tz = business.timezone || 'Asia/Kolkata';
     const dateStr = new Intl.DateTimeFormat('en-IN', {

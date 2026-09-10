@@ -868,6 +868,17 @@ class ApiClient {
     return this.request<{ url: string; publicCode: string; businessName: string }>('/owner/qr')
   }
 
+  submitSupportTicket(data: {
+    category: 'bug' | 'enhancement' | 'billing' | 'account' | 'other'
+    subject: string
+    message: string
+  }) {
+    return this.request<{ ok: boolean; emailedTo: string }>('/owner/support', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   // ---------- Payments (owner) ----------
 
   getPayments(params?: Record<string, string>) {

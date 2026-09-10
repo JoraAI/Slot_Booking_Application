@@ -30,6 +30,7 @@ import {
   platformWhatsappDisplayPhone,
   smtpConfigured,
   tenantWhatsappOptedIn,
+  platformEmailConfigured,
 } from '../services/notificationCredentials';
 import {
   customerService,
@@ -3400,6 +3401,84 @@ ownerRouter.get('/qr', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------- Support tickets (email to platform admin) ----------
+
+const SUPPORT_ADMIN_EMAIL = 'admin@staffingpros.tech';
+const supportTicketRate = new Map<string, number[]>(); // businessId → timestamps (ms)
+
+function allowSupportTicket(businessId: string, limit = 5, windowMs = 60 * 60 * 1000): boolean {
+  const now = Date.now();
+  const prev = (supportTicketRate.get(businessId) || []).filter((t) => now - t < windowMs);
+  if (prev.length >= limit) {
+    supportTicketRate.set(businessId, prev);
+    return false;
+  }
+  prev.push(now);
+  supportTicketRate.set(businessId, prev);
+  return true;
+}
+
+const supportTicketSchema = z.object({
+  category: z.enum(['bug', 'enhancement', 'billing', 'account', 'other']),
+  subject: z.string().trim().min(3, 'Subject must be at least 3 characters').max(120),
+  message: z.string().trim().min(10, 'Please describe the issue in at least 10 characters').max(4000),
+});
+
+/**
+ * POST /owner/support — owners/managers raise a ticket emailed to admin@staffingpros.tech
+ */
+ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!platformEmailConfigured()) {
+      return res.status(503).json({
+        error: 'Support email is temporarily unavailable. Please email admin@staffingpros.tech directly.',
+      });
+    }
+
+    const businessId = req.owner!.businessId;
+    if (!allowSupportTicket(businessId)) {
+      return res.status(429).json({ error: 'Too many support requests. Please try again in an hour.' });
+    }
+
+    const parsed = supportTicketSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
+    }
+
+    const business = await prisma.business.findUnique({
+      where: { id: businessId },
+      select: { id: true, name: true, slug: true, publicCode: true, ownerEmail: true },
+    });
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+
+    const ownerEmail = (req.owner!.email || business.ownerEmail || '').trim().toLowerCase();
+    if (!ownerEmail || !ownerEmail.includes('@')) {
+      return res.status(400).json({ error: 'Your account email is missing. Update it in Settings, then retry.' });
+    }
+
+    await notificationService.sendSupportTicketEmail({
+      to: SUPPORT_ADMIN_EMAIL,
+      replyTo: ownerEmail,
+      category: parsed.data.category,
+      subject: parsed.data.subject,
+      message: parsed.data.message,
+      ownerEmail,
+      ownerRole: req.owner!.role || 'OWNER',
+      businessName: business.name,
+      businessId: business.id,
+      businessSlug: business.slug,
+      shopPublicCode: business.publicCode,
+    });
+
+    res.json({ ok: true, emailedTo: SUPPORT_ADMIN_EMAIL });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(500).json({ error: error.message || 'Failed to send support ticket' });
   }
 });
 

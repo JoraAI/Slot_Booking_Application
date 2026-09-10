@@ -25,6 +25,7 @@ const navItems = [
   { path: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
   { path: '/dashboard/subscription', label: 'Subscription', icon: '🧾', ownerOnly: true },
   { path: '/dashboard/app-info', label: 'Owner App', icon: '📱' },
+  { path: '/dashboard/support', label: 'Support', icon: '🆘' },
   { path: '/dashboard/setup-guide', label: 'Setup Guide', icon: '❓' },
 ]
 
