@@ -206,6 +206,7 @@ export interface Staff {
   color: string
   isActive: boolean
   salary?: number | null
+  commissionPercent?: number | null
 }
 
 export interface ServiceCategory {
