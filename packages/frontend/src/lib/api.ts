@@ -913,6 +913,7 @@ class ApiClient {
     paymentRef?: string | null
     discountType?: 'PERCENTAGE' | 'FLAT' | null
     discountValue?: number | null
+    staffId?: string | null
   }) {
     return this.request<import('../types').InvoiceListItem>('/owner/invoices', {
       method: 'POST',
