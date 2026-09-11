@@ -13,6 +13,7 @@ type StaffForm = {
   email: string
   color: string
   salary: string
+  commissionPercent: string
   isActive: boolean
 }
 
@@ -23,6 +24,7 @@ const emptyForm = (): StaffForm => ({
   email: '',
   color: COLORS[0],
   salary: '',
+  commissionPercent: '',
   isActive: true,
 })
 
@@ -33,6 +35,7 @@ export const StaffPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<StaffForm>(emptyForm())
   const [editingSalary, setEditingSalary] = useState<{ id: string; name: string; value: string } | null>(null)
+  const [editingCommission, setEditingCommission] = useState<{ id: string; name: string; value: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [hoursEditor, setHoursEditor] = useState<{ id: string; name: string } | null>(null)
 
@@ -55,10 +58,12 @@ export const StaffPage: React.FC = () => {
       email: s.email || '',
       color: s.color || COLORS[0],
       salary: s.salary != null ? String(s.salary) : '',
+      commissionPercent: s.commissionPercent != null ? String(s.commissionPercent) : '',
       isActive: s.isActive !== false,
     })
     setShowForm(true)
     setEditingSalary(null)
+    setEditingCommission(null)
   }
 
   const closeForm = () => {
@@ -72,6 +77,10 @@ export const StaffPage: React.FC = () => {
     if (salary !== null && (!Number.isFinite(salary) || salary < 0)) {
       throw new Error('Enter a valid salary (₹) or leave it blank')
     }
+    const commissionPercent = form.commissionPercent.trim() === '' ? null : Number(form.commissionPercent)
+    if (commissionPercent !== null && (!Number.isFinite(commissionPercent) || commissionPercent < 0 || commissionPercent > 100)) {
+      throw new Error('Commission must be between 0 and 100, or leave blank')
+    }
     return {
       name: form.name.trim(),
       role: form.role.trim() || null,
@@ -80,6 +89,7 @@ export const StaffPage: React.FC = () => {
       color: form.color,
       isActive: form.isActive,
       salary,
+      commissionPercent,
     }
   }
 
@@ -144,6 +154,26 @@ export const StaffPage: React.FC = () => {
     }
   }
 
+  const saveCommission = async (id: string) => {
+    if (!editingCommission) return
+    const next = editingCommission.value.trim() === '' ? null : Number(editingCommission.value)
+    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 100)) {
+      toast.error('Commission must be 0–100, or clear the field')
+      return
+    }
+    setLoading(true)
+    try {
+      const updated = await api.updateStaff(id, { commissionPercent: next })
+      setStaffList((list) => list.map((s) => (s.id === id ? { ...s, ...updated } : s)))
+      setEditingCommission(null)
+      toast.success(next === null ? 'Commission cleared' : 'Commission saved')
+    } catch (err: any) {
+      toast.error(err.message || 'Could not save commission')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -184,6 +214,13 @@ export const StaffPage: React.FC = () => {
               placeholder="e.g. 25000 — leave blank for none"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">Owner-only field — never shown on the public booking page.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Commission % (optional)</label>
+            <input value={form.commissionPercent} onChange={(e) => setForm((f) => ({ ...f, commissionPercent: e.target.value }))} type="number" min={0} max={100} step={0.5}
+              placeholder="e.g. 10 — leave blank for none"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
+            <p className="text-xs text-gray-400 mt-1">Used in Analytics for staff incentives on attributed collections.</p>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Color</label>
@@ -232,6 +269,9 @@ export const StaffPage: React.FC = () => {
                   {s.salary != null && (
                     <p className="text-xs text-gray-400 mt-0.5">Salary: ₹{Number(s.salary).toLocaleString('en-IN')}/mo</p>
                   )}
+                  {s.commissionPercent != null && (
+                    <p className="text-xs text-gray-400 mt-0.5">Commission: {Number(s.commissionPercent)}%</p>
+                  )}
                 </div>
               </div>
 
@@ -251,11 +291,35 @@ export const StaffPage: React.FC = () => {
                 </div>
               ) : (
                 <button
-                  onClick={() => setEditingSalary({ id: s.id, name: s.name, value: s.salary != null ? String(s.salary) : '' })}
+                  onClick={() => { setEditingCommission(null); setEditingSalary({ id: s.id, name: s.name, value: s.salary != null ? String(s.salary) : '' }) }}
                   className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
                   title="Set / edit / clear salary"
                 >
                   {s.salary != null ? '✎ Edit salary' : '+ Set salary'}
+                </button>
+              )}
+
+              {editingCommission && editingCommission.id === s.id ? (
+                <div className="space-y-1.5">
+                  <input type="number" min={0} max={100} step={0.5} value={editingCommission.value} autoFocus
+                    onChange={(e) => setEditingCommission((p) => (p ? { ...p, value: e.target.value } : p))}
+                    placeholder="e.g. 10 — empty clears"
+                    className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
+                  <div className="flex gap-1.5">
+                    <button onClick={() => void saveCommission(s.id)} disabled={loading}
+                      className="px-2 py-1 bg-primary text-white rounded-md text-xs font-medium disabled:opacity-50">Save</button>
+                    <button onClick={() => setEditingCommission({ id: s.id, name: s.name, value: '' })} disabled={loading}
+                      className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800">Clear</button>
+                    <button onClick={() => setEditingCommission(null)} className="px-2 py-1 text-xs text-gray-500 hover:underline">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setEditingSalary(null); setEditingCommission({ id: s.id, name: s.name, value: s.commissionPercent != null ? String(s.commissionPercent) : '' }) }}
+                  className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+                  title="Set / edit / clear commission %"
+                >
+                  {s.commissionPercent != null ? '✎ Edit commission %' : '+ Set commission %'}
                 </button>
               )}
 

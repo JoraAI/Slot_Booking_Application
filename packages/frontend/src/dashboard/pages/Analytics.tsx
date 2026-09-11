@@ -305,13 +305,27 @@ export const Analytics: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    {(data.staffCollections || []).some((s) => s.collected > 0) && (
-                      <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
-                        <p className="text-xs text-gray-500 mb-2">Staff collections & commission</p>
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                      <p className="text-xs text-gray-500 mb-2">Staff collections & commission</p>
+                      {(data.staffCollections || []).length === 0 ? (
+                        <p className="text-sm text-gray-400">
+                          Add staff under Staff to track collections. Assign them on bookings or walk-in invoices (Served by).
+                        </p>
+                      ) : (data.staffCollections || []).every((s) => s.collected <= 0) ? (
+                        <p className="text-sm text-gray-400">
+                          No attributed collections in this range yet. Pick <span className="font-medium text-gray-500">Served by</span> on
+                          walk-in invoices, or use bookings with an assigned staff member. Set commission % on Staff to see incentive amounts.
+                        </p>
+                      ) : (
                         <div className="space-y-1.5">
                           {(data.staffCollections || []).filter((s) => s.collected > 0).slice(0, 8).map((s) => (
                             <div key={s.id} className="flex justify-between text-sm gap-2">
-                              <span className="truncate">{s.name}</span>
+                              <span className="truncate">
+                                {s.name}
+                                {s.commissionPercent != null && s.commissionPercent > 0 && (
+                                  <span className="text-xs text-gray-400 ml-1.5">{s.commissionPercent}%</span>
+                                )}
+                              </span>
                               <span className="shrink-0 text-right">
                                 ₹{s.collected.toLocaleString('en-IN')}
                                 {s.commissionPercent != null && s.commissionPercent > 0 && (
@@ -321,8 +335,8 @@ export const Analytics: React.FC = () => {
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
 
