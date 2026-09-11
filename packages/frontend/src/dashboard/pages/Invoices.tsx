@@ -8,6 +8,7 @@ import type {
   InvoiceListItem,
   Product,
   Service,
+  Staff,
 } from '../../types'
 
 const iso = (d: Date) => {
@@ -43,6 +44,7 @@ export const InvoicesPage: React.FC = () => {
   const [eligible, setEligible] = useState<EligibleBookingForInvoice[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(
     searchParams.get('dateFrom') || iso(new Date(Date.now() - 30 * 86400000)),
@@ -62,22 +64,25 @@ export const InvoicesPage: React.FC = () => {
     discountEnabled: false,
     discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FLAT',
     discountValue: '',
+    staffId: '',
   })
   const [selected, setSelected] = useState<Record<string, SelectedLine>>({})
 
   const load = async () => {
     setLoading(true)
     try {
-      const [inv, elig, svc, prod] = await Promise.all([
+      const [inv, elig, svc, prod, staff] = await Promise.all([
         api.getInvoices({ dateFrom, dateTo }),
         api.getEligibleInvoiceBookings(),
         api.getServices().catch(() => [] as Service[]),
         api.getProducts().catch(() => [] as Product[]),
+        api.getStaff().catch(() => [] as Staff[]),
       ])
       setInvoices(inv)
       setEligible(elig.bookings)
       setServices((svc || []).filter((s) => s.isActive !== false))
       setProducts((prod || []).filter((p) => p.isActive !== false))
+      setStaffList((staff || []).filter((s) => s.isActive !== false))
     } catch (e: any) {
       toast.error(e.message || 'Could not load invoices')
     } finally {
@@ -114,6 +119,7 @@ export const InvoicesPage: React.FC = () => {
     discountEnabled: false,
     discountType: 'PERCENTAGE' as const,
     discountValue: '',
+    staffId: '',
   }
   const toggleCatalogItem = (kind: 'service' | 'product', item: { id: string; name: string; price: number }) => {
     const key = `${kind}:${item.id}`
@@ -239,6 +245,7 @@ export const InvoicesPage: React.FC = () => {
         notes: form.notes.trim() || null,
         discountType: form.discountEnabled ? form.discountType : null,
         discountValue: form.discountEnabled ? Number(form.discountValue) : null,
+        staffId: form.staffId.trim() || null,
       })
       toast.success(`Invoice ${inv.invoiceNumber} created`)
       setShowForm(false)
@@ -346,6 +353,7 @@ export const InvoicesPage: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3">Invoice</th>
                   <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Date</th>
@@ -360,6 +368,7 @@ export const InvoicesPage: React.FC = () => {
                       <div>{inv.customerName}</div>
                       {!hasContact(inv) && <div className="text-xs text-gray-400">No email/phone — download only</div>}
                     </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{inv.staffName || '—'}</td>
                     <td className="px-4 py-3">{SOURCE_LABELS[inv.source] || inv.source}</td>
                     <td className="px-4 py-3">₹{inv.total.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-3">{new Date(inv.issuedAt).toLocaleDateString('en-IN')}</td>
@@ -381,6 +390,7 @@ export const InvoicesPage: React.FC = () => {
                   <p className="font-semibold">₹{inv.total.toLocaleString('en-IN')}</p>
                 </div>
                 <p className="text-xs text-gray-500">{SOURCE_LABELS[inv.source] || inv.source} · {new Date(inv.issuedAt).toLocaleDateString('en-IN')}</p>
+                {inv.staffName && <p className="text-xs text-gray-500">Staff: {inv.staffName}</p>}
                 {!hasContact(inv) && <p className="text-xs text-gray-400">No email/phone — download only</p>}
                 {actionButtons(inv)}
               </div>
@@ -409,6 +419,26 @@ export const InvoicesPage: React.FC = () => {
                 <label className="block text-xs font-medium mb-1">Email (for email send)</label>
                 <input type="email" value={form.customerEmail} onChange={(e) => setForm(p => ({ ...p, customerEmail: e.target.value }))} className={inputCls} />
               </div>
+              {staffList.length > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium mb-1">Served by (optional)</label>
+                  <select
+                    value={form.staffId}
+                    onChange={(e) => setForm(p => ({ ...p, staffId: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value="">Not assigned</option>
+                    {staffList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.role ? ` · ${s.role}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Optional — used for month-end staff collections and commission in Analytics.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

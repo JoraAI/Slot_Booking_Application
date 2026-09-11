@@ -3749,7 +3749,18 @@ ownerRouter.get('/invoices', async (req: AuthRequest, res: Response) => {
       orderBy: { issuedAt: 'desc' },
       take: 500,
     });
-    res.json(invoices.map((inv) => invoiceService.toListItem(inv)));
+    const staffIds = Array.from(new Set(invoices.map((inv) => inv.staffId).filter(Boolean))) as string[];
+    const staffRows = staffIds.length
+      ? await prisma.staff.findMany({
+          where: { businessId: req.owner!.businessId, id: { in: staffIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const staffNameById = Object.fromEntries(staffRows.map((s) => [s.id, s.name]));
+    res.json(invoices.map((inv) => invoiceService.toListItem({
+      ...inv,
+      staffName: inv.staffId ? (staffNameById[inv.staffId] || null) : null,
+    })));
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

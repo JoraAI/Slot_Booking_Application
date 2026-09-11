@@ -204,6 +204,8 @@ class InvoiceService {
       paymentMethod: invoice.paymentMethod,
       issuedAt: invoice.issuedAt,
       bookingId: invoice.bookingId,
+      staffId: invoice.staffId ?? null,
+      staffName: invoice.staffName ?? invoice.staff?.name ?? null,
       booking: invoice.booking ? {
         id: invoice.booking.id,
         date: invoice.booking.date,
@@ -500,6 +502,19 @@ class InvoiceService {
       err.status = 400;
       throw err;
     }
+    let staffId: string | null = payload.staffId ?? null;
+    if (staffId) {
+      const staff = await prisma.staff.findFirst({
+        where: { id: staffId, businessId, isActive: true },
+        select: { id: true },
+      });
+      if (!staff) {
+        const err: any = new Error('Selected staff is invalid or inactive');
+        err.status = 400;
+        throw err;
+      }
+      staffId = staff.id;
+    }
     return this.createInvoiceRecord(businessId, {
       bookingId: null,
       customerName: payload.customerName.trim(),
@@ -515,7 +530,7 @@ class InvoiceService {
       source: 'walk_in',
       discountType: payload.discountType ?? null,
       discountValue: payload.discountValue ?? null,
-      staffId: payload.staffId ?? null,
+      staffId,
       syncProductSales: true,
     });
   }
@@ -722,11 +737,19 @@ class InvoiceService {
 
   /** Prefer embedded logo so View/Download and email work without a public CDN URL. */
   async renderInvoiceHtmlAsync(invoice: any, business: any): Promise<string> {
+    let staffName = invoice.staffName || null;
+    if (!staffName && invoice.staffId) {
+      const staff = await prisma.staff.findFirst({
+        where: { id: invoice.staffId, businessId: business.id },
+        select: { name: true },
+      });
+      staffName = staff?.name || null;
+    }
     const logoPng = await this.loadLogoPng(business);
     const logoSrc = logoPng
       ? `data:image/png;base64,${logoPng.toString('base64')}`
       : this.logoPublicUrl(business);
-    return this.buildInvoiceHtml(invoice, business, logoSrc);
+    return this.buildInvoiceHtml({ ...invoice, staffName }, business, logoSrc);
   }
 
   private buildInvoiceHtml(invoice: any, business: any, logoUrl: string | null): string {
@@ -870,6 +893,7 @@ class InvoiceService {
           <p><strong>${this.esc(invoice.customerName)}</strong></p>
           ${invoice.customerPhone ? `<p class="muted">${this.esc(invoice.customerPhone)}</p>` : ''}
           ${invoice.customerEmail ? `<p class="muted">${this.esc(invoice.customerEmail)}</p>` : ''}
+          ${invoice.staffName ? `<p class="muted">Served by: ${this.esc(invoice.staffName)}</p>` : ''}
         </div>
       </div>
       ${bookingMeta}

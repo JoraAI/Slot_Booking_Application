@@ -580,6 +580,8 @@ export interface InvoiceListItem {
   paymentMethod: string | null
   issuedAt: string
   bookingId: string | null
+  staffId?: string | null
+  staffName?: string | null
   booking?: {
     id: string
     date: string
