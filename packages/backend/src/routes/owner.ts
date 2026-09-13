@@ -46,7 +46,10 @@ import {
   deleteOwnedMediaAsset,
   deleteReplacedMediaAsset,
   mediaIdFromUrl,
+  normalizeAudioMime,
   publicMediaUrl,
+  sniffAudioMime,
+  MEDIA_MAX_AUDIO_BYTES,
 } from '../services/MediaService';
 import { attributeKeyFromLabel, attributesFromFormData, contactMatchesFilters } from '../services/CustomerAttributes';
 
@@ -3439,13 +3442,48 @@ function allowSupportTicket(businessId: string, limit = 5, windowMs = 60 * 60 * 
 
 const supportTicketSchema = z.object({
   category: z.enum(['bug', 'enhancement', 'billing', 'account', 'other']),
-  subject: z.string().trim().min(3, 'Subject must be at least 3 characters').max(120),
-  message: z.string().trim().min(10, 'Please describe the issue in at least 10 characters').max(4000),
-  voiceNoteUrl: z.union([
-    z.null(),
-    z.string().trim().url().max(2000),
-    z.string().trim().regex(/^\/api\/media\/[a-zA-Z0-9_-]+$/, 'Invalid voice note URL'),
-  ]).optional(),
+  subject: z.string().trim().max(120).optional().default(''),
+  message: z.string().trim().max(4000).optional().default(''),
+  voiceNoteBase64: z.string().min(1).max(4_000_000).nullable().optional(),
+  voiceNoteMimeType: z.string().trim().max(120).nullable().optional(),
+}).superRefine((data, ctx) => {
+  const hasVoice = Boolean(String(data.voiceNoteBase64 || '').trim());
+  const subject = String(data.subject || '').trim();
+  const message = String(data.message || '').trim();
+
+  if (hasVoice) {
+    // With a voice note, subject/message are optional; if provided, keep soft minimums.
+    if (subject && subject.length < 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Subject must be at least 3 characters when provided',
+        path: ['subject'],
+      });
+    }
+    if (message && message.length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Details must be at least 10 characters when provided',
+        path: ['message'],
+      });
+    }
+    return;
+  }
+
+  if (subject.length < 3) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Subject must be at least 3 characters',
+      path: ['subject'],
+    });
+  }
+  if (message.length < 10) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please describe the issue in at least 10 characters',
+      path: ['message'],
+    });
+  }
 });
 
 /**
@@ -3477,21 +3515,47 @@ ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Your account email is missing. Update it in Settings, then retry.' });
     }
 
-    let voiceNoteUrl: string | null = null;
-    const rawVoice = parsed.data.voiceNoteUrl;
+    let voiceAttachment: { filename: string; content: Buffer; contentType: string } | null = null;
+    const rawVoice = String(parsed.data.voiceNoteBase64 || '').trim();
     if (rawVoice) {
-      const mediaId = mediaIdFromUrl(String(rawVoice));
-      if (!mediaId) {
-        return res.status(400).json({ error: 'Invalid voice note' });
+      let bytes: Buffer;
+      try {
+        bytes = decodeDataBase64(rawVoice);
+      } catch {
+        return res.status(400).json({ error: 'Invalid voice note data' });
       }
-      const asset = await prisma.mediaAsset.findFirst({
-        where: { id: mediaId, businessId },
-        select: { id: true, mimeType: true },
-      });
-      if (!asset || !String(asset.mimeType || '').startsWith('audio/')) {
-        return res.status(400).json({ error: 'Voice note not found for this shop' });
+      if (!bytes.length) {
+        return res.status(400).json({ error: 'Voice note was empty' });
       }
-      voiceNoteUrl = publicMediaUrl(asset.id, req);
+      if (bytes.length > MEDIA_MAX_AUDIO_BYTES) {
+        return res.status(400).json({
+          error: `Voice note too large (max ${Math.round(MEDIA_MAX_AUDIO_BYTES / 1024 / 1024)}MB)`,
+        });
+      }
+      const sniffed = sniffAudioMime(bytes);
+      const declared = normalizeAudioMime(parsed.data.voiceNoteMimeType || undefined);
+      const mime = sniffed || declared;
+      if (!mime || !sniffed) {
+        return res.status(400).json({ error: 'Could not recognize that audio file. Re-record and try again.' });
+      }
+      if (declared && declared !== sniffed) {
+        const compatible =
+          (declared === 'audio/aac' && sniffed === 'audio/mp4') ||
+          (declared === 'audio/mpeg' && sniffed === 'audio/mp4');
+        if (!compatible) {
+          return res.status(400).json({ error: 'Audio content does not match the declared format' });
+        }
+      }
+      const ext = mime === 'audio/mpeg' ? 'mp3'
+        : mime === 'audio/mp4' ? 'm4a'
+        : mime === 'audio/ogg' ? 'ogg'
+        : mime === 'audio/wav' ? 'wav'
+        : 'webm';
+      voiceAttachment = {
+        filename: `support-voice-note.${ext}`,
+        content: bytes,
+        contentType: mime,
+      };
     }
 
     // Consume rate limit only after payload validation succeeds.
@@ -3499,13 +3563,18 @@ ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
       return res.status(429).json({ error: 'Too many support requests. Please try again in an hour.' });
     }
 
+    const subject = String(parsed.data.subject || '').trim()
+      || (voiceAttachment ? 'Voice support note' : '');
+    const message = String(parsed.data.message || '').trim()
+      || (voiceAttachment ? '(Voice note attached — no written details provided.)' : '');
+
     await notificationService.sendSupportTicketEmail({
       to: SUPPORT_ADMIN_EMAIL,
       replyTo: ownerEmail,
       category: parsed.data.category,
-      subject: parsed.data.subject,
-      message: parsed.data.message,
-      voiceNoteUrl,
+      subject,
+      message,
+      voiceAttachment,
       ownerEmail,
       ownerRole: req.owner!.role || 'OWNER',
       businessName: business.name,

@@ -249,6 +249,7 @@ app.use(cors({
 }));
 app.use('/api/owner/media/upload', express.json({ limit: '6mb' }));
 app.use('/api/owner/media/upload-audio', express.json({ limit: '6mb' }));
+app.use('/api/owner/support', express.json({ limit: '6mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

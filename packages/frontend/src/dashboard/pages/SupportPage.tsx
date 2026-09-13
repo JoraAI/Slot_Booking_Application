@@ -60,9 +60,8 @@ export const SupportPage: React.FC = () => {
 
   const [recording, setRecording] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
-  const [uploadingVoice, setUploadingVoice] = useState(false)
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null)
-  const [voiceNoteUrl, setVoiceNoteUrl] = useState<string | null>(null)
+  const [hasVoice, setHasVoice] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -70,28 +69,20 @@ export const SupportPage: React.FC = () => {
   const timerRef = useRef<number | null>(null)
   const autoStopTimeoutRef = useRef<number | null>(null)
   const voicePreviewRef = useRef<string | null>(null)
-  const voiceNoteUrlRef = useRef<string | null>(null)
+  const voiceBlobRef = useRef<Blob | null>(null)
+  const voiceMimeRef = useRef<string>('audio/webm')
   const cancelledRef = useRef(false)
   const mountedRef = useRef(true)
 
-  const discardRemoteVoice = (url: string | null) => {
-    if (!url) return
-    void api.deleteMedia(url).catch(() => {
-      // Best-effort cleanup; quota recovery is the goal.
-    })
-  }
-
-  const clearVoiceLocal = (opts?: { deleteRemote?: boolean }) => {
-    if (opts?.deleteRemote !== false) {
-      discardRemoteVoice(voiceNoteUrlRef.current)
-    }
-    voiceNoteUrlRef.current = null
+  const clearVoiceLocal = () => {
+    voiceBlobRef.current = null
+    voiceMimeRef.current = 'audio/webm'
     if (voicePreviewRef.current) {
       URL.revokeObjectURL(voicePreviewRef.current)
       voicePreviewRef.current = null
     }
     setVoicePreviewUrl(null)
-    setVoiceNoteUrl(null)
+    setHasVoice(false)
     setRecordSeconds(0)
   }
 
@@ -135,7 +126,7 @@ export const SupportPage: React.FC = () => {
     }
   }, [])
 
-  const finishRecording = async (blob: Blob, mimeType: string) => {
+  const finishRecording = (blob: Blob, mimeType: string) => {
     if (cancelledRef.current || !mountedRef.current) return
     if (!blob.size) {
       toast.error('Recording was empty — try again')
@@ -146,44 +137,14 @@ export const SupportPage: React.FC = () => {
       return
     }
 
-    const previousUrl = voiceNoteUrlRef.current
     const localUrl = URL.createObjectURL(blob)
     if (voicePreviewRef.current) URL.revokeObjectURL(voicePreviewRef.current)
     voicePreviewRef.current = localUrl
-    if (mountedRef.current) {
-      setVoicePreviewUrl(localUrl)
-      setVoiceNoteUrl(null)
-      setUploadingVoice(true)
-    }
-    voiceNoteUrlRef.current = null
-
-    try {
-      const dataBase64 = await blobToBase64(blob)
-      if (cancelledRef.current || !mountedRef.current) {
-        discardRemoteVoice(previousUrl)
-        return
-      }
-      const uploaded = await api.uploadAudio({
-        mimeType: mimeType.split(';')[0] || 'audio/webm',
-        dataBase64,
-      })
-      if (cancelledRef.current || !mountedRef.current) {
-        discardRemoteVoice(uploaded.url)
-        discardRemoteVoice(previousUrl)
-        return
-      }
-      discardRemoteVoice(previousUrl)
-      voiceNoteUrlRef.current = uploaded.url
-      setVoiceNoteUrl(uploaded.url)
-      toast.success('Voice note attached')
-    } catch (err: any) {
-      if (!cancelledRef.current && mountedRef.current) {
-        toast.error(err?.message || 'Could not upload voice note')
-        clearVoiceLocal({ deleteRemote: false })
-      }
-    } finally {
-      if (mountedRef.current) setUploadingVoice(false)
-    }
+    voiceBlobRef.current = blob
+    voiceMimeRef.current = mimeType.split(';')[0] || 'audio/webm'
+    setVoicePreviewUrl(localUrl)
+    setHasVoice(true)
+    toast.success('Voice note ready to send')
   }
 
   const stopRecording = () => {
@@ -204,7 +165,7 @@ export const SupportPage: React.FC = () => {
   }
 
   const startRecording = async () => {
-    if (recording || uploadingVoice || sending) return
+    if (recording || sending) return
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       toast.error('Voice recording is not supported on this device')
       return
@@ -236,7 +197,7 @@ export const SupportPage: React.FC = () => {
         const type = recorder.mimeType || mimeType || 'audio/webm'
         const blob = new Blob(chunksRef.current, { type })
         chunksRef.current = []
-        void finishRecording(blob, type)
+        finishRecording(blob, type)
       }
       recorder.start(250)
       setRecording(true)
@@ -259,37 +220,53 @@ export const SupportPage: React.FC = () => {
     e.preventDefault()
     const sub = subject.trim()
     const msg = message.trim()
-    if (sub.length < 3) {
-      toast.error('Subject must be at least 3 characters')
-      return
-    }
-    if (msg.length < 10) {
-      toast.error('Please describe the issue in at least 10 characters')
-      return
-    }
+    const voiceBlob = voiceBlobRef.current
+
     if (recording) {
       toast.error('Stop the voice recording before submitting')
       return
     }
-    if (uploadingVoice) {
-      toast.error('Wait for the voice note to finish uploading')
-      return
+
+    if (!voiceBlob) {
+      if (sub.length < 3) {
+        toast.error('Subject must be at least 3 characters')
+        return
+      }
+      if (msg.length < 10) {
+        toast.error('Please describe the issue in at least 10 characters')
+        return
+      }
+    } else {
+      if (sub && sub.length < 3) {
+        toast.error('Subject must be at least 3 characters when provided')
+        return
+      }
+      if (msg && msg.length < 10) {
+        toast.error('Details must be at least 10 characters when provided')
+        return
+      }
     }
+
     setSending(true)
     try {
+      let voiceNoteBase64: string | null = null
+      let voiceNoteMimeType: string | null = null
+      if (voiceBlob) {
+        voiceNoteBase64 = await blobToBase64(voiceBlob)
+        voiceNoteMimeType = voiceMimeRef.current
+      }
       await api.submitSupportTicket({
         category,
         subject: sub,
         message: msg,
-        voiceNoteUrl: voiceNoteUrlRef.current || voiceNoteUrl || null,
+        voiceNoteBase64,
+        voiceNoteMimeType,
       })
       setSent(true)
       setSubject('')
       setMessage('')
       setCategory('bug')
-      // Keep the submitted asset; only clear local preview state.
-      voiceNoteUrlRef.current = null
-      clearVoiceLocal({ deleteRemote: false })
+      clearVoiceLocal()
       toast.success('Ticket sent - we will reply by email')
     } catch (err: any) {
       toast.error(err?.message || 'Could not send ticket')
@@ -351,14 +328,14 @@ export const SupportPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="support-subject">
-              Subject
+              Subject{hasVoice ? ' (optional with voice note)' : ''}
             </label>
             <input
               id="support-subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               maxLength={120}
-              placeholder="Short summary"
+              placeholder={hasVoice ? 'Optional short summary' : 'Short summary'}
               className={inputClass}
               disabled={sending}
               autoComplete="off"
@@ -367,7 +344,7 @@ export const SupportPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="support-message">
-              Details
+              Details{hasVoice ? ' (optional with voice note)' : ''}
             </label>
             <textarea
               id="support-message"
@@ -375,7 +352,11 @@ export const SupportPage: React.FC = () => {
               onChange={(e) => setMessage(e.target.value)}
               maxLength={4000}
               rows={8}
-              placeholder="What happened? Steps to reproduce, device/browser, or what you’d like improved…"
+              placeholder={
+                hasVoice
+                  ? 'Optional written details — your voice note will be emailed as an attachment…'
+                  : 'What happened? Steps to reproduce, device/browser, or what you’d like improved…'
+              }
               className={`${inputClass} min-h-[160px] resize-y`}
               disabled={sending}
             />
@@ -385,17 +366,18 @@ export const SupportPage: React.FC = () => {
           <div className="space-y-2">
             <label className="block text-sm font-medium">Voice note (optional)</label>
             <p className="text-xs text-gray-500">
-              Record up to {MAX_VOICE_SECONDS} seconds if typing is inconvenient. Submitted with your ticket.
+              Record up to {MAX_VOICE_SECONDS} seconds. The clip is emailed as an attachment (not stored on the server).
+              With a voice note, subject and details are optional.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {!recording ? (
                 <button
                   type="button"
                   onClick={() => void startRecording()}
-                  disabled={sending || uploadingVoice}
+                  disabled={sending}
                   className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {voiceNoteUrl || voicePreviewUrl ? 'Re-record' : 'Record voice note'}
+                  {hasVoice ? 'Re-record' : 'Record voice note'}
                 </button>
               ) : (
                 <button
@@ -406,19 +388,18 @@ export const SupportPage: React.FC = () => {
                   Stop · {formatSeconds(recordSeconds)}
                 </button>
               )}
-              {(voiceNoteUrl || voicePreviewUrl) && !recording && (
+              {hasVoice && !recording && (
                 <button
                   type="button"
-                  onClick={() => clearVoiceLocal({ deleteRemote: true })}
-                  disabled={sending || uploadingVoice}
+                  onClick={clearVoiceLocal}
+                  disabled={sending}
                   className="px-3 py-2 text-sm text-gray-500 hover:text-red-600 disabled:opacity-50"
                 >
                   Remove
                 </button>
               )}
-              {uploadingVoice && <span className="text-xs text-gray-400">Uploading…</span>}
-              {voiceNoteUrl && !uploadingVoice && (
-                <span className="text-xs text-green-600">Attached</span>
+              {hasVoice && !recording && (
+                <span className="text-xs text-green-600">Ready to attach</span>
               )}
             </div>
             {voicePreviewUrl && (
@@ -435,7 +416,7 @@ export const SupportPage: React.FC = () => {
             </a>
             <button
               type="submit"
-              disabled={sending || recording || uploadingVoice}
+              disabled={sending || recording}
               className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium disabled:opacity-50"
             >
               {sending ? 'Sending…' : 'Submit ticket'}
@@ -445,8 +426,7 @@ export const SupportPage: React.FC = () => {
       </div>
 
       <p className="text-xs text-gray-400 leading-relaxed">
-        Tip: add an optional voice note for quicker context, or describe screenshots in the details.
-        Limit: a few tickets per hour per shop.
+        Tip: send a voice note alone, or add written details. Limit: a few tickets per hour per shop.
       </p>
     </div>
   )

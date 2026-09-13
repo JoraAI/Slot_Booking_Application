@@ -120,31 +120,31 @@ test('POST /owner/support emails admin with Reply-To owner and shop context', as
   assert.equal(sentArgs.businessSlug, business.slug);
   assert.equal(sentArgs.shopPublicCode, business.publicCode);
   assert.equal(sentArgs.ownerEmail, ownerEmail);
+  assert.equal(sentArgs.voiceAttachment, null);
 });
 
-test('POST /owner/support accepts optional voice note URL for owned audio', async () => {
+test('POST /owner/support accepts voice-only ticket as email attachment', async () => {
   const ownerEmail = 'owner@support-test.com';
-  const audio = Buffer.from('fake-webm-audio-bytes');
-  const asset = await prisma.mediaAsset.create({
-    data: {
-      businessId: business.id,
-      mimeType: 'audio/webm',
-      byteSize: audio.length,
-      data: audio,
-    },
-  });
+  // Minimal EBML/WebM-looking header so sniffAudioMime accepts it.
+  const audio = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
   const res = await req('POST', '/owner/support', {
     headers: { Authorization: `Bearer ${tokenFor(ownerEmail)}` },
     body: {
       category: 'bug',
-      subject: 'Voice note ticket',
-      message: 'Please listen to the attached voice note for details.',
-      voiceNoteUrl: `/api/media/${asset.id}`,
+      subject: '',
+      message: '',
+      voiceNoteBase64: audio.toString('base64'),
+      voiceNoteMimeType: 'audio/webm',
     },
   });
   assert.equal(res.status, 200, res.json?.error || 'expected 200');
   assert.ok(sentArgs);
-  assert.match(String(sentArgs.voiceNoteUrl || ''), new RegExp(asset.id));
+  assert.equal(sentArgs.subject, 'Voice support note');
+  assert.ok(sentArgs.voiceAttachment);
+  assert.equal(sentArgs.voiceAttachment.contentType, 'audio/webm');
+  assert.equal(sentArgs.voiceAttachment.filename, 'support-voice-note.webm');
+  assert.ok(Buffer.isBuffer(sentArgs.voiceAttachment.content));
+  assert.equal(sentArgs.voiceAttachment.content.length, audio.length);
 });
 
 test('POST /owner/support rate-limits excessive tickets', async () => {
