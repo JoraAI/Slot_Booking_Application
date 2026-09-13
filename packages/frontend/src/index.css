@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #7C3AED;
-  --color-primary-light: #EDE9FE;
-  --color-primary-dark: #5B21B6;
+  --color-primary: #1780A8;
+  --color-primary-light: #E6F5FB;
+  --color-primary-dark: #0D5A75;
   --color-surface: #FFFFFF;
   --color-surface-2: #F9FAFB;
   --color-border: #E5E7EB;
@@ -29,7 +29,7 @@
     --color-border: #374151;
     --color-text-primary: #F9FAFB;
     --color-text-secondary: #9CA3AF;
-    --color-primary-light: #2E1065;
+    --color-primary-light: #0A3D52;
   }
 }
 

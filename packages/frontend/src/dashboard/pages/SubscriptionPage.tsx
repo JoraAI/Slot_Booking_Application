@@ -24,7 +24,7 @@ const PLAN_INFO: Record<Plan, { title: string; price: string; desc: string; feat
   COMMISSION: {
     title: 'Commission',
     price: '5% per booking',
-    desc: 'Pay a small percentage on each booking — ideal for businesses just starting out.',
+    desc: 'Pay a small percentage on each booking - ideal for businesses just starting out.',
     features: [
       'Unlimited bookings',
       '5% commission on all bookings (incl. cancelled)',
@@ -35,7 +35,7 @@ const PLAN_INFO: Record<Plan, { title: string; price: string; desc: string; feat
   MONTHLY_799: {
     title: 'Monthly',
     price: '₹799 / month',
-    desc: 'Fixed monthly fee with zero commission — great for growing salons.',
+    desc: 'Fixed monthly fee with zero commission - great for growing salons.',
     features: [
       'Unlimited bookings',
       'Zero commission',
@@ -46,7 +46,7 @@ const PLAN_INFO: Record<Plan, { title: string; price: string; desc: string; feat
   YEARLY_799: {
     title: 'Yearly',
     price: '₹9,588 / year',
-    desc: 'Best value — pay yearly and save. Same benefits as monthly.',
+    desc: 'Best value - pay yearly and save. Same benefits as monthly.',
     features: [
       'Unlimited bookings',
       'Zero commission',
@@ -88,9 +88,9 @@ export const SubscriptionPage: React.FC = () => {
           })
         : null
       if (ends && next.dueInr === 0) {
-        toast.success(`Switched plan — paid through ${ends}`)
+        toast.success(`Switched plan - paid through ${ends}`)
       } else if (ends) {
-        toast.success(`Switched plan — cycle ends ${ends}`)
+        toast.success(`Switched plan - cycle ends ${ends}`)
       } else {
         toast.success('Plan selected')
       }
@@ -106,7 +106,7 @@ export const SubscriptionPage: React.FC = () => {
     try {
       const res = await api.createSubscriptionPayment()
       if (res.alreadyPaid) {
-        toast.success('Already paid — subscription is active!')
+        toast.success('Already paid - subscription is active!')
         await refresh()
         return
       }
@@ -120,7 +120,7 @@ export const SubscriptionPage: React.FC = () => {
         amount: res.amountPaise,
         currency: res.currency || 'INR',
         name: 'Jora Reservly',
-        description: `Subscription — ${res.plan}`,
+        description: `Subscription - ${res.plan}`,
         order_id: res.orderId,
         handler: async (response: any) => {
           try {
@@ -136,7 +136,7 @@ export const SubscriptionPage: React.FC = () => {
                   year: 'numeric',
                 })
               : null
-            toast.success(ends ? `Payment verified — cycle ends ${ends}` : 'Payment verified — subscription activated!')
+            toast.success(ends ? `Payment verified - cycle ends ${ends}` : 'Payment verified - subscription activated!')
             await refresh()
           } catch (e: any) {
             toast.error(e.message || 'Payment verification failed')
@@ -211,7 +211,7 @@ export const SubscriptionPage: React.FC = () => {
                       month: 'short',
                       year: 'numeric',
                     })
-                  : '—'}
+                  : ' - '}
               </p>
               {view.isActive && view.dueInr === 0 && (
                 <p className="text-xs text-green-600 mt-1">Paid through this cycle</p>
@@ -280,7 +280,7 @@ export const SubscriptionPage: React.FC = () => {
       <p className="text-xs text-gray-400">
         Payments are securely processed via Razorpay. Commission is calculated on all bookings for the current month.
         Switching plans keeps any remaining paid period (cycle end date). If payment is overdue, booking services are
-        paused until payment is completed — you still have full access to the dashboard.
+        paused until payment is completed - you still have full access to the dashboard.
       </p>
     </div>
   )

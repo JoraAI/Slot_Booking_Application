@@ -280,7 +280,7 @@ export const StepRouter: React.FC = () => {
     <div className="relative max-w-md mx-auto p-6 space-y-6">
       <BusyOverlay show={submitting} message="Confirming your booking…" />
 
-      {/* Branding header — cover shows here only in embed (standalone uses full-bleed above). */}
+      {/* Branding header - cover shows here only in embed (standalone uses full-bleed above). */}
       <div className="text-center pt-2">
         {isEmbedded && config.business.branding.coverImageUrl && (
           <div className="mb-4 -mx-6 sm:mx-0 overflow-hidden sm:rounded-xl">

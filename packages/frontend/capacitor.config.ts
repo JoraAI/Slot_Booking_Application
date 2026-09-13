@@ -30,6 +30,10 @@ const config: CapacitorConfig = {
       style: 'LIGHT',
       backgroundColor: '#ffffff',
     },
+    Media: {
+      // App albums only - no READ_MEDIA_* / Photos permission required to save QR PNGs.
+      androidGalleryMode: false,
+    },
   },
 }
 

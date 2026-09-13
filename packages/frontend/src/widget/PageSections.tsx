@@ -16,7 +16,7 @@ const SECTION_ICONS: Record<PageSectionType, string> = {
 
 /**
  * Renders the owner-configured PageSections for the standalone public booking
- * page. Embed mode (compact booking-only iframe) intentionally omits this —
+ * page. Embed mode (compact booking-only iframe) intentionally omits this  - 
  * see App.tsx, which gates it with `useEmbedMode()`.
  */
 export const PageSections: React.FC<{
@@ -135,7 +135,7 @@ function PageSectionBlock({ section, services, workingHours, location }: {
               <div key={d} className="flex justify-between">
                 <span className={wh?.isOpen === false ? 'text-gray-400 line-through' : ''}>{d}</span>
                 <span className="text-gray-600 dark:text-gray-300">
-                  {wh?.isOpen === false ? 'Closed' : `${wh?.openTime || '09:00'} – ${wh?.closeTime || '18:00'}`}
+                  {wh?.isOpen === false ? 'Closed' : `${wh?.openTime || '09:00'} - ${wh?.closeTime || '18:00'}`}
                 </span>
               </div>
             )

@@ -100,9 +100,9 @@ export const DashboardLayout: React.FC = () => {
       <aside className={`fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex shrink-0 items-center gap-2.5 px-5 py-4 border-b border-gray-200 dark:border-gray-800 safe-top">
           <img
-            src="/brand/jora-reservly-mark-white.png"
+            src="/brand/jora-reservly-mark.png"
             alt=""
-            className="h-9 w-9 object-contain rounded-lg bg-white"
+            className="h-8 w-auto max-w-[32px] object-contain object-left shrink-0"
           />
           <div className="min-w-0 leading-tight">
             <p className="font-bold text-[15px] truncate">Jora Reservly</p>

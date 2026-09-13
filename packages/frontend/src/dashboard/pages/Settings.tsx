@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import { MediaUploadButton } from '../components/MediaUploadButton'
+import { PasswordInput } from '../components/PasswordInput'
 import { geoFailureMessage, geolocationAvailable, mapPositionError, secureContextAvailable } from '../geolocation'
 import { getCurrentPositionCoords, isNativePlatform, openExternalUrl } from '../../lib/native'
 import toast from 'react-hot-toast'
@@ -70,7 +71,7 @@ export const Settings: React.FC = () => {
     name: config?.name || '',
     description: config?.description || '',
     timezone: config?.timezone || 'Asia/Kolkata',
-    primaryColor: config?.primaryColor || '#7C3AED',
+    primaryColor: config?.primaryColor || '#1780A8',
     secondaryColor: config?.secondaryColor || '',
     accentColor: config?.accentColor || '',
     logoUrl: config?.logoUrl || '',
@@ -127,7 +128,7 @@ export const Settings: React.FC = () => {
         name: config.name || '',
         description: config.description || '',
         timezone: config.timezone || 'Asia/Kolkata',
-        primaryColor: config.primaryColor || '#7C3AED',
+        primaryColor: config.primaryColor || '#1780A8',
         secondaryColor: config.secondaryColor || '',
         accentColor: config.accentColor || '',
         logoUrl: config.logoUrl || '',
@@ -333,7 +334,7 @@ export const Settings: React.FC = () => {
       .catch(() => setWaStatus(null))
   }, [])
 
-  // Batch 4 — fill lat/lng from the browser when the owner is at the salon.
+  // Batch 4 - fill lat/lng from the browser when the owner is at the salon.
   // Geolocation requires a secure context (HTTPS or localhost) + permission.
   const useMyLocation = () => {
     setGeoError('')
@@ -446,7 +447,7 @@ export const Settings: React.FC = () => {
       await api.setOwnerPassword(newPasswordForm.newPassword)
       setNewPasswordForm({ newPassword: '', confirmPassword: '' })
       if (config) setConfig({ ...(config as any), passwordSet: true } as any)
-      toast.success('Password set — you can now sign in with email + password too')
+      toast.success('Password set - you can now sign in with email + password too')
     } catch (err: any) {
       toast.error(err.message || 'Could not set password')
     } finally {
@@ -541,13 +542,13 @@ export const Settings: React.FC = () => {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">New password</label>
-              <input type="password" value={newPasswordForm.newPassword} autoComplete="new-password"
+              <PasswordInput value={newPasswordForm.newPassword} autoComplete="new-password"
                 onChange={(e) => setNewPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Confirm new password</label>
-              <input type="password" value={newPasswordForm.confirmPassword} autoComplete="new-password"
+              <PasswordInput value={newPasswordForm.confirmPassword} autoComplete="new-password"
                 onChange={(e) => setNewPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
@@ -556,19 +557,19 @@ export const Settings: React.FC = () => {
           <div className="grid sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Current password</label>
-              <input type="password" value={passwordForm.currentPassword} autoComplete="current-password"
+              <PasswordInput value={passwordForm.currentPassword} autoComplete="current-password"
                 onChange={(e) => setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">New password</label>
-              <input type="password" value={passwordForm.newPassword} autoComplete="new-password"
+              <PasswordInput value={passwordForm.newPassword} autoComplete="new-password"
                 onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Confirm new password</label>
-              <input type="password" value={passwordForm.confirmPassword} autoComplete="new-password"
+              <PasswordInput value={passwordForm.confirmPassword} autoComplete="new-password"
                 onChange={(e) => setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             </div>
@@ -593,7 +594,7 @@ export const Settings: React.FC = () => {
             <h2 className="text-lg font-semibold">Team</h2>
             <p className="text-sm text-gray-500">
               Invite managers for day-to-day ops on selected shops. Managers cannot change subscription, Razorpay secrets, or WhatsApp wallet.
-              Share temporary passwords securely — there is no email invite link yet.
+              Share temporary passwords securely - there is no email invite link yet.
             </p>
           </div>
 
@@ -686,8 +687,7 @@ export const Settings: React.FC = () => {
                     {resetPasswordFor === m.userId && (
                       <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
                         <label className="block text-xs font-medium text-gray-500">New temporary password</label>
-                        <input
-                          type="password"
+                        <PasswordInput
                           value={resetPasswordValue}
                           onChange={(e) => setResetPasswordValue(e.target.value)}
                           autoComplete="new-password"
@@ -730,8 +730,7 @@ export const Settings: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Temporary password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={inviteForm.temporaryPassword}
                   onChange={(e) => setInviteForm((p) => ({ ...p, temporaryPassword: e.target.value }))}
                   autoComplete="new-password"
@@ -740,8 +739,7 @@ export const Settings: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Confirm password</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={inviteForm.confirmPassword}
                   onChange={(e) => setInviteForm((p) => ({ ...p, confirmPassword: e.target.value }))}
                   autoComplete="new-password"
@@ -800,7 +798,7 @@ export const Settings: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold">Email & WhatsApp delivery</h2>
             <p className="text-sm text-gray-500">
-              Connect a Gmail (or similar) mailbox to email customers. WhatsApp uses Reservly’s shared number —
+              Connect a Gmail (or similar) mailbox to email customers. WhatsApp uses Reservly’s shared number  - 
               enable it below and keep wallet credits topped up. Mailbox passwords are encrypted and never shown again.
             </p>
           </div>
@@ -829,7 +827,7 @@ export const Settings: React.FC = () => {
               {waStatus?.wallet && (
                 <p className="text-gray-500 mt-1">
                   Wallet: ₹{(waStatus.wallet.balancePaise / 100).toFixed(2)}
-                  {waStatus.wallet.lowBalance ? ' · low balance — top up soon' : ''}
+                  {waStatus.wallet.lowBalance ? ' · low balance - top up soon' : ''}
                   {waStatus.wallet.estimatedMessages != null ? ` · ≈ ${waStatus.wallet.estimatedMessages} messages left` : ''}
                 </p>
               )}
@@ -893,7 +891,7 @@ export const Settings: React.FC = () => {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Email password</label>
-            <input type="password" value={form.smtpPass} onChange={(e) => setForm(p => ({ ...p, smtpPass: e.target.value, clearSmtpPass: false }))}
+            <PasswordInput value={form.smtpPass} onChange={(e) => setForm(p => ({ ...p, smtpPass: e.target.value, clearSmtpPass: false }))}
               placeholder={config?.smtpPassConfigured ? '•••••••• (leave blank to keep)' : 'Gmail App Password'}
               autoComplete="new-password"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
@@ -903,7 +901,7 @@ export const Settings: React.FC = () => {
               <a className="text-primary underline" href="https://support.google.com/accounts/answer/185833" target="_blank" rel="noopener noreferrer">
                 App Password
               </a>
-              — not your normal login password.
+              - not your normal login password.
               {config?.smtpPassConfigured && (
                 <button type="button" className="ml-1 text-red-600 underline" onClick={() => setForm(p => ({ ...p, smtpPass: '', clearSmtpPass: true }))}>
                   Remove saved password
@@ -970,7 +968,7 @@ export const Settings: React.FC = () => {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
           <h2 className="text-lg font-semibold">Payment Settings</h2>
           <p className="text-xs text-gray-500 leading-relaxed">
-            UPI payments run through <strong>your own Razorpay account</strong> — connect the Key ID/Secret
+            UPI payments run through <strong>your own Razorpay account</strong> - connect the Key ID/Secret
             below. Customers pay with installed UPI apps (Google Pay, PhonePe, Paytm) on mobile; money
             settles to the bank account linked in your Razorpay dashboard. Cancellations automatically
             refund what was collected back to the customer's original payment method.
@@ -1000,7 +998,7 @@ export const Settings: React.FC = () => {
             </div>
           )}
           <p className="text-xs text-gray-400 -mt-1">
-            Choose exactly one of a fixed amount or a percentage (1–100). Saving both is rejected.
+            Choose exactly one of a fixed amount or a percentage (1-100). Saving both is rejected.
           </p>
           <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
             <div>
@@ -1024,10 +1022,10 @@ export const Settings: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Razorpay Key Secret</label>
                 <p className="text-xs text-gray-500 mb-2">
-                  {config?.razorpayKeySecretConfigured ? '✓ Configured (write-only — the value is never shown)' : 'Not configured.'}{' '}
+                  {config?.razorpayKeySecretConfigured ? '✓ Configured (write-only - the value is never shown)' : 'Not configured.'}{' '}
                   Enter a new value to set or replace it. Leave blank to keep the current secret.
                 </p>
-                <input type="password" value={form.razorpayKeySecret || ''} onChange={(e) => setForm(p => ({ ...p, razorpayKeySecret: e.target.value }))}
+                <PasswordInput value={form.razorpayKeySecret || ''} onChange={(e) => setForm(p => ({ ...p, razorpayKeySecret: e.target.value }))}
                   placeholder="Only set to write a new secret"
                   autoComplete="new-password"
                   className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 font-mono" />
@@ -1264,7 +1262,7 @@ export const Settings: React.FC = () => {
           <div className="space-y-3">
             <p className={`text-xs ${providerStatus?.smtpConfigured ? 'text-green-600' : 'text-amber-600'}`}>
               {providerStatus?.smtpConfigured
-                ? '✓ Email is ready — verification codes can be sent'
+                ? '✓ Email is ready - verification codes can be sent'
                 : '⚠ Add your email address and password above first'}
             </p>
             {!providerStatus?.smtpConfigured && (

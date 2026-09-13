@@ -67,8 +67,8 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Reservly uses your location so you can pin your salon on the map in Settings.</string>
+	<string>Jora Reservly uses your location so you can pin your business on the map in Settings.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Reservly saves your booking QR code as a PNG image to your photo library.</string>
+	<string>Jora Reservly saves your booking QR code as a PNG image to your photo library.</string>
 </dict>
 </plist>

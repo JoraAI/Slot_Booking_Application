@@ -141,7 +141,7 @@ export const ServicesPage: React.FC = () => {
     const tagged = services.filter((s) => s.categoryId === cat.id).length
     if (tagged > 0) {
       toast.error(
-        `Cannot delete “${cat.name}” — ${tagged} service${tagged === 1 ? ' is' : 's are'} tagged to it (active or inactive). Reassign them first.`
+        `Cannot delete “${cat.name}” - ${tagged} service${tagged === 1 ? ' is' : 's are'} tagged to it (active or inactive). Reassign them first.`
       )
       return
     }

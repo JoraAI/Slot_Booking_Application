@@ -1,5 +1,5 @@
 /**
- * Platform helpers for QR PNG save — kept free of React for unit tests.
+ * Platform helpers for QR PNG save - kept free of React for unit tests.
  */
 
 import { Capacitor } from '@capacitor/core'

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
+import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { Media } from '@capacitor-community/media'
@@ -45,21 +46,50 @@ async function blobToBase64(blob: Blob): Promise<string> {
   })
 }
 
-/** Resolve or create the Reservly album (Android MediaStore needs an album id). */
-async function resolveQrAlbumId(): Promise<string | undefined> {
-  const { albums } = await Media.getAlbums()
-  const existing = albums.find((a) => a.name === QR_GALLERY_ALBUM)
-  if (existing?.identifier) return existing.identifier
+/** Resolve or create the Jora Reservly album used for QR PNGs. */
+async function resolveQrAlbumId(): Promise<string> {
+  const platform = Capacitor.getPlatform()
+  let albumsRoot: string | undefined
+  if (platform === 'android') {
+    try {
+      const { path } = await Media.getAlbumsPath()
+      albumsRoot = path
+    } catch {
+      albumsRoot = undefined
+    }
+  }
 
-  await Media.createAlbum({ name: QR_GALLERY_ALBUM })
-  const refreshed = await Media.getAlbums()
-  return refreshed.albums.find((a) => a.name === QR_GALLERY_ALBUM)?.identifier
+  const pick = (albums: { name: string; identifier: string }[]): string | undefined => {
+    const named = albums.filter((a) => a.name === QR_GALLERY_ALBUM)
+    if (albumsRoot) {
+      const underRoot = named.find((a) => a.identifier.startsWith(albumsRoot))
+      if (underRoot?.identifier) return underRoot.identifier
+    }
+    return named[0]?.identifier
+  }
+
+  let { albums } = await Media.getAlbums()
+  let identifier = pick(albums)
+  if (identifier) return identifier
+
+  try {
+    await Media.createAlbum({ name: QR_GALLERY_ALBUM })
+  } catch {
+    // Album may already exist (plugin rejects duplicates on Android).
+  }
+
+  ;({ albums } = await Media.getAlbums())
+  identifier = pick(albums)
+  if (!identifier) {
+    throw new Error('Could not create gallery album for QR PNG')
+  }
+  return identifier
 }
 
 /**
- * Native Android/iOS: save a real PNG into Photos/Gallery.
- * No storage permission at app launch — iOS may prompt once to allow adding photos.
- * Share sheet is only a fallback (avoid Print → PDF).
+ * Native Android/iOS: save a real PNG into Photos/Gallery (app album).
+ * Android uses non-gallery Media mode so no Photos permission is required.
+ * Share sheet is only a last-resort fallback.
  */
 async function savePngOnNativeApp(blob: Blob, fileName: string): Promise<'gallery' | 'share'> {
   const base64 = await blobToBase64(blob)
@@ -71,7 +101,7 @@ async function savePngOnNativeApp(blob: Blob, fileName: string): Promise<'galler
     await Media.savePhoto({
       path: dataUrl,
       fileName: stem,
-      ...(albumIdentifier ? { albumIdentifier } : {}),
+      albumIdentifier,
     })
     return 'gallery'
   } catch (galleryErr) {
@@ -202,8 +232,8 @@ export const QRCodePage: React.FC = () => {
         const mode = await savePngOnNativeApp(blob, fileName)
         toast.success(
           mode === 'gallery'
-            ? 'QR PNG saved to Photos / Gallery'
-            : 'Choose Save Image / Save to Files — not Print (Print makes a PDF)',
+            ? 'QR PNG saved to Gallery (Jora Reservly album)'
+            : 'Choose Save Image / Save to Files - not Print (Print makes a PDF)',
         )
       } catch (err: any) {
         if (
@@ -242,7 +272,7 @@ export const QRCodePage: React.FC = () => {
           await navigator.share(payload)
 
           toast.success(
-            'Use Save Image / Save to Files — not Print (Print makes a PDF)',
+            'Use Save Image / Save to Files - not Print (Print makes a PDF)',
           )
 
           return
@@ -368,15 +398,15 @@ export const QRCodePage: React.FC = () => {
           </li>
 
           <li>
-            <strong>App (Android/iOS):</strong> Save PNG stores an image
-            in Photos / Gallery — not a PDF.
+            <strong>App (Android/iOS):</strong> Save PNG stores the image in your
+            Gallery under the <strong>Jora Reservly</strong> album (no Photos permission on Android).
           </li>
           <li>
             <strong>Web:</strong> downloads a <strong>.png</strong> file.
           </li>
           <li>
             If a share sheet appears, choose <strong>Save Image</strong> /
-            Files — avoid <strong>Print</strong> (that creates a PDF).
+            Files - avoid <strong>Print</strong> (that creates a PDF).
           </li>
         </ul>
       </div>

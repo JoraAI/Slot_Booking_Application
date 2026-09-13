@@ -43,7 +43,7 @@ export const SupportPage: React.FC = () => {
       setSubject('')
       setMessage('')
       setCategory('bug')
-      toast.success('Ticket sent — we will reply by email')
+      toast.success('Ticket sent - we will reply by email')
     } catch (err: any) {
       toast.error(err?.message || 'Could not send ticket')
     } finally {

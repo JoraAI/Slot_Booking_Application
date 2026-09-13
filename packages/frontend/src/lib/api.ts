@@ -6,8 +6,8 @@ import { isNativePlatform, openHtmlDocument } from './native'
 // - Local development / single-service deploys: relative `/api` (vite proxies it).
 // - Vercel static + external Node API: set VITE_API_BASE_URL to the API origin
 //   (e.g. https://reservly-api.onrender.com) OR origin + `/api`. Never put secrets
-//   in VITE_* — these vars are exposed to the browser at build time.
-// - Android/iOS (Capacitor): always set VITE_API_BASE_URL — there is no Vite proxy
+//   in VITE_* - these vars are exposed to the browser at build time.
+// - Android/iOS (Capacitor): always set VITE_API_BASE_URL - there is no Vite proxy
 //   and relative `/api` would hit the local WebView host.
 function resolveApiBase(): string {
   const raw = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
@@ -19,7 +19,7 @@ function resolveApiBase(): string {
     return '/api'
   }
   // Same-origin `/api` is always correct on web: Vite proxies it in dev, Vercel
-  // rewrites it to the Render API in production. Do not collapse on native —
+  // rewrites it to the Render API in production. Do not collapse on native  - 
   // Capacitor's origin is https://localhost, not the API host.
   try {
     const resolved = raw.endsWith('/api') ? raw : `${raw}/api`

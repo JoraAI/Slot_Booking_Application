@@ -366,9 +366,9 @@ export const InvoicesPage: React.FC = () => {
                     <td className="px-4 py-3 font-medium">{inv.invoiceNumber}</td>
                     <td className="px-4 py-3">
                       <div>{inv.customerName}</div>
-                      {!hasContact(inv) && <div className="text-xs text-gray-400">No email/phone — download only</div>}
+                      {!hasContact(inv) && <div className="text-xs text-gray-400">No email/phone - download only</div>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{inv.staffName || '—'}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{inv.staffName || ' - '}</td>
                     <td className="px-4 py-3">{SOURCE_LABELS[inv.source] || inv.source}</td>
                     <td className="px-4 py-3">₹{inv.total.toLocaleString('en-IN')}</td>
                     <td className="px-4 py-3">{new Date(inv.issuedAt).toLocaleDateString('en-IN')}</td>
@@ -391,7 +391,7 @@ export const InvoicesPage: React.FC = () => {
                 </div>
                 <p className="text-xs text-gray-500">{SOURCE_LABELS[inv.source] || inv.source} · {new Date(inv.issuedAt).toLocaleDateString('en-IN')}</p>
                 {inv.staffName && <p className="text-xs text-gray-500">Staff: {inv.staffName}</p>}
-                {!hasContact(inv) && <p className="text-xs text-gray-400">No email/phone — download only</p>}
+                {!hasContact(inv) && <p className="text-xs text-gray-400">No email/phone - download only</p>}
                 {actionButtons(inv)}
               </div>
             ))}
@@ -435,7 +435,7 @@ export const InvoicesPage: React.FC = () => {
                     ))}
                   </select>
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Optional — used for month-end staff collections and commission in Analytics.
+                    Optional - used for month-end staff collections and commission in Analytics.
                   </p>
                 </div>
               )}

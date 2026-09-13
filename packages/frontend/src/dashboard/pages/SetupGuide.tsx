@@ -34,7 +34,7 @@ export const SetupGuide: React.FC = () => (
         </li>
         <li>
           <strong>Earliest booking (hours from now)</strong> is the minimum notice. If you set 4, a customer
-          cannot take a slot in the next 4 hours — they start seeing slots after that. 0 lets them book
+          cannot take a slot in the next 4 hours - they start seeing slots after that. 0 lets them book
           any remaining slot today.
         </li>
         <li>Save All. The public booking page hides too-soon slots automatically.</li>

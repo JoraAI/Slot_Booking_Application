@@ -91,7 +91,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
               onClick={() => onSelectDate(availability.nextAvailable as string)}
               className="w-full text-sm text-primary hover:underline text-left"
             >
-              No slots this day — next available: {availability.nextAvailable}. Tap to jump →
+              No slots this day - next available: {availability.nextAvailable}. Tap to jump →
             </button>
           )}
         </div>

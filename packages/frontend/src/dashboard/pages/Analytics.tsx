@@ -426,7 +426,7 @@ export const Analytics: React.FC = () => {
                         return (
                           <div
                             key={h}
-                            title={`${day} ${key} — ${count} bookings`}
+                            title={`${day} ${key} - ${count} bookings`}
                             className="aspect-square rounded-sm"
                             style={{ backgroundColor: count ? `rgba(124,58,237,${intensity})` : 'rgb(243 244 246)' }}
                           />
@@ -468,7 +468,7 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
 
-          {/* Services & sources — always useful for booking ops; revenue column is service collections */}
+          {/* Services & sources - always useful for booking ops; revenue column is service collections */}
           {(collectionFocus === 'all' || collectionFocus === 'services') && (
           <div className="grid lg:grid-cols-2 gap-4">
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
@@ -503,7 +503,7 @@ export const Analytics: React.FC = () => {
           </div>
           )}
 
-          {/* Product sales — shown for All; Products focus already has a compact list above */}
+          {/* Product sales - shown for All; Products focus already has a compact list above */}
           {(collectionFocus === 'all') && (
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 sm:p-6 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
