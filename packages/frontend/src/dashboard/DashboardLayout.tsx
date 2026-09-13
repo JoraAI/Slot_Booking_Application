@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { FeatureGate } from '../widget/FeatureGate'
 import { JoraPoweredBy } from '../components/JoraPoweredBy'
 
@@ -38,24 +38,47 @@ export const DashboardLayout: React.FC = () => {
   const [newShopName, setNewShopName] = useState('')
   const [copyCatalog, setCopyCatalog] = useState(false)
   const [copyFromShopId, setCopyFromShopId] = useState('')
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [loadingSession, setLoadingSession] = useState(!config)
 
-  // Fetch business config on mount so all dashboard pages have access
-  useEffect(() => {
-    if (!config) {
-      api.getOwnerMe().then(setConfig).catch(() => {
-        // If fetch fails (e.g. token expired), redirect to login
-        api.setToken(null)
-        setIsAuthenticated(false)
-        navigate('/login')
-      })
-    }
-  }, [])
-
-  const handleLogout = () => {
+  const forceLogout = useCallback(() => {
     api.setToken(null)
     setIsAuthenticated(false)
     setConfig(null as any)
     navigate('/login')
+  }, [navigate, setConfig, setIsAuthenticated])
+
+  const loadSession = useCallback(async () => {
+    setLoadingSession(true)
+    setSessionError(null)
+    try {
+      const me = await api.getOwnerMe()
+      setConfig(me)
+      setSessionError(null)
+    } catch (err) {
+      // Network / cold-start / 5xx must NOT wipe the stored token — that caused
+      // repeated Android logouts when the API was briefly unreachable.
+      if (err instanceof ApiError && err.status === 401) {
+        forceLogout()
+        return
+      }
+      const message = err instanceof Error ? err.message : 'Could not load your shop'
+      setSessionError(message)
+    } finally {
+      setLoadingSession(false)
+    }
+  }, [forceLogout, setConfig])
+
+  // Fetch business config on mount so all dashboard pages have access
+  useEffect(() => {
+    if (!config) void loadSession()
+    else setLoadingSession(false)
+    // Mount-only: avoid re-fetch loops when config is set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleLogout = () => {
+    forceLogout()
   }
 
   const handleSwitchShop = async (businessId: string) => {
@@ -238,7 +261,39 @@ export const DashboardLayout: React.FC = () => {
             ☰
           </button>
           <div className="flex-1">
-            <Outlet />
+            {!config && loadingSession ? (
+              <div className="space-y-3 max-w-md">
+                <div className="skeleton h-8 w-48" />
+                <div className="skeleton h-24 w-full" />
+                <p className="text-sm text-gray-500">Loading your shop…</p>
+              </div>
+            ) : !config && sessionError ? (
+              <div className="max-w-md space-y-3 bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 rounded-xl p-5">
+                <h2 className="font-semibold text-lg">Couldn’t reach the server</h2>
+                <p className="text-sm text-gray-500">
+                  You’re still signed in. This is usually a temporary network or server delay — try again in a moment.
+                </p>
+                <p className="text-xs text-gray-400 break-words">{sessionError}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void loadSession()}
+                    className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </div>
           <JoraPoweredBy />
         </div>

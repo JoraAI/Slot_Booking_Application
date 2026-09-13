@@ -37,17 +37,36 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [resendCountdown, setResendCountdown] = useState(0)
   const googleBtnRef = useRef<HTMLDivElement>(null)
-  const { setConfig, setIsAuthenticated } = useStore()
+  const { setConfig, setIsAuthenticated, isAuthenticated } = useStore()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    if (isAuthenticated && api.getToken()) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
   const afterAuth = async (token: string) => {
-    api.setToken(token)
-    try {
-      const config = await api.getOwnerMe()
-      setConfig(config)
-    } catch { /* non-critical; DashboardLayout retries */ }
+    await api.setTokenPersisted(token)
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const config = await api.getOwnerMe()
+        setConfig(config)
+        setIsAuthenticated(true)
+        navigate('/dashboard')
+        return
+      } catch (err) {
+        lastError = err
+        // Brief backoff helps when the API is cold-starting (common on mobile).
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
+      }
+    }
+    // Keep the token even if profile load failed — dashboard will retry without logging out.
     setIsAuthenticated(true)
     navigate('/dashboard')
+    const message = lastError instanceof Error ? lastError.message : 'Signed in, but shop data is still loading'
+    toast.error(message)
   }
 
   // Google Identity Services - Sign In and Create Business (email step).
