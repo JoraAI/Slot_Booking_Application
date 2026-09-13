@@ -1,4 +1,4 @@
-package tech.staffingpros.reservly;
+package ai.jora.reservly;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -119,7 +119,7 @@ export const SubscriptionPage: React.FC = () => {
         key: res.keyId,
         amount: res.amountPaise,
         currency: res.currency || 'INR',
-        name: 'Reservly',
+        name: 'Jora Reservly',
         description: `Subscription — ${res.plan}`,
         order_id: res.orderId,
         handler: async (response: any) => {

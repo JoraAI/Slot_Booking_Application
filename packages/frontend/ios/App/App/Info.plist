@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Reservly</string>
+	<string>Jora Reservly</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -68,5 +68,7 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Reservly uses your location so you can pin your salon on the map in Settings.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Reservly saves your booking QR code as a PNG image to your photo library.</string>
 </dict>
 </plist>

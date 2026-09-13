@@ -8,9 +8,12 @@ import { NativeBackHandler } from './components/NativeBackHandler'
 import { hydrateOwnerToken } from './lib/tokenStorage'
 import { api } from './lib/api'
 import { useStore } from './store'
+import { configureNativeChrome } from './lib/nativeChrome'
 import './index.css'
 
 async function boot() {
+  await configureNativeChrome()
+
   const token = await hydrateOwnerToken()
   if (token) {
     api.setToken(token)

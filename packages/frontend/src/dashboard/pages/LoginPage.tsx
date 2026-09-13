@@ -212,18 +212,27 @@ export const LoginPage: React.FC = () => {
         : 'Choose a new password'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4 safe-top">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">R</div>
-          <h1 className="text-2xl font-bold">Reservly</h1>
+          <img
+            src="/brand/jora-reservly-full.png"
+            alt="Jora Reservly"
+            className="h-14 w-auto mx-auto mb-3 object-contain"
+          />
+          <h1 className="text-2xl font-bold tracking-tight">Jora Reservly</h1>
           <p className="text-sm text-gray-500 mt-1">
             {forgotOpen
               ? forgotTitle
               : mode === 'login'
-                ? (signupStep === 'details' ? signupTitle : 'Sign in to your dashboard')
+                ? (signupStep === 'details' ? signupTitle : 'Sign in to your owner dashboard')
                 : signupTitle}
           </p>
+          {!forgotOpen && mode === 'login' && signupStep !== 'details' && (
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              Manage bookings, invoices, staff, and your public booking page — powered by Jora AI.
+            </p>
+          )}
         </div>
 
         {!forgotOpen && (

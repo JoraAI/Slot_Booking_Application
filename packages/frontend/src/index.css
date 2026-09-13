@@ -39,6 +39,20 @@ body {
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Keep content clear of notches / punch-hole cameras (e.g. Oppo A79). */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.safe-top {
+  /* Extra top inset for fixed chrome on punch-hole OEMs when insets are reported. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 @keyframes shimmer {

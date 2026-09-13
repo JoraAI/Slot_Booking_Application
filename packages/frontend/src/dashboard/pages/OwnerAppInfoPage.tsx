@@ -3,12 +3,12 @@ import React from 'react'
 export const OwnerAppInfoPage: React.FC = () => {
   return (
     <div className="max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Reservly Owner App</h1>
+      <h1 className="text-2xl font-bold">Jora Reservly Owner App</h1>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-3">
-        <h2 className="text-lg font-semibold">About Reservly</h2>
+        <h2 className="text-lg font-semibold">About Jora Reservly</h2>
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Reservly helps salons and service businesses manage appointments, customer communication, reminders, staff schedules, and payments from one dashboard.
+          Jora Reservly helps salons and service businesses manage appointments, customer communication, reminders, staff schedules, and payments from one dashboard — powered by Jora AI.
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-300">
           The owner dashboard runs on the web and as a native Android / iOS app (Capacitor). Customer booking pages stay on the web for sharing and embeds.

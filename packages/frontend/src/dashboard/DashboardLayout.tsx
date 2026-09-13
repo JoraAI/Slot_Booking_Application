@@ -98,9 +98,16 @@ export const DashboardLayout: React.FC = () => {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex shrink-0 items-center gap-2 px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-sm">R</div>
-          <span className="font-bold text-lg">Reservly</span>
+        <div className="flex shrink-0 items-center gap-2.5 px-5 py-4 border-b border-gray-200 dark:border-gray-800 safe-top">
+          <img
+            src="/brand/jora-reservly-mark-white.png"
+            alt=""
+            className="h-9 w-9 object-contain rounded-lg bg-white"
+          />
+          <div className="min-w-0 leading-tight">
+            <p className="font-bold text-[15px] truncate">Jora Reservly</p>
+            <p className="text-[10px] text-gray-400 truncate">Powered by Jora AI</p>
+          </div>
         </div>
 
         {shops.length > 0 && (
@@ -177,7 +184,7 @@ export const DashboardLayout: React.FC = () => {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 overflow-y-auto">
-        <div className="p-4 lg:p-8 flex flex-col min-h-full">
+        <div className="p-4 lg:p-8 flex flex-col min-h-full safe-top">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden mb-4 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
             ☰
           </button>

@@ -8,8 +8,8 @@ import type { CapacitorConfig } from '@capacitor/cli'
  *   pnpm --filter frontend build:mobile
  */
 const config: CapacitorConfig = {
-  appId: 'tech.staffingpros.reservly',
-  appName: 'Reservly',
+  appId: 'ai.jora.reservly',
+  appName: 'Jora Reservly',
   webDir: 'dist',
   server: {
     // https scheme avoids cleartext/mixed-content issues talking to Render/Vercel APIs.
@@ -23,6 +23,13 @@ const config: CapacitorConfig = {
       '*.google.com',
       '*.gstatic.com',
     ],
+  },
+  plugins: {
+    StatusBar: {
+      overlaysWebView: false,
+      style: 'LIGHT',
+      backgroundColor: '#ffffff',
+    },
   },
 }
 
