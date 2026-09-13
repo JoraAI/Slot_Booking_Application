@@ -874,6 +874,24 @@ class ApiClient {
     })
   }
 
+  uploadAudio(data: { mimeType: string; dataBase64: string }) {
+    return this.request<{ url: string; publicId: string | null; mimeType?: string; byteSize?: number }>(
+      '/owner/media/upload-audio',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    )
+  }
+
+  deleteMedia(mediaIdOrUrl: string) {
+    const id = mediaIdOrUrl.includes('/api/media/')
+      ? (mediaIdOrUrl.match(/\/api\/media\/([a-zA-Z0-9_-]+)/)?.[1] || '')
+      : mediaIdOrUrl.trim()
+    if (!id) return Promise.reject(new Error('Media id required'))
+    return this.request<void>(`/owner/media/${id}`, { method: 'DELETE' })
+  }
+
   // ---------- QR ----------
 
   getQrInfo() {
@@ -884,6 +902,7 @@ class ApiClient {
     category: 'bug' | 'enhancement' | 'billing' | 'account' | 'other'
     subject: string
     message: string
+    voiceNoteUrl?: string | null
   }) {
     return this.request<{ ok: boolean; emailedTo: string }>('/owner/support', {
       method: 'POST',

@@ -122,6 +122,31 @@ test('POST /owner/support emails admin with Reply-To owner and shop context', as
   assert.equal(sentArgs.ownerEmail, ownerEmail);
 });
 
+test('POST /owner/support accepts optional voice note URL for owned audio', async () => {
+  const ownerEmail = 'owner@support-test.com';
+  const audio = Buffer.from('fake-webm-audio-bytes');
+  const asset = await prisma.mediaAsset.create({
+    data: {
+      businessId: business.id,
+      mimeType: 'audio/webm',
+      byteSize: audio.length,
+      data: audio,
+    },
+  });
+  const res = await req('POST', '/owner/support', {
+    headers: { Authorization: `Bearer ${tokenFor(ownerEmail)}` },
+    body: {
+      category: 'bug',
+      subject: 'Voice note ticket',
+      message: 'Please listen to the attached voice note for details.',
+      voiceNoteUrl: `/api/media/${asset.id}`,
+    },
+  });
+  assert.equal(res.status, 200, res.json?.error || 'expected 200');
+  assert.ok(sentArgs);
+  assert.match(String(sentArgs.voiceNoteUrl || ''), new RegExp(asset.id));
+});
+
 test('POST /owner/support rate-limits excessive tickets', async () => {
   const auth = { Authorization: `Bearer ${tokenFor()}` };
   const body = {

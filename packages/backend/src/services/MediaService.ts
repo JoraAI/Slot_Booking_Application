@@ -8,6 +8,8 @@ export const MEDIA_MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const MEDIA_MAX_STORED_BYTES = 80 * 1024;
 /** Invoice / document PDF cap (Gupshup fetches this URL). */
 export const MEDIA_MAX_DOCUMENT_BYTES = 500 * 1024;
+/** Support voice notes (webm/mp4/mpeg/ogg/wav). */
+export const MEDIA_MAX_AUDIO_BYTES = 2 * 1024 * 1024;
 /** Per salon — enough for service photos, cover, and invoice PDFs. */
 export const MEDIA_MAX_ASSETS = 100;
 /** Per salon — 8MB after compression. */
@@ -38,6 +40,55 @@ export function sniffImageMime(buf: Buffer): ImageMime | null {
 export function decodeImageBase64(dataBase64: string): Buffer {
   const raw = dataBase64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
   return Buffer.from(raw, 'base64');
+}
+
+/** Strip optional data-URL prefix (image/audio/etc) and decode base64. */
+export function decodeDataBase64(dataBase64: string): Buffer {
+  const raw = String(dataBase64 || '').replace(/^data:[^;]+;base64,/i, '');
+  return Buffer.from(raw, 'base64');
+}
+
+const AUDIO_MIMES = new Set([
+  'audio/webm',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/aac',
+]);
+
+export function normalizeAudioMime(mimeType: string | null | undefined): string | null {
+  const raw = String(mimeType || '').trim().toLowerCase().split(';')[0].trim();
+  if (!raw) return null;
+  if (AUDIO_MIMES.has(raw)) return raw === 'audio/x-wav' ? 'audio/wav' : raw;
+  // MediaRecorder often reports codecs in the type; keep the base type when allowed.
+  if (raw.startsWith('audio/webm')) return 'audio/webm';
+  if (raw.startsWith('audio/mp4')) return 'audio/mp4';
+  if (raw.startsWith('audio/ogg')) return 'audio/ogg';
+  return null;
+}
+
+/** Best-effort container sniff so we do not trust client Content-Type alone. */
+export function sniffAudioMime(buf: Buffer): string | null {
+  if (buf.length >= 4 && buf.toString('ascii', 0, 4) === 'OggS') return 'audio/ogg';
+  if (
+    buf.length >= 12 &&
+    buf.toString('ascii', 0, 4) === 'RIFF' &&
+    buf.toString('ascii', 8, 12) === 'WAVE'
+  ) {
+    return 'audio/wav';
+  }
+  // EBML (Matroska / WebM)
+  if (buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+    return 'audio/webm';
+  }
+  // ISO BMFF (mp4 / m4a)
+  if (buf.length >= 8 && buf.toString('ascii', 4, 8) === 'ftyp') return 'audio/mp4';
+  if (buf.length >= 3 && buf.toString('ascii', 0, 3) === 'ID3') return 'audio/mpeg';
+  // MPEG frame sync
+  if (buf.length >= 2 && buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return 'audio/mpeg';
+  return null;
 }
 
 export function publicMediaUrl(id: string, req?: Request): string {
@@ -96,7 +147,7 @@ export async function compressImage(bytes: Buffer): Promise<{ data: Buffer; mime
   return { data, mimeType: 'image/webp' };
 }
 
-async function assertMediaQuota(businessId: string, byteSize: number, kind: 'image' | 'document') {
+async function assertMediaQuota(businessId: string, byteSize: number, kind: 'image' | 'document' | 'audio') {
   const [perBusiness, platform] = await Promise.all([
     prisma.mediaAsset.aggregate({
       where: { businessId },
@@ -109,8 +160,9 @@ async function assertMediaQuota(businessId: string, byteSize: number, kind: 'ima
   ]);
 
   if (perBusiness._count._all >= MEDIA_MAX_ASSETS) {
+    const label = kind === 'image' ? 'Image' : kind === 'audio' ? 'Audio' : 'File';
     throw Object.assign(
-      new Error(`${kind === 'image' ? 'Image' : 'File'} limit reached (${MEDIA_MAX_ASSETS} per business)`),
+      new Error(`${label} limit reached (${MEDIA_MAX_ASSETS} per business)`),
       { status: 400 }
     );
   }
@@ -173,6 +225,54 @@ export async function createDocumentMediaAsset(
   });
 }
 
+/** Store a short support voice note (webm/mp4/mpeg/ogg/wav). */
+export async function createAudioMediaAsset(
+  businessId: string,
+  bytes: Buffer,
+  mimeType: string
+) {
+  if (!bytes.length) {
+    throw Object.assign(new Error('Empty audio'), { status: 400 });
+  }
+  if (bytes.length > MEDIA_MAX_AUDIO_BYTES) {
+    throw Object.assign(
+      new Error(`Voice note too large (max ${Math.round(MEDIA_MAX_AUDIO_BYTES / 1024 / 1024)}MB)`),
+      { status: 400 }
+    );
+  }
+  const sniffed = sniffAudioMime(bytes);
+  const declared = normalizeAudioMime(mimeType);
+  // Prefer sniffed container type; require a recognized audio payload.
+  const safeMime = sniffed || declared;
+  if (!safeMime) {
+    throw Object.assign(new Error('Unsupported audio format. Use webm, mp4, mpeg, ogg, or wav.'), { status: 400 });
+  }
+  if (!sniffed) {
+    throw Object.assign(new Error('Could not recognize that audio file. Re-record and try again.'), { status: 400 });
+  }
+  if (declared && declared !== sniffed) {
+    // Allow minor mismatches only when sniff succeeded (e.g. audio/mp4 vs audio/aac label).
+    const compatible =
+      (declared === 'audio/aac' && sniffed === 'audio/mp4') ||
+      (declared === 'audio/mpeg' && sniffed === 'audio/mp4');
+    if (!compatible) {
+      throw Object.assign(new Error('Audio content does not match the declared format'), { status: 400 });
+    }
+  }
+
+  await assertMediaQuota(businessId, bytes.length, 'audio');
+
+  return prisma.mediaAsset.create({
+    data: {
+      businessId,
+      mimeType: sniffed,
+      byteSize: bytes.length,
+      data: bytes,
+    },
+    select: { id: true, mimeType: true, byteSize: true },
+  });
+}
+
 export async function serveMediaAsset(req: Request, res: Response) {
   const id = String(req.params.id || '');
   if (!id) return res.status(404).end();
@@ -190,6 +290,13 @@ export async function serveMediaAsset(req: Request, res: Response) {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   if (asset.mimeType === 'application/pdf') {
     res.setHeader('Content-Disposition', 'inline; filename="invoice.pdf"');
+  } else if (asset.mimeType.startsWith('audio/')) {
+    const ext = asset.mimeType === 'audio/mpeg' ? 'mp3'
+      : asset.mimeType === 'audio/mp4' ? 'm4a'
+      : asset.mimeType === 'audio/ogg' ? 'ogg'
+      : asset.mimeType === 'audio/wav' ? 'wav'
+      : 'webm';
+    res.setHeader('Content-Disposition', `inline; filename="voice-note.${ext}"`);
   }
   res.setHeader('ETag', `"${id}"`);
   if (req.headers['if-none-match'] === `"${id}"`) return res.status(304).end();
