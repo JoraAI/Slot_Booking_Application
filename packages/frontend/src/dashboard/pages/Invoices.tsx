@@ -163,6 +163,11 @@ export const InvoicesPage: React.FC = () => {
     searchParams.get('dateFrom') || iso(new Date(Date.now() - 30 * 86400000)),
   )
   const [dateTo, setDateTo] = useState(searchParams.get('dateTo') || iso(new Date()))
+  const [searchQ, setSearchQ] = useState(searchParams.get('q') || '')
+  const [debouncedQ, setDebouncedQ] = useState(searchQ)
+  const [sourceFilter, setSourceFilter] = useState(searchParams.get('source') || '')
+  const [staffFilter, setStaffFilter] = useState(searchParams.get('staffId') || '')
+  const [paymentFilter, setPaymentFilter] = useState(searchParams.get('paymentMethod') || '')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
@@ -181,11 +186,23 @@ export const InvoicesPage: React.FC = () => {
   })
   const [selected, setSelected] = useState<Record<string, SelectedLine>>({})
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(searchQ.trim()), 250)
+    return () => window.clearTimeout(t)
+  }, [searchQ])
+
   const load = async () => {
     setLoading(true)
     try {
       const [inv, elig, svc, prod, staff] = await Promise.all([
-        api.getInvoices({ dateFrom, dateTo }),
+        api.getInvoices({
+          dateFrom,
+          dateTo,
+          q: debouncedQ || undefined,
+          source: sourceFilter || undefined,
+          staffId: staffFilter || undefined,
+          paymentMethod: paymentFilter || undefined,
+        }),
         api.getEligibleInvoiceBookings(),
         api.getServices().catch(() => [] as Service[]),
         api.getProducts().catch(() => [] as Product[]),
@@ -203,7 +220,16 @@ export const InvoicesPage: React.FC = () => {
     }
   }
 
-  useEffect(() => { load() }, [dateFrom, dateTo])
+  useEffect(() => { load() }, [dateFrom, dateTo, debouncedQ, sourceFilter, staffFilter, paymentFilter])
+
+  const hasActiveFilters = Boolean(debouncedQ || sourceFilter || staffFilter || paymentFilter)
+  const clearFilters = () => {
+    setSearchQ('')
+    setDebouncedQ('')
+    setSourceFilter('')
+    setStaffFilter('')
+    setPaymentFilter('')
+  }
 
   const selectedLines = useMemo(() => Object.values(selected), [selected])
   const subtotal = useMemo(
@@ -446,17 +472,88 @@ export const InvoicesPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} />
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
-        <button onClick={load} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="sm:col-span-2 lg:col-span-2">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+            <input
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Invoice #, name, phone, or email"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Source</label>
+            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className={inputCls}>
+              <option value="">All sources</option>
+              <option value="walk_in">Walk-in</option>
+              <option value="booking_paid">Paid booking</option>
+              <option value="booking_completed">Completed booking</option>
+              <option value="manual">Manual</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Payment</label>
+            <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className={inputCls}>
+              <option value="">All methods</option>
+              <option value="cash">Cash</option>
+              <option value="upi">UPI</option>
+              <option value="card">Card</option>
+              <option value="razorpay">Razorpay</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Staff</label>
+            <select value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className={inputCls}>
+              <option value="">All staff</option>
+              <option value="none">Unassigned</option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
+            <button
+              type="button"
+              onClick={load}
+              className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              Refresh
+            </button>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-3 py-2 text-sm text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+        {!loading && (
+          <p className="text-xs text-gray-400">
+            {invoices.length} invoice{invoices.length === 1 ? '' : 's'}
+            {hasActiveFilters ? ' matching filters' : ' in this date range'}
+          </p>
+        )}
       </div>
 
       {loading ? (
         <div className="skeleton h-40" />
       ) : invoices.length === 0 ? (
         <div className="text-center py-12 text-sm text-gray-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-          No invoices in this date range.
+          {hasActiveFilters ? 'No invoices match these filters.' : 'No invoices in this date range.'}
         </div>
       ) : (
         <>

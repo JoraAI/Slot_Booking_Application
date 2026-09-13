@@ -898,8 +898,18 @@ class ApiClient {
     })
   }
 
-  getInvoices(params?: { dateFrom?: string; dateTo?: string }) {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+  getInvoices(params?: {
+    dateFrom?: string
+    dateTo?: string
+    q?: string
+    source?: string
+    staffId?: string
+    paymentMethod?: string
+  }) {
+    const cleaned = Object.fromEntries(
+      Object.entries(params || {}).filter(([, v]) => v != null && String(v).trim() !== ''),
+    ) as Record<string, string>
+    const qs = Object.keys(cleaned).length ? '?' + new URLSearchParams(cleaned).toString() : ''
     return this.request<import('../types').InvoiceListItem[]>(`/owner/invoices${qs}`)
   }
 
