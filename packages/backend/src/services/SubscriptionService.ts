@@ -128,6 +128,9 @@ export function computePlanSwitch(input: PlanSwitchInput): PlanSwitchResult {
   };
 }
 
+/** Flat yearly plan price (INR). Not 12× monthly — promotional yearly rate. */
+export const YEARLY_PLAN_INR = 7499;
+
 /** Pure helpers for unit tests — same rules as getSubscriptionView for fixed plans. */
 export function fixedPlanDueAndCycle(input: {
   plan: 'MONTHLY_799' | 'YEARLY_799';
@@ -136,7 +139,7 @@ export function fixedPlanDueAndCycle(input: {
   now: Date;
   isTrial: boolean;
 }): Pick<SubscriptionView, 'dueInr' | 'paidInr' | 'isActive' | 'status' | 'currentCycleEndsAt'> {
-  const fullDue = input.plan === 'YEARLY_799' ? input.monthlyInr * 12 : input.monthlyInr;
+  const fullDue = input.plan === 'YEARLY_799' ? YEARLY_PLAN_INR : input.monthlyInr;
   const paidUntil = input.paidUntil;
   const isPaidThrough = !!paidUntil && paidUntil.getTime() > input.now.getTime();
 

@@ -287,6 +287,8 @@ export const orgAuthService = {
     name: string;
     timezone?: string;
     copyHoursFromPrimary?: boolean;
+    /** When set, copy categories/services/products (and hours) from this org shop. */
+    copyCatalogFromBusinessId?: string | null;
   }) {
     const orgMember = await prisma.orgMember.findUnique({
       where: { organizationId_userId: { organizationId: args.orgId, userId: args.userId } },
@@ -303,6 +305,70 @@ export const orgAuthService = {
       throw Object.assign(new Error('Primary shop not found'), { status: 404 });
     }
 
+    let catalogSource: {
+      id: string;
+      workingHours: Array<{ dayOfWeek: number; openTime: string; closeTime: string; isOpen: boolean }>;
+      serviceCategories: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        imageUrl: string | null;
+        imagePublicId: string | null;
+        displayOrder: number;
+        isActive: boolean;
+        services: Array<{
+          id: string;
+          name: string;
+          description: string | null;
+          durationMinutes: number;
+          bufferMinutes: number;
+          price: number;
+          resourceMode: any;
+          capacity: number;
+          isActive: boolean;
+          displayOrder: number;
+          imageUrl: string | null;
+          imagePublicId: string | null;
+          discountType: any;
+          discountValue: number | null;
+          discountLabel: string | null;
+          discountValidFrom: Date | null;
+          discountValidUntil: Date | null;
+          discountActive: boolean;
+          workingHours: Array<{ dayOfWeek: number; openTime: string; closeTime: string; isOpen: boolean }>;
+        }>;
+      }>;
+      products: Array<{
+        name: string;
+        sku: string | null;
+        price: number;
+        cost: number | null;
+        stockQty: number | null;
+        hsnCode: string | null;
+        gstPercent: number | null;
+        isActive: boolean;
+      }>;
+    } | null = null;
+
+    if (args.copyCatalogFromBusinessId) {
+      const source = await prisma.business.findFirst({
+        where: { id: args.copyCatalogFromBusinessId, organizationId: args.orgId },
+        include: {
+          workingHours: true,
+          serviceCategories: {
+            include: {
+              services: { include: { workingHours: true } },
+            },
+          },
+          products: true,
+        },
+      });
+      if (!source) {
+        throw Object.assign(new Error('Source shop not found in your organization'), { status: 404 });
+      }
+      catalogSource = source;
+    }
+
     const slug = await uniqueSlug(args.name);
     const publicCode = await uniquePublicCode();
     const tz = args.timezone || primary.timezone || 'Asia/Kolkata';
@@ -310,23 +376,37 @@ export const orgAuthService = {
       throw Object.assign(new Error('Invalid timezone'), { status: 400 });
     }
 
-    const hoursSource =
-      args.copyHoursFromPrimary !== false && primary.workingHours.length > 0
-        ? primary.workingHours.map((h) => ({
-            dayOfWeek: h.dayOfWeek,
-            openTime: h.openTime,
-            closeTime: h.closeTime,
-            isOpen: h.isOpen,
-          }))
-        : [
-            { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
-            { dayOfWeek: 1, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 2, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 3, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 4, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 5, openTime: '09:00', closeTime: '20:00', isOpen: true },
-            { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
-          ];
+    const defaultHours = [
+      { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
+      { dayOfWeek: 1, openTime: '09:00', closeTime: '20:00', isOpen: true },
+      { dayOfWeek: 2, openTime: '09:00', closeTime: '20:00', isOpen: true },
+      { dayOfWeek: 3, openTime: '09:00', closeTime: '20:00', isOpen: true },
+      { dayOfWeek: 4, openTime: '09:00', closeTime: '20:00', isOpen: true },
+      { dayOfWeek: 5, openTime: '09:00', closeTime: '20:00', isOpen: true },
+      { dayOfWeek: 6, openTime: '10:00', closeTime: '18:00', isOpen: true },
+    ];
+
+    let hoursSource = defaultHours;
+    if (catalogSource && catalogSource.workingHours.length > 0) {
+      hoursSource = catalogSource.workingHours.map((h) => ({
+        dayOfWeek: h.dayOfWeek,
+        openTime: h.openTime,
+        closeTime: h.closeTime,
+        isOpen: h.isOpen,
+      }));
+    } else if (args.copyHoursFromPrimary !== false && primary.workingHours.length > 0) {
+      hoursSource = primary.workingHours.map((h) => ({
+        dayOfWeek: h.dayOfWeek,
+        openTime: h.openTime,
+        closeTime: h.closeTime,
+        isOpen: h.isOpen,
+      }));
+    }
+
+    // Start from scratch: empty catalog and default hours (unless hours were copied above without catalog).
+    if (!catalogSource && args.copyHoursFromPrimary === false) {
+      hoursSource = defaultHours;
+    }
 
     const owners = await prisma.orgMember.findMany({
       where: { organizationId: args.orgId, role: OrgRole.OWNER },
@@ -377,6 +457,79 @@ export const orgAuthService = {
           role: OrgRole.OWNER,
         })),
       });
+
+      if (catalogSource) {
+        for (const category of catalogSource.serviceCategories) {
+          const newCategoryId = newId();
+          await tx.serviceCategory.create({
+            data: {
+              id: newCategoryId,
+              businessId: created.id,
+              name: category.name,
+              description: category.description,
+              imageUrl: category.imageUrl,
+              imagePublicId: category.imagePublicId,
+              displayOrder: category.displayOrder,
+              isActive: category.isActive,
+            },
+          });
+
+          for (const service of category.services) {
+            const newServiceId = newId();
+            await tx.service.create({
+              data: {
+                id: newServiceId,
+                businessId: created.id,
+                categoryId: newCategoryId,
+                name: service.name,
+                description: service.description,
+                durationMinutes: service.durationMinutes,
+                bufferMinutes: service.bufferMinutes,
+                price: service.price,
+                resourceMode: service.resourceMode,
+                capacity: service.capacity,
+                isActive: service.isActive,
+                displayOrder: service.displayOrder,
+                imageUrl: service.imageUrl,
+                imagePublicId: service.imagePublicId,
+                discountType: service.discountType,
+                discountValue: service.discountValue,
+                discountLabel: service.discountLabel,
+                discountValidFrom: service.discountValidFrom,
+                discountValidUntil: service.discountValidUntil,
+                discountActive: service.discountActive,
+                workingHours: {
+                  create: service.workingHours.map((h) => ({
+                    id: newId(),
+                    businessId: created.id,
+                    dayOfWeek: h.dayOfWeek,
+                    openTime: h.openTime,
+                    closeTime: h.closeTime,
+                    isOpen: h.isOpen,
+                  })),
+                },
+              },
+            });
+          }
+        }
+
+        if (catalogSource.products.length > 0) {
+          await tx.product.createMany({
+            data: catalogSource.products.map((p) => ({
+              id: newId(),
+              businessId: created.id,
+              name: p.name,
+              sku: p.sku,
+              price: p.price,
+              cost: p.cost,
+              stockQty: p.stockQty,
+              hsnCode: p.hsnCode,
+              gstPercent: p.gstPercent,
+              isActive: p.isActive,
+            })),
+          });
+        }
+      }
 
       return created;
     });

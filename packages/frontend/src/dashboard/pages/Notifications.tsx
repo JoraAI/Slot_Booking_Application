@@ -528,7 +528,15 @@ export const Notifications: React.FC = () => {
         <Row ok={status?.smtpConfigured} label="Email mailbox connected" fix="add your email address and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email on file (alerts and replies)" />
         <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp available" fix="not available yet - contact support" />
-        <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number on file" />
+        <Row
+          ok={status?.ownerWhatsappPresent}
+          label="Owner WhatsApp number on file"
+          fix="set your number in Settings"
+        />
+        <p className="text-[11px] text-gray-400 pt-1">
+          Owner WhatsApp number can be set up on the{' '}
+          <Link to="/dashboard/settings" className="text-primary underline">Settings</Link> page.
+        </p>
         <Row ok={status?.frontendUrlConfigured} label="Booking manage links ready" fix="contact support to finish setup" />
       </div>
 
