@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 
 /**
- * Full-screen HTML viewer for invoices — works on web and Capacitor WebView
+ * Full-screen HTML viewer for invoices - works on web and Capacitor WebView
  * where blob: window.open often fails.
  */
 export const HtmlDocumentOverlay: React.FC = () => {

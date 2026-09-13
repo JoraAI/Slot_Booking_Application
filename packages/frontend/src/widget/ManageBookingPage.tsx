@@ -114,7 +114,7 @@ export const ManageBookingPage: React.FC = () => {
       } else if (result.refund.status === 'FAILED') {
         toast.error('Booking cancelled, but the refund needs salon action.')
       } else {
-        toast.success('Booking cancelled — refund initiated')
+        toast.success('Booking cancelled - refund initiated')
       }
     } catch (e: any) {
       toast.error(e.message || 'Cancel failed')
@@ -251,7 +251,7 @@ export const ManageBookingPage: React.FC = () => {
             ) : refund ? (
               <>
                 <p className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
-                  Refund initiated to your original payment method. It may be instant; otherwise allow 5–7 working days.
+                  Refund initiated to your original payment method. It may be instant; otherwise allow 5-7 working days.
                 </p>
                 <p className="text-xs text-gray-400">Refund of ₹{refund.amount} for your cancelled booking.</p>
               </>

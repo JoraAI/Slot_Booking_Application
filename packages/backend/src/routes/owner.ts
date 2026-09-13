@@ -3067,7 +3067,10 @@ ownerRouter.get('/services', async (req: AuthRequest, res: Response) => {
       orderBy: [{ displayOrder: 'asc' }],
       include: { staff: true, workingHours: true, category: true },
     });
-    res.json(services);
+    res.json(services.map((s) => ({
+      ...s,
+      assignedStaffIds: s.staff.map((x) => x.staffId),
+    })));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -3141,7 +3144,10 @@ ownerRouter.post('/services', async (req: AuthRequest, res: Response) => {
       },
       include: { staff: true, category: true },
     });
-    res.status(201).json(service);
+    res.status(201).json({
+      ...service,
+      assignedStaffIds: service.staff.map((x) => x.staffId),
+    });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
@@ -3191,7 +3197,10 @@ ownerRouter.put('/services/:id', async (req: AuthRequest, res: Response) => {
         include: { staff: true, category: true, workingHours: true },
       });
     });
-    res.json(result);
+    res.json({
+      ...result,
+      assignedStaffIds: result.staff.map((x) => x.staffId),
+    });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

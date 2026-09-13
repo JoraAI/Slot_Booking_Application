@@ -175,7 +175,7 @@ function BroadcastSummary({ report, channel }: { report: BroadcastReport; channe
         <>
           <p className="text-amber-700 dark:text-amber-300">
             Not sent to {report.unsent.length} customer{report.unsent.length === 1 ? '' : 's'}
-            {report.ownerNotified ? ' — the same list was emailed to you.' : '.'}
+            {report.ownerNotified ? ' - the same list was emailed to you.' : '.'}
           </p>
           <div className="max-h-48 overflow-auto space-y-2">
             {report.unsent.map((person) => (
@@ -288,7 +288,7 @@ export const Notifications: React.FC = () => {
         key: res.keyId,
         amount: res.amountPaise,
         currency: res.currency || 'INR',
-        name: 'Reservly',
+        name: 'Jora Reservly',
         description: 'WhatsApp wallet credits',
         order_id: res.orderId,
         handler: async (response: any) => {
@@ -300,7 +300,7 @@ export const Notifications: React.FC = () => {
             })
             toast.success(v.alreadyCredited
               ? 'Payment was already credited.'
-              : `Recharged ₹${(res.amountPaise / 100).toFixed(2)} — ${v.balancePaise / 100} credits balance`)
+              : `Recharged ₹${(res.amountPaise / 100).toFixed(2)} - ${v.balancePaise / 100} credits balance`)
             await refreshWallet()
           } catch (e: any) {
             toast.error(e.message || 'Payment verification failed')
@@ -332,7 +332,7 @@ export const Notifications: React.FC = () => {
       const res = await api.sendTestNotification()
       setResult(res)
       if (res.email.ok || res.whatsapp.ok) toast.success('Test sent to at least one channel')
-      else toast.error('Test failed — see channel details below')
+      else toast.error('Test failed - see channel details below')
     } catch (err: any) {
       toast.error(err.message || 'Failed')
     } finally {
@@ -503,7 +503,7 @@ export const Notifications: React.FC = () => {
   const Row = ({ ok, label, fix }: { ok?: boolean; label: string; fix?: string }) => (
     <p className={`text-xs ${ok ? 'text-green-600' : 'text-amber-600'}`}>
       {ok ? '✓' : '⚠'} {label}
-      {!ok && fix ? ` — ${fix}` : ''}
+      {!ok && fix ? ` - ${fix}` : ''}
     </p>
   )
 
@@ -527,7 +527,7 @@ export const Notifications: React.FC = () => {
         </p>
         <Row ok={status?.smtpConfigured} label="Email mailbox connected" fix="add your email address and password in Settings" />
         <Row ok={status?.ownerEmailPresent} label="Owner email on file (alerts and replies)" />
-        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp available" fix="not available yet — contact support" />
+        <Row ok={status?.metaWhatsappConfigured} label="Reservly WhatsApp available" fix="not available yet - contact support" />
         <Row ok={status?.ownerWhatsappPresent} label="Owner WhatsApp number on file" />
         <Row ok={status?.frontendUrlConfigured} label="Booking manage links ready" fix="contact support to finish setup" />
       </div>
@@ -542,10 +542,10 @@ export const Notifications: React.FC = () => {
         {result && (
           <div className="space-y-1 text-xs">
             <p className={result.email.ok ? 'text-green-600' : 'text-amber-600'}>
-              Email: {result.email.ok ? 'sent' : 'failed'}{result.email.error ? ` — ${result.email.error}` : ''}
+              Email: {result.email.ok ? 'sent' : 'failed'}{result.email.error ? ` - ${result.email.error}` : ''}
             </p>
             <p className={result.whatsapp.ok ? 'text-green-600' : 'text-amber-600'}>
-              WhatsApp: {result.whatsapp.ok ? 'sent' : 'failed'}{result.whatsapp.error ? ` — ${result.whatsapp.error}` : ''}
+              WhatsApp: {result.whatsapp.ok ? 'sent' : 'failed'}{result.whatsapp.error ? ` - ${result.whatsapp.error}` : ''}
             </p>
           </div>
         )}
@@ -626,7 +626,7 @@ export const Notifications: React.FC = () => {
                     <div className="min-w-0">
                       <p className="font-medium">+{m.toPhone} · {m.category}</p>
                       <p className="text-gray-500 truncate">
-                        {m.status}{m.failureReason ? ` — ${m.failureReason}` : ''} · {new Date(m.createdAt).toLocaleString()}
+                        {m.status}{m.failureReason ? ` - ${m.failureReason}` : ''} · {new Date(m.createdAt).toLocaleString()}
                       </p>
                     </div>
                     <span className="shrink-0 text-gray-500">₹{(m.costPaise / 100).toFixed(2)}</span>

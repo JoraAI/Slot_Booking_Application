@@ -104,7 +104,7 @@ export const BlockSlots: React.FC = () => {
   }
 
   const handleUnblock = async (block: BlockedSlot) => {
-    if (!window.confirm(`Remove the block on ${formatDisplayDate(block.date)} ${block.startTime}–${block.endTime}?`)) return
+    if (!window.confirm(`Remove the block on ${formatDisplayDate(block.date)} ${block.startTime}-${block.endTime}?`)) return
     try {
       await api.unblockSlot(block.id)
       toast.success('Block removed')
@@ -133,7 +133,7 @@ export const BlockSlots: React.FC = () => {
           <div className="min-w-0">
             <p className="font-medium text-sm">
               {formatDisplayDate(block.date)}
-              <span className="text-gray-500 font-normal"> · {block.startTime}–{block.endTime}</span>
+              <span className="text-gray-500 font-normal"> · {block.startTime}-{block.endTime}</span>
             </p>
             <p className="text-xs text-gray-500 mt-0.5">
               {block.staff?.name || (block.staffId ? 'Staff' : 'All staff')}

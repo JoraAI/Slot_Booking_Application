@@ -3,7 +3,7 @@ import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import toast from 'react-hot-toast'
 
-const COLORS = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6']
+const COLORS = ['#1780A8', '#9CD8FA', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6']
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 type StaffForm = {
@@ -158,7 +158,7 @@ export const StaffPage: React.FC = () => {
     if (!editingCommission) return
     const next = editingCommission.value.trim() === '' ? null : Number(editingCommission.value)
     if (next !== null && (!Number.isFinite(next) || next < 0 || next > 100)) {
-      toast.error('Commission must be 0–100, or clear the field')
+      toast.error('Commission must be 0-100, or clear the field')
       return
     }
     setLoading(true)
@@ -211,14 +211,14 @@ export const StaffPage: React.FC = () => {
           <div>
             <label className="block text-sm font-medium mb-1">Salary (₹/month, optional)</label>
             <input value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} type="number" min={0} step={100}
-              placeholder="e.g. 25000 — leave blank for none"
+              placeholder="e.g. 25000 - leave blank for none"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
-            <p className="text-xs text-gray-400 mt-1">Owner-only field — never shown on the public booking page.</p>
+            <p className="text-xs text-gray-400 mt-1">Owner-only field - never shown on the public booking page.</p>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Commission % (optional)</label>
             <input value={form.commissionPercent} onChange={(e) => setForm((f) => ({ ...f, commissionPercent: e.target.value }))} type="number" min={0} max={100} step={0.5}
-              placeholder="e.g. 10 — leave blank for none"
+              placeholder="e.g. 10 - leave blank for none"
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800" />
             <p className="text-xs text-gray-400 mt-1">Used in Analytics for staff incentives on attributed collections.</p>
           </div>
@@ -279,7 +279,7 @@ export const StaffPage: React.FC = () => {
                 <div className="space-y-1.5">
                   <input type="number" min={0} step={100} value={editingSalary.value} autoFocus
                     onChange={(e) => setEditingSalary((p) => (p ? { ...p, value: e.target.value } : p))}
-                    placeholder="e.g. 25000 — empty clears"
+                    placeholder="e.g. 25000 - empty clears"
                     className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
                   <div className="flex gap-1.5">
                     <button onClick={() => void saveSalary(s.id)} disabled={loading}
@@ -303,7 +303,7 @@ export const StaffPage: React.FC = () => {
                 <div className="space-y-1.5">
                   <input type="number" min={0} max={100} step={0.5} value={editingCommission.value} autoFocus
                     onChange={(e) => setEditingCommission((p) => (p ? { ...p, value: e.target.value } : p))}
-                    placeholder="e.g. 10 — empty clears"
+                    placeholder="e.g. 10 - empty clears"
                     className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-800" />
                   <div className="flex gap-1.5">
                     <button onClick={() => void saveCommission(s.id)} disabled={loading}
@@ -398,7 +398,7 @@ function StaffHoursEditor({ staffId, staffName, onClose }: { staffId: string; st
           <h2 className="text-lg font-semibold">Hours for {staffName}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-        <p className="text-sm text-gray-500">When disabled, this staff member uses the business hours. Enable to set per-day hours.</p>
+        <p className="text-sm text-gray-500">When disabled, this staff member uses the business hours. Enable to set per-day hours - overrides can only narrow business hours, not extend past them.</p>
         <label className="flex items-center gap-2 text-sm font-medium">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="rounded border-gray-300" />
           Override business hours

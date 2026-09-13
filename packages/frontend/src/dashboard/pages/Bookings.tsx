@@ -8,7 +8,7 @@ function fmtDate(d: string | Date) {
 }
 
 function formatAnswerValue(value: unknown): string {
-  if (value == null || value === '') return '—'
+  if (value == null || value === '') return ' - '
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   return String(value)
 }
@@ -139,12 +139,12 @@ export const Bookings: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-gray-400">Service</p>
-                <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || ' - '}</p>
                 {b.durationMinutesSnapshot ? <p className="text-gray-500">{b.durationMinutesSnapshot} min</p> : null}
               </div>
               <div>
                 <p className="text-xs text-gray-400">Staff</p>
-                <p className="font-medium">{b.staff?.name || '—'}</p>
+                <p className="font-medium">{b.staff?.name || ' - '}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">When</p>
@@ -152,18 +152,18 @@ export const Bookings: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-gray-400">Amount</p>
-                <p className="font-medium">₹{b.finalPrice != null ? b.finalPrice.toLocaleString('en-IN') : '—'}</p>
+                <p className="font-medium">₹{b.finalPrice != null ? b.finalPrice.toLocaleString('en-IN') : ' - '}</p>
                 {b.originalPrice != null && b.discountAmount != null && b.discountAmount > 0 && (
                   <p className="text-gray-500">was ₹{b.originalPrice.toLocaleString('en-IN')} · discount ₹{b.discountAmount.toLocaleString('en-IN')}</p>
                 )}
               </div>
               <div>
                 <p className="text-xs text-gray-400">Payment</p>
-                <p className="font-medium">{b.paymentStatus ? String(b.paymentStatus) : '—'}{b.paymentAmount != null ? ` · ₹${b.paymentAmount.toLocaleString('en-IN')}` : ''}</p>
+                <p className="font-medium">{b.paymentStatus ? String(b.paymentStatus) : ' - '}{b.paymentAmount != null ? ` · ₹${b.paymentAmount.toLocaleString('en-IN')}` : ''}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">Source</p>
-                <p className="font-medium">{b.source || '—'}</p>
+                <p className="font-medium">{b.source || ' - '}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400">Booking ID</p>
@@ -171,7 +171,7 @@ export const Bookings: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs text-gray-400">Created</p>
-                <p className="font-medium">{b.createdAt ? new Date(b.createdAt).toLocaleString() : '—'}</p>
+                <p className="font-medium">{b.createdAt ? new Date(b.createdAt).toLocaleString() : ' - '}</p>
               </div>
             </div>
 
@@ -259,7 +259,7 @@ export const Bookings: React.FC = () => {
                       <p className="text-xs text-gray-400">{b.customerPhone}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                      <p className="font-medium">{b.serviceNameSnapshot || b.service?.name || ' - '}</p>
                       {b.staff?.name && <p className="text-xs text-gray-400">{b.staff.name}</p>}
                     </td>
                     <td className="px-4 py-3">{fmtDate(b.date)}</td>
@@ -292,7 +292,7 @@ export const Bookings: React.FC = () => {
                     </div>
                     <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[b.status] || 'bg-gray-100 text-gray-700'}`}>{b.status}</span>
                   </div>
-                  <p className="text-sm font-medium">{b.serviceNameSnapshot || b.service?.name || '—'}</p>
+                  <p className="text-sm font-medium">{b.serviceNameSnapshot || b.service?.name || ' - '}</p>
                   <p className="text-xs text-gray-500">{fmtDate(b.date)} · {b.startTime} - {b.endTime}{b.staff?.name ? ` · ${b.staff.name}` : ''}</p>
                 </button>
                 <button onClick={() => void openDetail(b.id)} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">

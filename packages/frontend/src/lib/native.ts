@@ -1,5 +1,5 @@
 /**
- * Platform helpers — safe on web and Capacitor (Android/iOS).
+ * Platform helpers - safe on web and Capacitor (Android/iOS).
  * Never import Capacitor plugins at top-level in a way that breaks Vite SSR/web;
  * dynamic import when native.
  */
@@ -41,7 +41,7 @@ export function openHtmlDocument(html: string, title = 'Document'): void {
   window.dispatchEvent(new CustomEvent('reservly:open-html', { detail: { html, title } }))
 }
 
-/** Current position — Capacitor Geolocation on native, browser API on web. */
+/** Current position - Capacitor Geolocation on native, browser API on web. */
 export async function getCurrentPositionCoords(): Promise<{ latitude: number; longitude: number }> {
   if (isNativePlatform()) {
     const { Geolocation } = await import('@capacitor/geolocation')

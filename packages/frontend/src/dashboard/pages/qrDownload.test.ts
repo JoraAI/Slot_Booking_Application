@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isIosDevice, qrDownloadStrategy, sanitizeQrFileName } from './qrDownload'
+import { CAPACITOR_NATIVE_STRATEGY, isIosDevice, qrDownloadStrategy, sanitizeQrFileName } from './qrDownload'
 
 const devices = [
   {
@@ -78,6 +78,12 @@ test('Android must NOT use iOS share path even when canShare would be true', () 
   const strategy = qrDownloadStrategy(android.nav)
   const wouldPreferShare = strategy === 'ios-share-or-overlay' && true /* canShare */
   assert.equal(wouldPreferShare, false)
+})
+
+test('capacitor-native label matches QRCodePage branch (regression)', () => {
+  // QRCodePage checks strategy === CAPACITOR_NATIVE_STRATEGY. A renamed return
+  // value silently falls through to blob download and breaks Capacitor apps.
+  assert.equal(CAPACITOR_NATIVE_STRATEGY, 'capacitor-native')
 })
 
 test('Mac desktop uses blob download, not iOS overlay', () => {

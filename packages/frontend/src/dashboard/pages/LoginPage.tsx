@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { isNativePlatform } from '../../lib/native'
 import { useStore } from '../../store'
+import { PasswordInput } from '../components/PasswordInput'
 import toast from 'react-hot-toast'
 
 const TIMEZONES = [
@@ -49,8 +50,8 @@ export const LoginPage: React.FC = () => {
     navigate('/dashboard')
   }
 
-  // Google Identity Services — Sign In and Create Business (email step).
-  // Skip on native WebView — GIS often fails in Capacitor.
+  // Google Identity Services - Sign In and Create Business (email step).
+  // Skip on native WebView - GIS often fails in Capacitor.
   const showGoogleButton =
     !!GOOGLE_CLIENT_ID &&
     !isNativePlatform() &&
@@ -73,7 +74,7 @@ export const LoginPage: React.FC = () => {
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill',
         })
-      } catch { /* GIS blocked locally — button stays hidden; backend verify is wired */ }
+      } catch { /* GIS blocked locally - button stays hidden; backend verify is wired */ }
     }
     if (window.google?.accounts) render()
     else {
@@ -193,7 +194,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true)
     try {
       await api.ownerForgotReset(resetToken, password)
-      toast.success('Password updated — sign in with your new password')
+      toast.success('Password updated - sign in with your new password')
       setForgotOpen(false); setForgotStep('email'); setPassword('')
     } catch (err: any) { toast.error(err.message || 'Could not reset the password') }
     finally { setLoading(false) }
@@ -212,18 +213,27 @@ export const LoginPage: React.FC = () => {
         : 'Choose a new password'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8 w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4 safe-top">
+      <div className="w-full max-w-sm">
+        <img
+          src="/brand/jora-reservly-full.png"
+          alt="Jora Reservly"
+          className="h-20 w-auto max-w-[280px] mx-auto mb-6 object-contain drop-shadow-sm"
+        />
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">R</div>
-          <h1 className="text-2xl font-bold">Reservly</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500">
             {forgotOpen
               ? forgotTitle
               : mode === 'login'
-                ? (signupStep === 'details' ? signupTitle : 'Sign in to your dashboard')
+                ? (signupStep === 'details' ? signupTitle : 'Sign in to your owner dashboard')
                 : signupTitle}
           </p>
+          {!forgotOpen && mode === 'login' && signupStep !== 'details' && (
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              Manage bookings, invoices, staff, and your public booking page - powered by Jora AI.
+            </p>
+          )}
         </div>
 
         {!forgotOpen && (
@@ -246,7 +256,7 @@ export const LoginPage: React.FC = () => {
                   Forgot password?
                 </button>
               </div>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" className={inputCls} />
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" className={inputCls} />
             </div>
             <button type="submit" disabled={loading} className="w-full py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium text-sm disabled:opacity-50">
               {loading ? 'Please wait...' : 'Sign In'}
@@ -296,7 +306,7 @@ export const LoginPage: React.FC = () => {
                 <p className="text-sm text-gray-500">Choose a new password (at least 8 characters).</p>
                 <div>
                   <label className="block text-sm font-medium mb-1">New password</label>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className={inputCls} />
+                  <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className={inputCls} />
                 </div>
                 <button onClick={resetPassword} disabled={loading || password.length < 8} className="w-full py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium text-sm disabled:opacity-50">
                   {loading ? 'Please wait...' : 'Set new password'}
@@ -369,7 +379,7 @@ export const LoginPage: React.FC = () => {
                 {!googlePending && (
                   <div>
                     <label className="block text-sm font-medium mb-1">Password</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" className={inputCls} />
+                    <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" className={inputCls} />
                   </div>
                 )}
                 <button onClick={completeSignup} disabled={loading || !name || name.trim().length < 2 || (!googlePending && password.length < 8)}
@@ -383,6 +393,7 @@ export const LoginPage: React.FC = () => {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   )

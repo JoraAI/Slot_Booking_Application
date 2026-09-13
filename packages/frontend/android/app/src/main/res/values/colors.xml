@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Jora Reservly brand (peacock sky + teal primary) -->
+    <color name="colorPrimary">#1780A8</color>
+    <color name="colorPrimaryDark">#0D5A75</color>
+    <color name="colorAccent">#9CD8FA</color>
+    <color name="splashBackground">#FFFFFF</color>
+</resources>

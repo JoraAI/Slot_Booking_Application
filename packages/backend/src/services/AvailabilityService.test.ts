@@ -186,6 +186,42 @@ test('5. Service-specific hours restrict slots', async () => {
   await prisma.service.delete({ where: { id: service.id } });
 });
 
+test('5b. Service hours outside business hours are clipped to business hours', async () => {
+  const d = dateStr();
+  const service = await makeService();
+  const dow = timeService.dayOfWeek(d);
+  // Service claims 07:00-22:00, but business is 09:00-18:00
+  await prisma.serviceWorkingHour.create({
+    data: { businessId: business.id, serviceId: service.id, dayOfWeek: dow, openTime: '07:00', closeTime: '22:00', isOpen: true },
+  });
+  const starts = await slotStarts(service, d);
+  assert.ok(!starts.includes('07:00') && !starts.includes('08:30'), 'no slots before business open');
+  assert.ok(starts.includes('09:00'), 'first slot at business open');
+  assert.ok(starts.includes('17:30'), 'last slot still within business close');
+  assert.ok(!starts.includes('18:00') && !starts.includes('20:00'), 'no slots at/after business close');
+  await prisma.service.delete({ where: { id: service.id } });
+});
+
+test('5c. Closed business day yields no slots even if service is open', async () => {
+  const d = dateStr();
+  const service = await makeService();
+  const dow = timeService.dayOfWeek(d);
+  await prisma.workingHour.updateMany({
+    where: { businessId: business.id, dayOfWeek: dow },
+    data: { isOpen: false },
+  });
+  await prisma.serviceWorkingHour.create({
+    data: { businessId: business.id, serviceId: service.id, dayOfWeek: dow, openTime: '09:00', closeTime: '18:00', isOpen: true },
+  });
+  const starts = await slotStarts(service, d);
+  assert.strictEqual(starts.length, 0, 'closed business day must offer zero slots');
+  await prisma.workingHour.updateMany({
+    where: { businessId: business.id, dayOfWeek: dow },
+    data: { isOpen: true },
+  });
+  await prisma.service.delete({ where: { id: service.id } });
+});
+
 test('6. Buffer prevents the next overlap', async () => {
   const d = dateStr();
   const service = await makeService({ durationMinutes: 30, bufferMinutes: 15 });

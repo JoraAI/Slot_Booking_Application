@@ -8,9 +8,15 @@ import { NativeBackHandler } from './components/NativeBackHandler'
 import { hydrateOwnerToken } from './lib/tokenStorage'
 import { api } from './lib/api'
 import { useStore } from './store'
+import { configureNativeChrome } from './lib/nativeChrome'
+import { requestStartupPermissions } from './lib/startupPermissions'
 import './index.css'
 
 async function boot() {
+  await configureNativeChrome()
+  // Fire-and-forget so the first-launch permission sheet does not block UI paint.
+  void requestStartupPermissions()
+
   const token = await hydrateOwnerToken()
   if (token) {
     api.setToken(token)

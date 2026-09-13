@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #7C3AED;
-  --color-primary-light: #EDE9FE;
-  --color-primary-dark: #5B21B6;
+  --color-primary: #1780A8;
+  --color-primary-light: #E6F5FB;
+  --color-primary-dark: #0D5A75;
   --color-surface: #FFFFFF;
   --color-surface-2: #F9FAFB;
   --color-border: #E5E7EB;
@@ -29,7 +29,7 @@
     --color-border: #374151;
     --color-text-primary: #F9FAFB;
     --color-text-secondary: #9CA3AF;
-    --color-primary-light: #2E1065;
+    --color-primary-light: #0A3D52;
   }
 }
 
@@ -39,6 +39,20 @@ body {
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Keep content clear of notches / punch-hole cameras (e.g. Oppo A79). */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.safe-top {
+  /* Extra top inset for fixed chrome on punch-hole OEMs when insets are reported. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 @keyframes shimmer {

@@ -1,5 +1,5 @@
 /**
- * Razorpay Checkout `display` configuration — explicitly UPI-first (Batch 2A).
+ * Razorpay Checkout `display` configuration - explicitly UPI-first (Batch 2A).
  *
  * - `sequence: ['block.upi', 'block.other']` fixes the block order; Razorpay
  *   will not reorder the blocks.

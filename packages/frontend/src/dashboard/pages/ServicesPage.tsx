@@ -141,7 +141,7 @@ export const ServicesPage: React.FC = () => {
     const tagged = services.filter((s) => s.categoryId === cat.id).length
     if (tagged > 0) {
       toast.error(
-        `Cannot delete “${cat.name}” — ${tagged} service${tagged === 1 ? ' is' : 's are'} tagged to it (active or inactive). Reassign them first.`
+        `Cannot delete “${cat.name}” - ${tagged} service${tagged === 1 ? ' is' : 's are'} tagged to it (active or inactive). Reassign them first.`
       )
       return
     }
@@ -159,6 +159,9 @@ export const ServicesPage: React.FC = () => {
 
   const openServiceForm = (svc?: Service) => {
     if (svc) {
+      const fromIds = svc.assignedStaffIds?.length
+        ? svc.assignedStaffIds
+        : ((svc as any).staff || []).map((row: any) => row.staffId).filter(Boolean)
       setEditingId(svc.id)
       setServiceForm({
         categoryId: svc.categoryId,
@@ -170,7 +173,7 @@ export const ServicesPage: React.FC = () => {
         price: svc.price,
         resourceMode: svc.resourceMode,
         capacity: svc.capacity,
-        assignedStaffIds: svc.assignedStaffIds || [],
+        assignedStaffIds: fromIds,
         discountType: svc.discountType || '',
         discountValue: svc.discountValue || 0,
         discountLabel: svc.discountLabel || '',
@@ -780,7 +783,7 @@ function ServiceHoursEditor({ serviceId, serviceName, onClose }: { serviceId: st
           <h2 className="text-lg font-semibold">Hours for {serviceName}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-        <p className="text-sm text-gray-500">When disabled, this service uses the business hours. Enable to override per day.</p>
+        <p className="text-sm text-gray-500">When disabled, this service uses the business hours. Enable to override per day - overrides can only narrow business hours, not extend past them.</p>
         <label className="flex items-center gap-2 text-sm font-medium">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="rounded border-gray-300" />
           Override business hours

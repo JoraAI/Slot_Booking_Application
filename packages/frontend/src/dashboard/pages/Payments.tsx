@@ -111,7 +111,7 @@ export const PaymentsPage: React.FC = () => {
                     return (
                       <p className="text-[11px] text-gray-400 mt-1">
                         {refundRow.status === 'FAILED'
-                          ? '⚠️ Refund failed — manual action'
+                          ? '⚠️ Refund failed - manual action'
                           : `Refund ${String(refundRow.status).toLowerCase()}`}
                       </p>
                     )

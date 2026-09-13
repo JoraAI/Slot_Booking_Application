@@ -332,7 +332,7 @@ export interface Booking {
   createdAt: string
   updatedAt: string
   cancelledAt: string | null
-  /** Plaintext management token — returned exactly once at creation only. */
+  /** Plaintext management token - returned exactly once at creation only. */
   managementToken?: string
   managementUrl?: string
 }

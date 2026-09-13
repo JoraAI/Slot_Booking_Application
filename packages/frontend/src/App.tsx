@@ -38,7 +38,7 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public booking widget — web only; native shell is owner dashboard */}
+      {/* Public booking widget - web only; native shell is owner dashboard */}
       {!nativeOwnerApp && (
         <>
           <Route path="/:slug" element={<BookingWidget />} />

@@ -52,7 +52,7 @@ function validatePhone(raw: string, opts: { strict?: boolean } = {}): FieldMessa
         severity: strict ? 'error' : 'warning',
         text: strict
           ? 'Enter a complete international number with country code'
-          : `Keep typing — international numbers usually need 8–15 digits (${digits.length} so far)`,
+          : `Keep typing - international numbers usually need 8-15 digits (${digits.length} so far)`,
       }
     }
     if (digits.length >= 8 && digits.length < 10) {
@@ -76,16 +76,16 @@ function validatePhone(raw: string, opts: { strict?: boolean } = {}): FieldMessa
   if (digits.length === 11) {
     return {
       severity: 'warning',
-      text: 'That looks like 11 digits — Indian mobiles use 10, or add + with a country code',
+      text: 'That looks like 11 digits - Indian mobiles use 10, or add + with a country code',
     }
   }
   if (digits.length > 11) {
     return {
       severity: 'error',
-      text: 'Too many digits — use 10 digits, or + and country code (up to 15 digits)',
+      text: 'Too many digits - use 10 digits, or + and country code (up to 15 digits)',
     }
   }
-  // Exactly 10 — accept
+  // Exactly 10 - accept
   return null
 }
 
@@ -121,7 +121,7 @@ function validateEmail(raw: string, opts: { strict?: boolean } = {}): FieldMessa
 
   const tld = domain.split('.').pop()?.toLowerCase() || ''
   if (COMMON_TYPO_TLDS.has(tld)) {
-    return { severity: 'warning', text: `".${tld}" looks unusual — check for a typo` }
+    return { severity: 'warning', text: `".${tld}" looks unusual - check for a typo` }
   }
 
   return null

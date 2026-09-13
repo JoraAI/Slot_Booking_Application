@@ -137,7 +137,7 @@ export const ProductsPage: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Products</h1>
-          <p className="text-sm text-gray-500 mt-1">Retail items you sell at the salon (owner-only — no public storefront).</p>
+          <p className="text-sm text-gray-500 mt-1">Retail items you sell at the salon (owner-only - no public storefront).</p>
         </div>
         <button onClick={startAdd} className="w-full sm:w-auto px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
           + Add Product
@@ -200,9 +200,9 @@ export const ProductsPage: React.FC = () => {
                   {products.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-3 font-medium">{p.name}</td>
-                      <td className="px-4 py-3 text-gray-500">{p.sku || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500">{p.sku || ' - '}</td>
                       <td className="px-4 py-3">₹{p.price.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 text-gray-500">{p.cost != null ? `₹${p.cost.toLocaleString('en-IN')}` : '—'}</td>
+                      <td className="px-4 py-3 text-gray-500">{p.cost != null ? `₹${p.cost.toLocaleString('en-IN')}` : ' - '}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.isActive ? 'Active' : 'Inactive'}</span>
                       </td>
@@ -261,10 +261,10 @@ export const ProductsPage: React.FC = () => {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {sales.map((s) => (
                     <tr key={s.id}>
-                      <td className="px-4 py-2 font-medium">{s.product?.name || '—'}</td>
+                      <td className="px-4 py-2 font-medium">{s.product?.name || ' - '}</td>
                       <td className="px-4 py-2">{s.quantity}</td>
                       <td className="px-4 py-2">₹{s.totalAmount.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-2 text-gray-500">{s.note || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{s.note || ' - '}</td>
                       <td className="px-4 py-2 text-gray-500">{new Date(s.soldAt).toLocaleString()}</td>
                     </tr>
                   ))}
@@ -275,7 +275,7 @@ export const ProductsPage: React.FC = () => {
               {sales.map((s) => (
                 <div key={s.id} className="border border-gray-200 dark:border-gray-800 rounded-xl p-3 space-y-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium">{s.product?.name || '—'}</p>
+                    <p className="font-medium">{s.product?.name || ' - '}</p>
                     <p className="font-semibold shrink-0">₹{s.totalAmount.toLocaleString('en-IN')}</p>
                   </div>
                   <p className="text-xs text-gray-500">Qty {s.quantity} · {new Date(s.soldAt).toLocaleString()}</p>

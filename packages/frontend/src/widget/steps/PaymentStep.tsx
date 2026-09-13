@@ -17,7 +17,7 @@ interface PaymentStepProps {
   date: string
   startTime: string
   testMode?: boolean
-  /** Salon business name — shown as the receiver branding before checkout. */
+  /** Salon business name - shown as the receiver branding before checkout. */
   businessName: string
   bookingData: Record<string, unknown>
   onPaymentSuccess: (booking: any) => void
@@ -25,14 +25,14 @@ interface PaymentStepProps {
 }
 
 /**
- * Batch 2A — UPI Intent checkout (two-step).
+ * Batch 2A - UPI Intent checkout (two-step).
  *
  * - "Pay with UPI apps" initiates the order server-side FIRST; the
  *   server-confirmed payable amount and the salon name are then shown on a
  *   confirmation panel before the Razorpay Checkout opens (no misleading
  *   "amount confirmed" while opening in the same tick).
  * - The Razorpay `display` config is explicitly UPI-first (`sequence` +
- *   `show_default_blocks: false`) — see `razorpayDisplay.ts`.
+ *   `show_default_blocks: false`) - see `razorpayDisplay.ts`.
  * - No raw "receiver UPI ID" is collected; funds settle to the salon's own
  *   Razorpay account.
  * - `bookingData.formData` is forwarded to payment initiation so paid bookings
@@ -284,7 +284,7 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
         <div className="space-y-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pay Using</p>
 
-          {/* Primary CTA — UPI apps first (Razorpay UPI Intent) */}
+          {/* Primary CTA - UPI apps first (Razorpay UPI Intent) */}
           <button
             onClick={handlePay}
             disabled={loading}
@@ -297,13 +297,13 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
             Installed UPI apps (Google Pay, PhonePe, Paytm, BHIM) open automatically on your phone.
           </p>
 
-          {/* Single truthful "More options" action — no fake per-method buttons. */}
+          {/* Single truthful "More options" action - no fake per-method buttons. */}
           <button
             onClick={handlePay}
             disabled={loading}
             className="w-full text-center text-sm text-gray-500 hover:text-primary py-2 transition-colors"
           >
-            More payment options — card, net banking, wallets
+            More payment options - card, net banking, wallets
           </button>
         </div>
       )}

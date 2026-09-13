@@ -206,11 +206,11 @@ export const CustomersPage: React.FC = () => {
             <div className="flex gap-4 text-sm">
               <label className={`flex items-center gap-2 ${!notifying.email ? 'opacity-40' : ''}`}>
                 <input type="checkbox" checked={channels.includes('email')} disabled={!notifying.email} onChange={() => toggleChannel('email')} />
-                Email{notifying.email ? ` (${notifying.email})` : ' — no email saved'}
+                Email{notifying.email ? ` (${notifying.email})` : ' - no email saved'}
               </label>
               <label className={`flex items-center gap-2 ${!notifying.phone ? 'opacity-40' : ''}`}>
                 <input type="checkbox" checked={channels.includes('whatsapp')} disabled={!notifying.phone} onChange={() => toggleChannel('whatsapp')} />
-                WhatsApp{notifying.phone ? ` (${notifying.phone})` : ' — no number saved'}
+                WhatsApp{notifying.phone ? ` (${notifying.phone})` : ' - no number saved'}
               </label>
             </div>
             {channels.includes('email') && (

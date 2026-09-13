@@ -1,5 +1,5 @@
 /**
- * Token persistence — Preferences on native (survives WebView storage quirks),
+ * Token persistence - Preferences on native (survives WebView storage quirks),
  * localStorage on web. Sync API kept for existing call sites; hydrate on boot.
  */
 import { Preferences } from '@capacitor/preferences'
