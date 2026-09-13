@@ -3742,12 +3742,36 @@ const issueBookingInvoiceSchema = z.object({
  */
 ownerRouter.get('/invoices', async (req: AuthRequest, res: Response) => {
   try {
-    const { dateFrom, dateTo } = req.query as any;
+    const { dateFrom, dateTo, q, source, staffId, paymentMethod } = req.query as any;
     const where: any = { businessId: req.owner!.businessId };
     if (dateFrom || dateTo) {
       where.issuedAt = {};
       if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) where.issuedAt.gte = new Date(dateFrom + 'T00:00:00Z');
       if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) where.issuedAt.lte = new Date(dateTo + 'T23:59:59Z');
+    }
+    const query = String(q || '').trim();
+    if (query) {
+      where.OR = [
+        { invoiceNumber: { contains: query, mode: 'insensitive' } },
+        { customerName: { contains: query, mode: 'insensitive' } },
+        { customerPhone: { contains: query } },
+        { customerEmail: { contains: query, mode: 'insensitive' } },
+        { notes: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+    const sourceFilter = String(source || '').trim();
+    if (sourceFilter && ['booking_paid', 'booking_completed', 'walk_in', 'manual'].includes(sourceFilter)) {
+      where.source = sourceFilter;
+    }
+    const staffFilter = String(staffId || '').trim();
+    if (staffFilter === 'none') {
+      where.staffId = null;
+    } else if (staffFilter) {
+      where.staffId = staffFilter;
+    }
+    const payFilter = String(paymentMethod || '').trim();
+    if (payFilter) {
+      where.paymentMethod = payFilter;
     }
     const invoices = await prisma.invoice.findMany({
       where,
