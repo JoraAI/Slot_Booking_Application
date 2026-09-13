@@ -27,17 +27,18 @@ export const SetupGuide: React.FC = () => (
     <GuideSection id="booking-window" title="When customers can book">
       <ol className="list-decimal pl-5 space-y-2">
         <li>
-          Open <Link className="text-primary underline" to="/dashboard/settings">Settings → Business Configuration</Link>.
+          Open <Link className="text-primary underline" to="/dashboard/settings">Settings → Business Hours</Link>
+          and set each day&apos;s open/close times (or mark Closed).
         </li>
         <li>
-          <strong>Booking window (days)</strong> is how far ahead customers can book (for example 7 or 30 days).
+          Bookable slots are generated only inside those hours. Service or staff hour overrides can narrow
+          the window further, but never offer times outside business hours.
         </li>
         <li>
-          <strong>Earliest booking (hours from now)</strong> is the minimum notice. If you set 4, a customer
-          cannot take a slot in the next 4 hours - they start seeing slots after that. 0 lets them book
-          any remaining slot today.
+          Also set <strong>Booking window (days)</strong> (how far ahead customers can book) and
+          <strong> Earliest booking (hours from now)</strong> under Business Configuration.
         </li>
-        <li>Save All. The public booking page hides too-soon slots automatically.</li>
+        <li>Save All. The public booking page hides unavailable slots automatically.</li>
       </ol>
     </GuideSection>
 

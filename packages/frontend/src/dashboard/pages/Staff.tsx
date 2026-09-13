@@ -398,7 +398,7 @@ function StaffHoursEditor({ staffId, staffName, onClose }: { staffId: string; st
           <h2 className="text-lg font-semibold">Hours for {staffName}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
         </div>
-        <p className="text-sm text-gray-500">When disabled, this staff member uses the business hours. Enable to set per-day hours.</p>
+        <p className="text-sm text-gray-500">When disabled, this staff member uses the business hours. Enable to set per-day hours - overrides can only narrow business hours, not extend past them.</p>
         <label className="flex items-center gap-2 text-sm font-medium">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="rounded border-gray-300" />
           Override business hours

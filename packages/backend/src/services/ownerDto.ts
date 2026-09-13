@@ -31,5 +31,15 @@ export function toOwnerConfig(business: Record<string, any>) {
     formFields: Array.isArray(business.formFields)
       ? ensurePhoneAndEmailFields(business.formFields)
       : business.formFields,
+    services: Array.isArray(business.services)
+      ? business.services.map((s: any) => ({
+          ...s,
+          assignedStaffIds: Array.isArray(s.assignedStaffIds)
+            ? s.assignedStaffIds
+            : Array.isArray(s.staff)
+              ? s.staff.map((x: any) => x.staffId).filter(Boolean)
+              : [],
+        }))
+      : business.services,
   };
 }

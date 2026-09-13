@@ -67,6 +67,14 @@ export const Settings: React.FC = () => {
   const [savingMember, setSavingMember] = useState(false)
   const [resetPasswordFor, setResetPasswordFor] = useState<string | null>(null)
   const [resetPasswordValue, setResetPasswordValue] = useState('')
+  const defaultHours = () =>
+    DAYS.map((_, i) => ({
+      dayOfWeek: i,
+      openTime: i === 0 || i === 6 ? '10:00' : '09:00',
+      closeTime: i === 0 || i === 6 ? '18:00' : '20:00',
+      isOpen: true,
+    }))
+  const [hours, setHours] = useState(defaultHours)
   const [form, setForm] = useState({
     name: config?.name || '',
     description: config?.description || '',
@@ -177,6 +185,17 @@ export const Settings: React.FC = () => {
         stateCode: config.stateCode || '',
         defaultGstPercent: config.defaultGstPercent ?? '',
       })
+      if (config.workingHours?.length) {
+        const map = new Map(config.workingHours.map((h) => [h.dayOfWeek, h]))
+        setHours(DAYS.map((_, i) => ({
+          dayOfWeek: i,
+          openTime: map.get(i)?.openTime || '09:00',
+          closeTime: map.get(i)?.closeTime || '18:00',
+          isOpen: map.get(i)?.isOpen ?? true,
+        })))
+      } else {
+        setHours(defaultHours())
+      }
     }
   }, [config])
 
@@ -381,6 +400,18 @@ export const Settings: React.FC = () => {
   }
 
   const handleSave = async () => {
+    for (const h of hours) {
+      if (!h.isOpen) continue
+      if (!h.openTime || !h.closeTime) {
+        toast.error(`Set open and close times for ${DAYS[h.dayOfWeek]}`)
+        return
+      }
+      if (h.openTime >= h.closeTime) {
+        toast.error(`${DAYS[h.dayOfWeek]} close time must be after open time`)
+        return
+      }
+    }
+
     setSaving(true)
     try {
       // Owners only enter email + password; host/port/TLS stay as Gmail-friendly defaults.
@@ -391,7 +422,13 @@ export const Settings: React.FC = () => {
         smtpSecure: false,
       }
       const updated = await api.updateConfig(payload)
-      setConfig({ ...(config as any), ...updated })
+      await api.updateWorkingHours(hours.map((h) => ({
+        dayOfWeek: h.dayOfWeek,
+        openTime: h.openTime,
+        closeTime: h.closeTime,
+        isOpen: h.isOpen,
+      })))
+      setConfig({ ...(config as any), ...updated, workingHours: hours })
       setForm(p => ({
         ...p,
         smtpPass: '',
@@ -1049,6 +1086,51 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Business Hours - authoritative window for customer booking slots */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Business Hours</h2>
+          <p className="text-sm text-gray-500">
+            Weekly open hours for this shop. Customers can only book slots that fit inside these hours.
+            Optional service or staff hour overrides can only narrow this window, never extend past it.
+          </p>
+        </div>
+        <div className="space-y-2">
+          {hours.map((h) => (
+            <div key={h.dayOfWeek} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="w-24 font-medium shrink-0">{DAYS[h.dayOfWeek]}</span>
+              <input
+                type="time"
+                value={h.openTime}
+                disabled={!h.isOpen}
+                onChange={(e) => setHours((prev) => prev.map((x) => x.dayOfWeek === h.dayOfWeek ? { ...x, openTime: e.target.value } : x))}
+                className="px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm disabled:opacity-40"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                type="time"
+                value={h.closeTime}
+                disabled={!h.isOpen}
+                onChange={(e) => setHours((prev) => prev.map((x) => x.dayOfWeek === h.dayOfWeek ? { ...x, closeTime: e.target.value } : x))}
+                className="px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-sm disabled:opacity-40"
+              />
+              <label className="flex items-center gap-1.5 text-xs ml-1">
+                <input
+                  type="checkbox"
+                  checked={h.isOpen}
+                  onChange={(e) => setHours((prev) => prev.map((x) => x.dayOfWeek === h.dayOfWeek ? { ...x, isOpen: e.target.checked } : x))}
+                  className="rounded border-gray-300"
+                />
+                Open
+              </label>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400">
+          Saved with <strong>Save All</strong>. Closed days offer no bookable slots.
+        </p>
+      </div>
 
       {/* Business Settings */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
