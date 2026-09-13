@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
 import type {
+  CustomerContact,
   EligibleBookingForInvoice,
   InvoiceLineItem,
   InvoiceListItem,
@@ -36,6 +37,118 @@ type SelectedLine = {
 
 function hasContact(inv: { customerPhone?: string | null; customerEmail?: string | null }) {
   return Boolean(String(inv.customerPhone || '').trim() || String(inv.customerEmail || '').trim())
+}
+
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+/** Phone / email typeahead against the shop customer phonebook. */
+const CustomerSuggestField: React.FC<{
+  kind: 'phone' | 'email'
+  value: string
+  onChange: (value: string) => void
+  onSelect: (customer: CustomerContact) => void
+  className: string
+  placeholder?: string
+}> = ({ kind, value, onChange, onSelect, className, placeholder }) => {
+  const [suggestions, setSuggestions] = useState<CustomerContact[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const reqId = useRef(0)
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  useEffect(() => {
+    const q = value.trim()
+    if (q.length < 2) {
+      setSuggestions([])
+      setOpen(false)
+      return
+    }
+    const id = ++reqId.current
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      api.getCustomers({ q, limit: '12' })
+        .then((res) => {
+          if (id !== reqId.current) return
+          const rows = (res.customers || []) as CustomerContact[]
+          const filtered = rows.filter((c) => {
+            if (kind === 'phone') {
+              const phone = String(c.phone || '')
+              const dig = digitsOnly(q)
+              if (!dig) return phone.toLowerCase().startsWith(q.toLowerCase())
+              return digitsOnly(phone).startsWith(dig) || phone.startsWith(q)
+            }
+            const email = String(c.email || '').toLowerCase()
+            return email.startsWith(q.toLowerCase())
+          })
+          setSuggestions(filtered)
+          setOpen(filtered.length > 0)
+        })
+        .catch(() => {
+          if (id !== reqId.current) return
+          setSuggestions([])
+          setOpen(false)
+        })
+        .finally(() => {
+          if (id === reqId.current) setLoading(false)
+        })
+    }, 220)
+    return () => window.clearTimeout(timer)
+  }, [value, kind])
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <input
+        type={kind === 'email' ? 'email' : 'tel'}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => {
+          if (suggestions.length > 0) setOpen(true)
+        }}
+        className={className}
+      />
+      {open && suggestions.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg text-sm">
+          {suggestions.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSelect(c)
+                  setOpen(false)
+                  setSuggestions([])
+                }}
+              >
+                <span className="font-medium block truncate">{c.name}</span>
+                <span className="text-[11px] text-gray-500 block truncate">
+                  {[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {loading && value.trim().length >= 2 && (
+        <p className="text-[10px] text-gray-400 mt-0.5">Searching customers…</p>
+      )}
+    </div>
+  )
 }
 
 export const InvoicesPage: React.FC = () => {
@@ -413,11 +526,35 @@ export const InvoicesPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Phone (for WhatsApp send)</label>
-                <input value={form.customerPhone} onChange={(e) => setForm(p => ({ ...p, customerPhone: e.target.value }))} className={inputCls} />
+                <CustomerSuggestField
+                  kind="phone"
+                  value={form.customerPhone}
+                  className={inputCls}
+                  placeholder="Type to search customers"
+                  onChange={(customerPhone) => setForm((p) => ({ ...p, customerPhone }))}
+                  onSelect={(c) => setForm((p) => ({
+                    ...p,
+                    customerName: c.name || p.customerName,
+                    customerPhone: c.phone || p.customerPhone,
+                    customerEmail: c.email || p.customerEmail,
+                  }))}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Email (for email send)</label>
-                <input type="email" value={form.customerEmail} onChange={(e) => setForm(p => ({ ...p, customerEmail: e.target.value }))} className={inputCls} />
+                <CustomerSuggestField
+                  kind="email"
+                  value={form.customerEmail}
+                  className={inputCls}
+                  placeholder="Type to search customers"
+                  onChange={(customerEmail) => setForm((p) => ({ ...p, customerEmail }))}
+                  onSelect={(c) => setForm((p) => ({
+                    ...p,
+                    customerName: c.name || p.customerName,
+                    customerPhone: c.phone || p.customerPhone,
+                    customerEmail: c.email || p.customerEmail,
+                  }))}
+                />
               </div>
               {staffList.length > 0 && (
                 <div className="sm:col-span-2">

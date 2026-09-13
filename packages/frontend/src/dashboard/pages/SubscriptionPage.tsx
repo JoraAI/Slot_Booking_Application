@@ -45,13 +45,13 @@ const PLAN_INFO: Record<Plan, { title: string; price: string; desc: string; feat
   },
   YEARLY_799: {
     title: 'Yearly',
-    price: '₹9,588 / year',
+    price: '₹7,499 / year',
     desc: 'Best value - pay yearly and save. Same benefits as monthly.',
     features: [
       'Unlimited bookings',
       'Zero commission',
       'All features included',
-      '₹799 × 12 months',
+      'Save vs paying monthly',
     ],
   },
 }

@@ -6,6 +6,7 @@ import { Share } from '@capacitor/share'
 import { Media } from '@capacitor-community/media'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
+import { openExternalUrl } from '../../lib/native'
 import {
   CAPACITOR_NATIVE_STRATEGY,
   QR_GALLERY_ALBUM,
@@ -343,27 +344,20 @@ export const QRCodePage: React.FC = () => {
               <p className="font-medium text-center">
                 {name}
               </p>
-
-              <p className="text-xs text-gray-400 text-center mt-1 break-all">
-                {url}
-              </p>
             </div>
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => {
-                  navigator.clipboard
-                    .writeText(url)
-                    .then(() => {
-                      toast.success('Link copied!')
-                    })
-                    .catch(() => {
-                      toast.error('Could not copy link')
-                    })
+                  void openExternalUrl(url).catch(() => {
+                    toast.error('Could not open preview')
+                  })
                 }}
-                className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+                disabled={!url}
+                className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               >
-                Copy Link
+                Preview
               </button>
 
               <button

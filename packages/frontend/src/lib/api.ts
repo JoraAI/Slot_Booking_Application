@@ -237,7 +237,12 @@ class ApiClient {
     })
   }
 
-  createShop(data: { name: string; timezone?: string; copyHoursFromPrimary?: boolean }) {
+  createShop(data: {
+    name: string
+    timezone?: string
+    copyHoursFromPrimary?: boolean
+    copyCatalogFromBusinessId?: string | null
+  }) {
     return this.request<{
       token: string
       business: { id: string; name: string; slug: string; email: string; publicCode?: string }

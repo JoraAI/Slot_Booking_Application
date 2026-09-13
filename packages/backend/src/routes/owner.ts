@@ -309,6 +309,7 @@ ownerRouter.post('/shops', requireOwnerRole, async (req: AuthRequest, res: Respo
       name: z.string().trim().min(2).max(120),
       timezone: z.string().optional(),
       copyHoursFromPrimary: z.boolean().optional(),
+      copyCatalogFromBusinessId: z.string().min(1).nullable().optional(),
     }).parse(req.body);
 
     const business = await orgAuthService.createAdditionalShop({
@@ -316,7 +317,10 @@ ownerRouter.post('/shops', requireOwnerRole, async (req: AuthRequest, res: Respo
       orgId: req.owner!.orgId,
       name: parsed.name,
       timezone: parsed.timezone,
-      copyHoursFromPrimary: parsed.copyHoursFromPrimary,
+      copyHoursFromPrimary: parsed.copyCatalogFromBusinessId
+        ? false
+        : parsed.copyHoursFromPrimary,
+      copyCatalogFromBusinessId: parsed.copyCatalogFromBusinessId || null,
     });
 
     res.status(201).json(

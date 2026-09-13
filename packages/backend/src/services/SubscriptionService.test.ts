@@ -37,7 +37,7 @@ test('fixed monthly plan: after payment due is 0 and cycle ends at paidUntil', (
   assert.strictEqual(v.currentCycleEndsAt, paidUntil.toISOString());
 });
 
-test('fixed yearly plan: due is 12x monthly until paid', () => {
+test('fixed yearly plan: due is flat yearly price until paid', () => {
   const now = new Date('2026-09-07T12:00:00Z');
   const unpaid = fixedPlanDueAndCycle({
     plan: 'YEARLY_799',
@@ -46,7 +46,7 @@ test('fixed yearly plan: due is 12x monthly until paid', () => {
     now,
     isTrial: false,
   });
-  assert.strictEqual(unpaid.dueInr, 799 * 12);
+  assert.strictEqual(unpaid.dueInr, 7499);
 
   const paidUntil = addMonthsUtc(now, 12);
   const paid = fixedPlanDueAndCycle({

@@ -36,6 +36,8 @@ export const DashboardLayout: React.FC = () => {
   const [switching, setSwitching] = useState(false)
   const [addingShop, setAddingShop] = useState(false)
   const [newShopName, setNewShopName] = useState('')
+  const [copyCatalog, setCopyCatalog] = useState(false)
+  const [copyFromShopId, setCopyFromShopId] = useState('')
 
   // Fetch business config on mount so all dashboard pages have access
   useEffect(() => {
@@ -75,11 +77,21 @@ export const DashboardLayout: React.FC = () => {
   const handleAddShop = async () => {
     const name = newShopName.trim()
     if (name.length < 2) return
+    if (copyCatalog && !copyFromShopId) {
+      alert('Select a shop to copy items from, or turn off prefill')
+      return
+    }
     setAddingShop(true)
     try {
-      const res = await api.createShop({ name, copyHoursFromPrimary: true })
+      const res = await api.createShop({
+        name,
+        copyHoursFromPrimary: !copyCatalog,
+        copyCatalogFromBusinessId: copyCatalog ? copyFromShopId : null,
+      })
       api.setToken(res.token)
       setNewShopName('')
+      setCopyCatalog(false)
+      setCopyFromShopId('')
       const me = await api.getOwnerMe()
       setConfig(me)
       navigate('/dashboard')
@@ -126,21 +138,58 @@ export const DashboardLayout: React.FC = () => {
               ))}
             </select>
             {isOwner && (
-              <div className="flex gap-1">
-                <input
-                  className="flex-1 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1"
-                  placeholder="New shop name"
-                  value={newShopName}
-                  onChange={(e) => setNewShopName(e.target.value)}
-                />
-                <button
-                  type="button"
-                  disabled={addingShop || newShopName.trim().length < 2}
-                  onClick={handleAddShop}
-                  className="text-xs px-2 py-1 rounded-md bg-primary text-white disabled:opacity-50"
-                >
-                  Add
-                </button>
+              <div className="space-y-1.5">
+                <div className="flex gap-1">
+                  <input
+                    className="flex-1 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1"
+                    placeholder="New shop name"
+                    value={newShopName}
+                    onChange={(e) => setNewShopName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    disabled={addingShop || newShopName.trim().length < 2 || (copyCatalog && !copyFromShopId)}
+                    onClick={handleAddShop}
+                    className="text-xs px-2 py-1 rounded-md bg-primary text-white disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+                {shops.length > 0 && (
+                  <label className="flex items-start gap-1.5 px-1 text-[11px] text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-gray-300"
+                      checked={copyCatalog}
+                      onChange={(e) => {
+                        setCopyCatalog(e.target.checked)
+                        if (e.target.checked && !copyFromShopId && config?.id) {
+                          setCopyFromShopId(config.id)
+                        }
+                      }}
+                    />
+                    <span>Prefill items from an existing shop</span>
+                  </label>
+                )}
+                {copyCatalog && (
+                  <select
+                    className="w-full text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1"
+                    value={copyFromShopId}
+                    onChange={(e) => setCopyFromShopId(e.target.value)}
+                  >
+                    <option value="">Select shop…</option>
+                    {shops.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-[10px] text-gray-400 px-1 leading-snug">
+                  {copyCatalog
+                    ? 'Categories, services, products, and images are copied into the new shop.'
+                    : 'Leave unchecked to start this shop from scratch.'}
+                </p>
               </div>
             )}
             <p className="text-[11px] text-gray-400 px-1">{role === 'MANAGER' ? 'Manager' : 'Owner'}</p>
