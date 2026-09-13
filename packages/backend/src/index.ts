@@ -248,6 +248,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use('/api/owner/media/upload', express.json({ limit: '6mb' }));
+app.use('/api/owner/media/upload-audio', express.json({ limit: '6mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

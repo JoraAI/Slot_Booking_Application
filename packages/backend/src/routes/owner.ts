@@ -40,7 +40,10 @@ import {
 import { hashOwnerPassword, isHashedOwnerPassword, verifyOwnerPassword } from '../services/OwnerPassword';
 import {
   createMediaAsset,
+  createAudioMediaAsset,
   decodeImageBase64,
+  decodeDataBase64,
+  deleteOwnedMediaAsset,
   deleteReplacedMediaAsset,
   mediaIdFromUrl,
   publicMediaUrl,
@@ -3438,6 +3441,11 @@ const supportTicketSchema = z.object({
   category: z.enum(['bug', 'enhancement', 'billing', 'account', 'other']),
   subject: z.string().trim().min(3, 'Subject must be at least 3 characters').max(120),
   message: z.string().trim().min(10, 'Please describe the issue in at least 10 characters').max(4000),
+  voiceNoteUrl: z.union([
+    z.null(),
+    z.string().trim().url().max(2000),
+    z.string().trim().regex(/^\/api\/media\/[a-zA-Z0-9_-]+$/, 'Invalid voice note URL'),
+  ]).optional(),
 });
 
 /**
@@ -3452,9 +3460,6 @@ ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
     }
 
     const businessId = req.owner!.businessId;
-    if (!allowSupportTicket(businessId)) {
-      return res.status(429).json({ error: 'Too many support requests. Please try again in an hour.' });
-    }
 
     const parsed = supportTicketSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -3472,12 +3477,35 @@ ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Your account email is missing. Update it in Settings, then retry.' });
     }
 
+    let voiceNoteUrl: string | null = null;
+    const rawVoice = parsed.data.voiceNoteUrl;
+    if (rawVoice) {
+      const mediaId = mediaIdFromUrl(String(rawVoice));
+      if (!mediaId) {
+        return res.status(400).json({ error: 'Invalid voice note' });
+      }
+      const asset = await prisma.mediaAsset.findFirst({
+        where: { id: mediaId, businessId },
+        select: { id: true, mimeType: true },
+      });
+      if (!asset || !String(asset.mimeType || '').startsWith('audio/')) {
+        return res.status(400).json({ error: 'Voice note not found for this shop' });
+      }
+      voiceNoteUrl = publicMediaUrl(asset.id, req);
+    }
+
+    // Consume rate limit only after payload validation succeeds.
+    if (!allowSupportTicket(businessId)) {
+      return res.status(429).json({ error: 'Too many support requests. Please try again in an hour.' });
+    }
+
     await notificationService.sendSupportTicketEmail({
       to: SUPPORT_ADMIN_EMAIL,
       replyTo: ownerEmail,
       category: parsed.data.category,
       subject: parsed.data.subject,
       message: parsed.data.message,
+      voiceNoteUrl,
       ownerEmail,
       ownerRole: req.owner!.role || 'OWNER',
       businessName: business.name,
@@ -3520,6 +3548,52 @@ ownerRouter.post('/media/upload', async (req: AuthRequest, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
     }
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /owner/media/upload-audio — short support voice notes (webm/mp4/mpeg/ogg/wav).
+ */
+ownerRouter.post('/media/upload-audio', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = z.object({
+      mimeType: z.string().min(1),
+      dataBase64: z.string().min(1),
+    }).parse(req.body);
+
+    let bytes: Buffer;
+    try {
+      bytes = decodeDataBase64(parsed.dataBase64);
+    } catch {
+      return res.status(400).json({ error: 'Invalid audio data' });
+    }
+
+    const asset = await createAudioMediaAsset(req.owner!.businessId, bytes, parsed.mimeType);
+    res.status(201).json({
+      url: publicMediaUrl(asset.id, req),
+      publicId: asset.id,
+      mimeType: asset.mimeType,
+      byteSize: asset.byteSize,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /owner/media/:id — remove an owned media asset (e.g. discarded voice notes).
+ */
+ownerRouter.delete('/media/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'Media id required' });
+    await deleteOwnedMediaAsset(req.owner!.businessId, id);
+    res.status(204).end();
+  } catch (error: any) {
     res.status(error.status || 400).json({ error: error.message });
   }
 });

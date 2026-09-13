@@ -68,6 +68,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Jora Reservly uses your location so you can pin your business on the map in Settings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jora Reservly uses the microphone so you can attach an optional voice note when contacting support.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Jora Reservly saves your booking QR code as a PNG image to your photo library.</string>
 </dict>
