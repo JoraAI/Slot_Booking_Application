@@ -933,7 +933,7 @@ class NotificationService {
     category: string;
     subject: string;
     message: string;
-    voiceNoteUrl?: string | null;
+    voiceAttachment?: { filename: string; content: Buffer; contentType: string } | null;
     ownerEmail: string;
     ownerRole?: string;
     businessName: string;
@@ -943,11 +943,8 @@ class NotificationService {
   }): Promise<void> {
     const categoryLabel = this.esc(args.category);
     const subjectLine = `[Reservly Support · ${args.category}] ${args.subject}`.slice(0, 200);
-    const voiceBlock = args.voiceNoteUrl
-      ? `<p style="margin-top:16px;font-size:14px;"><strong>Voice note:</strong>
-          <a href="${this.esc(args.voiceNoteUrl)}" style="color:#1780A8;">Listen to recording</a>
-         </p>
-         <audio controls src="${this.esc(args.voiceNoteUrl)}" style="width:100%;margin-top:8px;"></audio>`
+    const voiceBlock = args.voiceAttachment
+      ? `<p style="margin-top:16px;font-size:14px;"><strong>Voice note:</strong> attached as <code>${this.esc(args.voiceAttachment.filename)}</code></p>`
       : '';
     const html = `
       <div style="font-family: Inter, system-ui, sans-serif; max-width: 640px; margin: 0 auto; color: #111827;">
@@ -969,6 +966,7 @@ class NotificationService {
     await this.sendEmail(args.to, subjectLine, html, {
       throwOnError: true,
       replyTo: args.replyTo,
+      attachments: args.voiceAttachment ? [args.voiceAttachment] : undefined,
       // intentionally no business → platform Resend/SMTP only
     });
   }
