@@ -1550,16 +1550,29 @@ ownerRouter.get('/customers', async (req: AuthRequest, res: Response) => {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
     const query = String(req.query.q || '').trim();
     const businessId = req.owner!.businessId;
+    const dig = query.replace(/\D/g, '');
+    // Prefer local mobile digits (strip leading 91/0) so "+9198…" matches query "98…"
+    let phoneNeedle = dig;
+    if (phoneNeedle.startsWith('91') && phoneNeedle.length >= 12) phoneNeedle = phoneNeedle.slice(2);
+    while (phoneNeedle.startsWith('0') && phoneNeedle.length > 10) phoneNeedle = phoneNeedle.slice(1);
+    if (phoneNeedle.length > 10) phoneNeedle = phoneNeedle.slice(-10);
+
+    const or: any[] = [];
+    if (query) {
+      or.push(
+        { name: { contains: query, mode: 'insensitive' } },
+        { phone: { contains: query } },
+        { email: { contains: query, mode: 'insensitive' } },
+        { lastServiceName: { contains: query, mode: 'insensitive' } },
+      );
+      if (dig && dig !== query) or.push({ phone: { contains: dig } });
+      if (phoneNeedle && phoneNeedle !== dig && phoneNeedle !== query) {
+        or.push({ phone: { contains: phoneNeedle } });
+      }
+    }
     const where: any = {
       businessId,
-      ...(query ? {
-        OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query } },
-          { email: { contains: query, mode: 'insensitive' } },
-          { lastServiceName: { contains: query, mode: 'insensitive' } },
-        ],
-      } : {}),
+      ...(or.length ? { OR: or } : {}),
     };
     const [customers, total] = await Promise.all([
       prisma.customerContact.findMany({

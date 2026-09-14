@@ -43,6 +43,28 @@ function digitsOnly(value: string) {
   return value.replace(/\D/g, '')
 }
 
+/** Digits only, with common IN prefixes (+91 / 0) stripped for matching. */
+function normalizePhoneDigits(value: string) {
+  let d = digitsOnly(value)
+  if (d.startsWith('91') && d.length >= 12) d = d.slice(2)
+  while (d.startsWith('0') && d.length > 10) d = d.slice(1)
+  return d
+}
+
+function phonesMatch(stored: string, query: string) {
+  const s = normalizePhoneDigits(stored)
+  const rawQ = digitsOnly(query)
+  if (rawQ.length < 2 || !s) return false
+  const candidates = new Set<string>([normalizePhoneDigits(query), rawQ])
+  // User may type "+91" + partial local digits before the full 10-digit mobile is present.
+  if (rawQ.startsWith('91') && rawQ.length > 2) candidates.add(rawQ.slice(2))
+  if (rawQ.startsWith('0') && rawQ.length > 1) candidates.add(rawQ.replace(/^0+/, ''))
+  for (const q of candidates) {
+    if (q.length >= 2 && (s.includes(q) || q.includes(s))) return true
+  }
+  return false
+}
+
 /** Name / phone / email typeahead against the shop customer phonebook. */
 const CustomerSuggestField: React.FC<{
   kind: 'name' | 'phone' | 'email'
@@ -57,6 +79,8 @@ const CustomerSuggestField: React.FC<{
   const [loading, setLoading] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const reqId = useRef(0)
+  /** Only search after the user types in this field — ignore parent fills from another field's select. */
+  const userTypedRef = useRef(false)
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -67,6 +91,13 @@ const CustomerSuggestField: React.FC<{
   }, [])
 
   useEffect(() => {
+    if (!userTypedRef.current) {
+      setSuggestions([])
+      setOpen(false)
+      setLoading(false)
+      return
+    }
+
     const q = value.trim()
     if (q.length < 2) {
       setSuggestions([])
@@ -76,9 +107,13 @@ const CustomerSuggestField: React.FC<{
     const id = ++reqId.current
     const timer = window.setTimeout(() => {
       setLoading(true)
-      api.getCustomers({ q, limit: '12' })
+      const apiQ =
+        kind === 'phone'
+          ? (normalizePhoneDigits(q) || digitsOnly(q) || q)
+          : q
+      api.getCustomers({ q: apiQ, limit: '12' })
         .then((res) => {
-          if (id !== reqId.current) return
+          if (id !== reqId.current || !userTypedRef.current) return
           const rows = (res.customers || []) as CustomerContact[]
           const qLower = q.toLowerCase()
           const filtered = rows.filter((c) => {
@@ -86,10 +121,7 @@ const CustomerSuggestField: React.FC<{
               return String(c.name || '').toLowerCase().includes(qLower)
             }
             if (kind === 'phone') {
-              const phone = String(c.phone || '')
-              const dig = digitsOnly(q)
-              if (!dig) return phone.toLowerCase().startsWith(qLower)
-              return digitsOnly(phone).startsWith(dig) || phone.startsWith(q)
+              return phonesMatch(String(c.phone || ''), q)
             }
             const email = String(c.email || '').toLowerCase()
             return email.startsWith(qLower) || email.includes(qLower)
@@ -119,11 +151,11 @@ const CustomerSuggestField: React.FC<{
         placeholder={placeholder}
         autoComplete="off"
         onChange={(e) => {
+          userTypedRef.current = true
           onChange(e.target.value)
-          setOpen(true)
         }}
         onFocus={() => {
-          if (suggestions.length > 0) setOpen(true)
+          if (userTypedRef.current && suggestions.length > 0) setOpen(true)
         }}
         className={className}
       />
@@ -136,9 +168,10 @@ const CustomerSuggestField: React.FC<{
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
-                  onSelect(c)
+                  userTypedRef.current = false
                   setOpen(false)
                   setSuggestions([])
+                  onSelect(c)
                 }}
               >
                 <span className="font-medium block truncate">{c.name}</span>
@@ -150,7 +183,7 @@ const CustomerSuggestField: React.FC<{
           ))}
         </ul>
       )}
-      {loading && value.trim().length >= 2 && (
+      {loading && userTypedRef.current && value.trim().length >= 2 && (
         <p className="text-[10px] text-gray-400 mt-0.5">Searching customers…</p>
       )}
     </div>
