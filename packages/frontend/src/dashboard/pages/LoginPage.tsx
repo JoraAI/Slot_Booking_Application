@@ -416,6 +416,8 @@ export const LoginPage: React.FC = () => {
         <p className="mt-4 text-center text-xs text-white/80">
           <a href="/privacy" className="underline hover:text-white">Privacy Policy</a>
           {' · '}
+          <a href="/delete-account" className="underline hover:text-white">Delete account</a>
+          {' · '}
           <a href="mailto:admin@staffingpros.tech" className="underline hover:text-white">Support</a>
         </p>
       </div>

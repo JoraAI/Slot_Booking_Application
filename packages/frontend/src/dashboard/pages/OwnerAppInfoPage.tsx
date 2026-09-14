@@ -41,6 +41,8 @@ export const OwnerAppInfoPage: React.FC = () => {
         <p className="text-sm text-gray-600 dark:text-gray-300">
           How we collect and use account, booking, payment, and support data is described in our{' '}
           <a href="/privacy" className="text-primary underline">Privacy Policy</a>.
+          To request deletion of your account and associated data, see{' '}
+          <a href="/delete-account" className="text-primary underline">Delete account</a>.
           Questions: <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
         </p>
       </div>

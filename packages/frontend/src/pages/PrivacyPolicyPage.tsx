@@ -129,10 +129,12 @@ export const PrivacyPolicyPage: React.FC = () => {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Retention &amp; deletion</h2>
           <p>
-            We keep account and business data while your workspace is active. You may request deletion of
-            your owner account / business data by emailing{' '}
-            <a className="text-primary underline" href="mailto:admin@staffingpros.tech">admin@staffingpros.tech</a>.
-            We may retain limited records required for fraud prevention, accounting, or law.
+            We keep account and business data while your workspace is active. To request deletion of your
+            owner account and associated data, follow the steps on our{' '}
+            <Link className="text-primary underline" to="/delete-account">Delete account</Link> page
+            (or email{' '}
+            <a className="text-primary underline" href="mailto:admin@staffingpros.tech">admin@staffingpros.tech</a>).
+            We may retain limited records required for fraud prevention, accounting, or law, as described on that page.
           </p>
         </section>
 
