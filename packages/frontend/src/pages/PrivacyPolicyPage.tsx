@@ -38,9 +38,14 @@ export const PrivacyPolicyPage: React.FC = () => {
           <h2 className="text-lg font-semibold">Who we are</h2>
           <p>
             Jora Reservly (“Reservly”, “we”, “us”) is a salon / service-business booking and operations
-            product from <strong>Jora AI</strong> (Staffing Pros / Jora). Contact:{' '}
+            product operated by <strong>StaffingPros</strong> (sole proprietorship).{' '}
+            <strong>Jora AI</strong> is the product brand under which StaffingPros offers Reservly.
+            Contact:{' '}
             <a className="text-primary underline" href="mailto:admin@staffingpros.tech">admin@staffingpros.tech</a>
-            . Website: <a className="text-primary underline" href="https://jora.co.in" target="_blank" rel="noreferrer">jora.co.in</a>.
+            . Company site:{' '}
+            <a className="text-primary underline" href="https://staffingpros.tech" target="_blank" rel="noreferrer">staffingpros.tech</a>
+            . Product site:{' '}
+            <a className="text-primary underline" href="https://jora.co.in" target="_blank" rel="noreferrer">jora.co.in</a>.
           </p>
           <p>
             This policy covers the <strong>owner Android / iOS apps</strong>, the owner web dashboard, and
