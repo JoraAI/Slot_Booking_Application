@@ -41,7 +41,8 @@ export const DeleteAccountPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Delete your Jora Reservly account</h1>
           <p className="mt-2 text-gray-500 dark:text-gray-400">
-            Jora Reservly (Google Play package <code className="text-xs">ai.jora.reservly</code>) · Last updated: 14 September 2026
+            Jora Reservly is a product of <strong>StaffingPros</strong> (Google Play package{' '}
+            <code className="text-xs">ai.jora.reservly</code>) · Last updated: 14 September 2026
           </p>
         </div>
 
