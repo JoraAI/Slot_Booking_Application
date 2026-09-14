@@ -35,6 +35,15 @@ export const OwnerAppInfoPage: React.FC = () => {
           WhatsApp automation runs through Meta Cloud API configured per salon. Message charges are billed by Meta on the sender account, not by the Reservly app runtime.
         </p>
       </div>
+
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 space-y-3">
+        <h2 className="text-lg font-semibold">Privacy</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          How we collect and use account, booking, payment, and support data is described in our{' '}
+          <a href="/privacy" className="text-primary underline">Privacy Policy</a>.
+          Questions: <a href="mailto:admin@staffingpros.tech" className="text-primary underline">admin@staffingpros.tech</a>.
+        </p>
+      </div>
     </div>
   )
 }
