@@ -1,5 +1,7 @@
 # Google Play Console — Jora Reservly production listing kit
 
+> **Paused on Org account:** Production was rejected (Personal account + financial features). See **`PLAY_CONSOLE_ORG_HANDOFF.md`** for transfer / D-U-N-S resume steps. No new AAB required for that rejection.
+
 Use this while filling **Play Console → Jora Reservly (`ai.jora.reservly`)**.  
 Assets folder: `play-store-assets/` (feature graphic). Screenshots you capture on a device.
 

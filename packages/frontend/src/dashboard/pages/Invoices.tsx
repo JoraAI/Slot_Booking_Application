@@ -43,9 +43,9 @@ function digitsOnly(value: string) {
   return value.replace(/\D/g, '')
 }
 
-/** Phone / email typeahead against the shop customer phonebook. */
+/** Name / phone / email typeahead against the shop customer phonebook. */
 const CustomerSuggestField: React.FC<{
-  kind: 'phone' | 'email'
+  kind: 'name' | 'phone' | 'email'
   value: string
   onChange: (value: string) => void
   onSelect: (customer: CustomerContact) => void
@@ -80,15 +80,19 @@ const CustomerSuggestField: React.FC<{
         .then((res) => {
           if (id !== reqId.current) return
           const rows = (res.customers || []) as CustomerContact[]
+          const qLower = q.toLowerCase()
           const filtered = rows.filter((c) => {
+            if (kind === 'name') {
+              return String(c.name || '').toLowerCase().includes(qLower)
+            }
             if (kind === 'phone') {
               const phone = String(c.phone || '')
               const dig = digitsOnly(q)
-              if (!dig) return phone.toLowerCase().startsWith(q.toLowerCase())
+              if (!dig) return phone.toLowerCase().startsWith(qLower)
               return digitsOnly(phone).startsWith(dig) || phone.startsWith(q)
             }
             const email = String(c.email || '').toLowerCase()
-            return email.startsWith(q.toLowerCase())
+            return email.startsWith(qLower) || email.includes(qLower)
           })
           setSuggestions(filtered)
           setOpen(filtered.length > 0)
@@ -105,10 +109,12 @@ const CustomerSuggestField: React.FC<{
     return () => window.clearTimeout(timer)
   }, [value, kind])
 
+  const inputType = kind === 'email' ? 'email' : kind === 'phone' ? 'tel' : 'text'
+
   return (
     <div className="relative" ref={wrapRef}>
       <input
-        type={kind === 'email' ? 'email' : 'tel'}
+        type={inputType}
         value={value}
         placeholder={placeholder}
         autoComplete="off"
@@ -619,7 +625,19 @@ export const InvoicesPage: React.FC = () => {
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium mb-1">Customer name *</label>
-                <input value={form.customerName} onChange={(e) => setForm(p => ({ ...p, customerName: e.target.value }))} className={inputCls} />
+                <CustomerSuggestField
+                  kind="name"
+                  value={form.customerName}
+                  className={inputCls}
+                  placeholder="Type to search customers by name"
+                  onChange={(customerName) => setForm((p) => ({ ...p, customerName }))}
+                  onSelect={(c) => setForm((p) => ({
+                    ...p,
+                    customerName: c.name || p.customerName,
+                    customerPhone: c.phone || p.customerPhone,
+                    customerEmail: c.email || p.customerEmail,
+                  }))}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">Phone (for WhatsApp send)</label>
