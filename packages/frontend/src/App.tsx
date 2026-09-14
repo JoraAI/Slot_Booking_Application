@@ -25,6 +25,7 @@ import { SetupGuide } from './dashboard/pages/SetupGuide'
 import { SubscriptionPage } from './dashboard/pages/SubscriptionPage'
 import { OwnerAppInfoPage } from './dashboard/pages/OwnerAppInfoPage'
 import { SupportPage } from './dashboard/pages/SupportPage'
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { useStore } from './store'
 import { useEmbedMode } from './hooks'
 import { PageSections } from './widget/PageSections'
@@ -38,6 +39,9 @@ export default function App() {
 
   return (
     <Routes>
+      {/* Public legal pages (Play Store / App Store require a reachable privacy URL) */}
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+
       {/* Public booking widget - web only; native shell is owner dashboard */}
       {!nativeOwnerApp && (
         <>
