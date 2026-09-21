@@ -981,6 +981,12 @@ class NotificationService {
       ? `${booking.durationMinutesSnapshot} min`
       : '';
     const locHtml = this.locationHtml(business);
+    const ownerPhoneDisplay = business.ownerWhatsapp
+      ? String(business.ownerWhatsapp).trim()
+      : '';
+    const contactEmailHtml = ownerPhoneDisplay
+      ? `<p><strong>Contact:</strong> ${this.esc(ownerPhoneDisplay)}</p>`
+      : '';
     // One-time manage/cancel link — customer reschedule remains disabled (405).
     const manageLink = booking.managementUrl
       ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#7C3AED; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Cancel booking</a></p>`
@@ -997,6 +1003,7 @@ class NotificationService {
           <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>
           ${booking.staff ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}
           ${booking.finalPrice != null ? `<p><strong>Amount:</strong> ₹${booking.finalPrice}</p>` : ''}
+          ${contactEmailHtml}
         </div>
         ${locHtml}
         ${manageLink}
@@ -1019,10 +1026,16 @@ class NotificationService {
       const waDate = new Intl.DateTimeFormat('en-IN', {
         weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz,
       }).format(new Date(booking.date));
+      // appointment_confirmation_2 has only {{1}}…{{5}} — fold contact into {{2}}
+      // (salon). Meta strips URLs from template params, so use the phone digits only.
+      const salonWithContact = ownerPhoneDisplay
+        ? `${business.name || 'us'} (contact ${ownerPhoneDisplay})`
+        : String(business.name || 'us');
       // Fallback body for session/Meta when structured booking template is unavailable.
       const body =
         `Your appointment at ${business.name} is confirmed for ${waDate} at ${booking.startTime}. ` +
         `Service ${plainService}${durationMin ? ` (${durationMin})` : ''}. ` +
+        (ownerPhoneDisplay ? `Contact ${ownerPhoneDisplay}. ` : '') +
         `Booking reference ${booking.id}.`;
       // appointment_confirmation_2: Hello {{1}}, thanks {{2}}, appointment for {{3}} on {{4}} at {{5}}
       // + Visit Website button suffix (path+query after approved base URL).
@@ -1031,7 +1044,7 @@ class NotificationService {
         bookingId: booking.id,
         templateParams: [
           String(booking.customerName || 'there'),
-          String(business.name || 'us'),
+          salonWithContact,
           plainService,
           waDate,
           String(booking.startTime || ''),

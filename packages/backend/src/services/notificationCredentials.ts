@@ -134,7 +134,7 @@ export function resolvePlatformGupshupWhatsapp(): GupshupWhatsappConfig | null {
   const apiKey = String(process.env.GUPSHUP_API_KEY || '').trim();
   const appName = String(process.env.GUPSHUP_APP_NAME || '').trim();
   const appId = String(
-    process.env.GUPSHUP_APP_ID || 'bf9b2544-1967-469e-be55-79f478e2ae57'
+    process.env.GUPSHUP_APP_ID || 'e3a6417f-4a8d-4194-9d77-144d2821c0c8'
   ).trim();
   const source = String(process.env.GUPSHUP_SOURCE || '').replace(/\D/g, '');
   const utilityTemplate = String(process.env.GUPSHUP_TEMPLATE_UTILITY || '').trim();
