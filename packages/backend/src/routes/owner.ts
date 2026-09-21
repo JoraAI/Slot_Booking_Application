@@ -704,9 +704,10 @@ ownerRouter.put('/bookings/:id', async (req: AuthRequest, res: Response) => {
     // Reschedule path: validate availability (excluding the moved booking) and
     // rebuild reminders only after success.
     if (req.body.date || req.body.startTime) {
+      // Full business row: sendBookingUpdate needs name, ownerWhatsapp, address,
+      // lat/lng, and SMTP fields — not just notify flags.
       const business = await prisma.business.findUnique({
         where: { id: req.owner!.businessId },
-        select: { id: true, publicCode: true, timezone: true, remindersEnabled: true, reminderOffsetsMinutes: true, notifyCustomerEmail: true, notifyCustomerWhatsapp: true },
       });
       if (!business) return res.status(404).json({ error: 'Business not found' });
 

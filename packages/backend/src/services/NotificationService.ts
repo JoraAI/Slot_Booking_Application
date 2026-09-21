@@ -1134,17 +1134,44 @@ class NotificationService {
     const dateStr = new Date(booking.date).toLocaleDateString('en-IN', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
+    const waDate = new Intl.DateTimeFormat('en-IN', {
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    }).format(new Date(booking.date));
 
     const serviceName = this.bookingServiceName(booking);
+    const locHtml = this.locationHtml(business);
+    const { address, directions, contact } = this.locationText(business);
+    const ownerPhoneDisplay = business.ownerWhatsapp
+      ? String(business.ownerWhatsapp).trim()
+      : '';
+    const contactEmailHtml = ownerPhoneDisplay
+      ? `<p><strong>Contact:</strong> ${this.esc(ownerPhoneDisplay)}</p>`
+      : '';
+    const contactLine = contact
+      ? `\nFor changes or questions, contact this number: ${ownerPhoneDisplay}\n${contact}`
+      : '';
+    const timeLine = `${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}`;
+
     if (business.notifyCustomerEmail && booking.customerEmail) {
       await this.sendEmail(booking.customerEmail, `Booking Updated - ${business.name}`,
         `<h2>Booking Updated</h2>
-        <p>Hi ${booking.customerName},</p>
-        <p>Your <strong>${this.esc(serviceName)}</strong> booking at <strong>${business.name}</strong> has been updated.</p>
+        <p>Hi ${this.esc(booking.customerName)},</p>
+        <p>Your <strong>${this.esc(serviceName)}</strong> booking at <strong>${this.esc(business.name)}</strong> has been updated.</p>
         <p><strong>Service:</strong> ${this.esc(serviceName)}</p>
         <p><strong>Date:</strong> ${dateStr}</p>
-        <p><strong>Time:</strong> ${booking.startTime} - ${booking.endTime}</p>`,
+        <p><strong>Time:</strong> ${timeLine}</p>
+        ${contactEmailHtml}
+        ${locHtml}
+        <p style="color: #6B7280; font-size: 14px;">Booking Reference: ${this.esc(booking.id)}</p>`,
         { business }
+      );
+    }
+
+    if (business.notifyCustomerWhatsapp && booking.customerPhone) {
+      await this.sendWhatsApp(
+        booking.customerPhone,
+        `✏️ Booking updated\n\n${business.name}\n📅 ${waDate}\n🕐 ${timeLine}\n💇 ${serviceName}\n${address}${directions}${contactLine}\nBooking Ref: ${booking.id}`,
+        { business, bookingId: booking.id }
       );
     }
   }
@@ -1322,10 +1349,16 @@ class NotificationService {
     const serviceName = this.esc(this.bookingServiceName(booking));
     const subject = `Reminder: ${serviceName} at ${this.esc(business.name)}`;
     const line = `${booking.dateDisplay} at ${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}`;
-    // Reminders intentionally carry location/directions ONLY — the manage/cancel
-    // token is returned exactly once at booking creation and is never recreated.
+    // Reminders intentionally omit manage/cancel links — the token is returned
+    // once at booking creation and is never recreated.
     const locHtml = this.locationHtml(business);
-    const { address, directions } = this.locationText(business);
+    const { address, directions, contact } = this.locationText(business);
+    const ownerPhoneDisplay = business.ownerWhatsapp
+      ? String(business.ownerWhatsapp).trim()
+      : '';
+    const contactEmailHtml = ownerPhoneDisplay
+      ? `<p><strong>Contact:</strong> ${this.esc(ownerPhoneDisplay)}</p>`
+      : '';
 
     if (channel === 'email') {
       if (booking.customerEmail) {
@@ -1339,6 +1372,7 @@ class NotificationService {
             <p><strong>Time:</strong> ${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}</p>
             ${booking.staff?.name ? `<p><strong>Staff:</strong> ${this.esc(booking.staff.name)}</p>` : ''}
             ${booking.finalPrice != null ? `<p><strong>Amount:</strong> ₹${booking.finalPrice}</p>` : ''}
+            ${contactEmailHtml}
           </div>
           ${locHtml}
           <p style="color: #6B7280; font-size: 14px;">Booking Reference: ${this.esc(booking.id)}</p>`,
@@ -1346,8 +1380,11 @@ class NotificationService {
         );
       }
     } else if (channel === 'whatsapp' && booking.customerPhone) {
+      const contactLine = contact
+        ? `\nFor changes or questions, contact this number: ${ownerPhoneDisplay}\n${contact}`
+        : '';
       await this.sendWhatsApp(booking.customerPhone,
-        `🔔 Reminder for your ${serviceName}\n\n${this.esc(business.name)}\n📅 ${booking.dateDisplay}\n🕐 ${line}${booking.staff?.name ? `\n👤 ${this.esc(booking.staff.name)}` : ''}${booking.finalPrice != null ? `\n💰 ₹${booking.finalPrice}` : ''}\n${address}${directions}\n\nBooking Ref: ${this.esc(booking.id)}`,
+        `🔔 Reminder for your ${serviceName}\n\n${this.esc(business.name)}\n📅 ${booking.dateDisplay}\n🕐 ${line}${booking.staff?.name ? `\n👤 ${this.esc(booking.staff.name)}` : ''}${booking.finalPrice != null ? `\n💰 ₹${booking.finalPrice}` : ''}\n${address}${directions}${contactLine}\nBooking Ref: ${this.esc(booking.id)}`,
         { business, bookingId: booking.id, throwOnInsufficient: true }
       );
     }
