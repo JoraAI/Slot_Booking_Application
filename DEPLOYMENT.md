@@ -279,7 +279,7 @@ See `packages/backend/.env.example`.
 | `META_WHATSAPP_DISPLAY_PHONE` / `META_WHATSAPP_TEMPLATE_*` | Display number + optional template names for outside-session fallback |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_WHATSAPP_FROM` | Twilio WhatsApp (when `WHATSAPP_PROVIDER=twilio`) |
 | `GUPSHUP_API_KEY` / `GUPSHUP_APP_NAME` / `GUPSHUP_SOURCE` | Gupshup Self-Serve WhatsApp (when `WHATSAPP_PROVIDER=gupshup`) |
-| `GUPSHUP_APP_ID` | Gupshup app UUID (default `bf9b2544-1967-469e-be55-79f478e2ae57`) |
+| `GUPSHUP_APP_ID` | Gupshup app UUID (India default `e3a6417f-4a8d-4194-9d77-144d2821c0c8`) |
 | `GUPSHUP_TEMPLATE_UTILITY` / `GUPSHUP_TEMPLATE_MARKETING` | Approved Gupshup template UUIDs (single `{{1}}` body recommended) |
 | `META_APP_ID` / `META_APP_SECRET` | Reserved for future Embedded Signup / webhooks (not required today) |
 | `META_WEBHOOK_VERIFY_TOKEN` | Reserved for future Meta webhook (not required today) |
