@@ -948,7 +948,7 @@ class NotificationService {
       : '';
     const html = `
       <div style="font-family: Inter, system-ui, sans-serif; max-width: 640px; margin: 0 auto; color: #111827;">
-        <h2 style="color:#7C3AED; margin-bottom: 8px;">New owner support ticket</h2>
+        <h2 style="color:#1957CA; margin-bottom: 8px;">New owner support ticket</h2>
         <p style="color:#6B7280; font-size:14px; margin-top:0;">Submitted from the Reservly owner dashboard.</p>
         <table style="width:100%; border-collapse:collapse; font-size:14px; margin:16px 0;">
           <tr><td style="padding:6px 0; color:#6B7280; width:140px;">Category</td><td style="padding:6px 0;"><strong>${categoryLabel}</strong></td></tr>
@@ -989,12 +989,12 @@ class NotificationService {
       : '';
     // One-time manage/cancel link — customer reschedule remains disabled (405).
     const manageLink = booking.managementUrl
-      ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#7C3AED; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Cancel booking</a></p>`
+      ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#1957CA; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Cancel booking</a></p>`
       : '';
 
     const html = `
       <div style="font-family: Inter, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #7C3AED;">Booking Confirmed!</h2>
+        <h2 style="color: #1957CA;">Booking Confirmed!</h2>
         <p>Hi ${this.esc(booking.customerName)},</p>
         <p>Your appointment at <strong>${this.esc(business.name)}</strong> has been confirmed.</p>
         <div style="background: #F9FAFB; padding: 16px; border-radius: 12px; margin: 16px 0;">
@@ -1212,7 +1212,7 @@ class NotificationService {
         <p>Hi ${entry.customerName},</p>
         <p>A slot is now available at <strong>${business.name}</strong> on ${dateStr} at ${entry.startTime}.</p>
         <p>You have <strong>30 minutes</strong> to book this slot.</p>
-        <a href="${bookingLink}" style="background: #7C3AED; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Book Now</a>`,
+        <a href="${bookingLink}" style="background: #1957CA; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block;">Book Now</a>`,
         { business }
       );
     }

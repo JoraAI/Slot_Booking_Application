@@ -54,7 +54,7 @@ async function main() {
       name: 'Demo Salon & Spa',
       timezone: 'Asia/Kolkata',
       description: 'Premium salon and spa services for hair, nails, skin, and relaxation.',
-      primaryColor: '#7C3AED',
+      primaryColor: '#1957CA',
       secondaryColor: '#10B981',
       accentColor: '#F59E0B',
       enableMultiStaff: true,
@@ -72,7 +72,7 @@ async function main() {
       publicCode: generatePublicCode(),
       timezone: 'Asia/Kolkata',
       description: 'Premium salon and spa services for hair, nails, skin, and relaxation.',
-      primaryColor: '#7C3AED',
+      primaryColor: '#1957CA',
       secondaryColor: '#10B981',
       accentColor: '#F59E0B',
       ownerEmail: 'owner@demosalon.com',
@@ -105,7 +105,7 @@ async function main() {
       },
       staff: {
         create: [
-          { name: 'Priya Sharma', role: 'Senior Stylist', phone: '+919876543210', email: 'priya@demosalon.com', color: '#7C3AED', isActive: true },
+          { name: 'Priya Sharma', role: 'Senior Stylist', phone: '+919876543210', email: 'priya@demosalon.com', color: '#1957CA', isActive: true },
           { name: 'Ravi Kumar', role: 'Color Specialist', phone: '+919876543211', email: 'ravi@demosalon.com', color: '#10B981', isActive: true },
           { name: 'Anita Desai', role: 'Spa Therapist', phone: '+919876543212', email: 'anita@demosalon.com', color: '#F59E0B', isActive: true },
         ],

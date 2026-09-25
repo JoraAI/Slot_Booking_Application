@@ -118,7 +118,7 @@ export const PaymentStep: React.FC<PaymentStepProps> = ({
         email: (bookingData.customerEmail as string) || '',
         contact: (bookingData.customerPhone as string) || '',
       },
-      theme: { color: '#7C3AED' },
+      theme: { color: '#1957CA' },
       modal: {
         ondismiss: () => {
           toast.error('Payment cancelled')
