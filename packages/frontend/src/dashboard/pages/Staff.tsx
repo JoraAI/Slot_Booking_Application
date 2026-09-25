@@ -3,7 +3,7 @@ import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import toast from 'react-hot-toast'
 
-const COLORS = ['#1780A8', '#9CD8FA', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6']
+const COLORS = ['#1957CA', '#9DB8F5', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#14B8A6']
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 type StaffForm = {

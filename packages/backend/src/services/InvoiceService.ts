@@ -588,7 +588,7 @@ class InvoiceService {
             ellipsis: true,
             lineBreak: false,
           });
-        doc.fontSize(9).fillColor('#7C3AED')
+        doc.fontSize(9).fillColor('#1957CA')
           .text('TAX INVOICE', 118, headerTop + 34);
 
         doc.fontSize(11).fillColor('#111827')

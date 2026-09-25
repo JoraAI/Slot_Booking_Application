@@ -132,7 +132,7 @@ model Business {
   logoPublicId            String?
   coverImageUrl           String?
   coverImagePublicId      String?
-  primaryColor            String    @default("#7C3AED")
+  primaryColor            String    @default("#1957CA")
   secondaryColor          String?
   accentColor             String?
   slotGranularityMinutes  Int       @default(15)
@@ -329,7 +329,7 @@ model Staff {
   role         String?
   phone        String?
   email        String?
-  color        String         @default("#7C3AED") // hex color for calendar display
+  color        String         @default("#1957CA") // hex color for calendar display
   isActive     Boolean        @default(true)
   salary       Float?         // optional monthly/lump salary (INR); owner-only, never exposed publicly
   commissionPercent Float?    // optional service commission %; owner-only

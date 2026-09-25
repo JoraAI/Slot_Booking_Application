@@ -27,7 +27,7 @@ export const DeleteAccountPage: React.FC = () => {
           <Link to="/login" className="inline-flex items-center gap-2">
             <img
               src="/brand/jora-reservly-full.png"
-              alt="Jora Reservly"
+              alt="Reservly"
               className="h-10 w-auto object-contain"
             />
           </Link>

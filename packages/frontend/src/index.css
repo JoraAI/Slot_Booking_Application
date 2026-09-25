@@ -3,9 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #1780A8;
-  --color-primary-light: #E6F5FB;
-  --color-primary-dark: #0D5A75;
+  /* Matches Reservly calendar logo blue */
+  --color-primary: #1957CA;
+  --color-primary-light: #E8EFFC;
+  --color-primary-dark: #1341A0;
   --color-surface: #FFFFFF;
   --color-surface-2: #F9FAFB;
   --color-border: #E5E7EB;
@@ -29,7 +30,7 @@
     --color-border: #374151;
     --color-text-primary: #F9FAFB;
     --color-text-secondary: #9CA3AF;
-    --color-primary-light: #0A3D52;
+    --color-primary-light: #0F2F6E;
   }
 }
 

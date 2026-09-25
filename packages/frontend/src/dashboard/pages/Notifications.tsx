@@ -306,7 +306,7 @@ export const Notifications: React.FC = () => {
             toast.error(e.message || 'Payment verification failed')
           }
         },
-        theme: { color: '#6366f1' },
+        theme: { color: '#1957CA' },
       }
       const rzp = new window.Razorpay(options)
       rzp.open()

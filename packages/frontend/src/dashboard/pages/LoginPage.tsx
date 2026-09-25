@@ -234,13 +234,14 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary to-primary-dark p-4 safe-top">
       <div className="w-full max-w-sm">
-        <img
-          src="/brand/jora-reservly-full.png"
-          alt="Jora Reservly"
-          className="h-20 w-auto max-w-[280px] mx-auto mb-6 object-contain drop-shadow-sm"
-        />
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-8">
         <div className="text-center mb-6">
+          <img
+            src="/brand/jora-reservly-full.png"
+            alt="Reservly"
+            className="h-12 sm:h-14 w-auto max-w-full mx-auto mb-4 object-contain"
+          />
+          <h1 className="sr-only">Reservly</h1>
           <p className="text-sm text-gray-500">
             {forgotOpen
               ? forgotTitle

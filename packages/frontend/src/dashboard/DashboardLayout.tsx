@@ -140,7 +140,7 @@ export const DashboardLayout: React.FC = () => {
             className="h-8 w-auto max-w-[32px] object-contain object-left shrink-0"
           />
           <div className="min-w-0 leading-tight">
-            <p className="font-bold text-[15px] truncate">Jora Reservly</p>
+            <p className="font-bold text-[15px] truncate text-primary">Reservly</p>
             <p className="text-[10px] text-gray-400 truncate">Powered by Jora AI</p>
           </div>
         </div>

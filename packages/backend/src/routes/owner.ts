@@ -2645,7 +2645,7 @@ ownerRouter.get('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthRequ
  *               role: { type: string, example: "Senior Stylist" }
  *               phone: { type: string }
  *               email: { type: string }
- *               color: { type: string, example: "#7C3AED" }
+ *               color: { type: string, example: "#1957CA" }
  *               isActive: { type: boolean, default: true }
  *     responses:
  *       201:
@@ -2673,7 +2673,7 @@ ownerRouter.post('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthReq
         role: parsed.role || null,
         phone: parsed.phone || null,
         email: parsed.email || null,
-        color: parsed.color || '#7C3AED',
+        color: parsed.color || '#1957CA',
         isActive: parsed.isActive !== undefined ? parsed.isActive : true,
         salary: parsed.salary ?? null,
         commissionPercent: parsed.commissionPercent ?? null,

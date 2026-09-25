@@ -12,7 +12,7 @@ const SIZES = [
   { label: 'L', value: '5' },
 ]
 
-const COLORS = ['#111827', '#7C3AED', '#DC2626', '#059669', '#2563EB', '#D97706']
+const COLORS = ['#111827', '#1957CA', '#DC2626', '#059669', '#2563EB', '#D97706']
 
 interface RichMessageEditorProps {
   valueHtml: string
