@@ -21,23 +21,15 @@
   --radius-lg: 20px;
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv11', 'ss01';
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-surface: #111827;
-    --color-surface-2: #1F2937;
-    --color-border: #374151;
-    --color-text-primary: #F9FAFB;
-    --color-text-secondary: #9CA3AF;
-    --color-primary-light: #0F2F6E;
-  }
+  /* Keep light UI on phones with system dark mode (matches desktop). */
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   background: var(--color-surface);
   color: var(--color-text-primary);
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Keep content clear of notches / punch-hole cameras (e.g. Oppo A79). */
