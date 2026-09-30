@@ -67,6 +67,7 @@ export interface BusinessConfig {
   address: string | null
   latitude: number | null
   longitude: number | null
+  googleReviewUrl?: string | null
   gstin?: string | null
   legalName?: string | null
   stateCode?: string | null

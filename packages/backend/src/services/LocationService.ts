@@ -69,3 +69,51 @@ export function validateLocation(data: {
   }
   return null;
 }
+
+const GOOGLE_REVIEW_HOSTS = new Set([
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'maps.app.goo.gl',
+  'goo.gl',
+  'g.page',
+  'www.g.page',
+]);
+
+/**
+ * Normalize / validate an owner-supplied Google review link.
+ * Empty → null (clear). Otherwise must be https with an allowlisted Google host.
+ */
+export function normalizeGoogleReviewUrl(
+  raw: unknown
+): { ok: true; url: string | null } | { ok: false; error: string } {
+  if (raw === null || raw === '') {
+    return { ok: true, url: null };
+  }
+  const trimmed = String(raw).trim();
+  if (!trimmed) return { ok: true, url: null };
+  if (trimmed.length > 2000) {
+    return { ok: false, error: 'Google review link must be 2000 characters or fewer' };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { ok: false, error: 'Enter a valid Google review link (https://…)' };
+  }
+  if (parsed.protocol !== 'https:') {
+    return { ok: false, error: 'Google review link must start with https://' };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const allowed =
+    GOOGLE_REVIEW_HOSTS.has(host) ||
+    host.endsWith('.google.com') ||
+    host.endsWith('.g.page');
+  if (!allowed) {
+    return {
+      ok: false,
+      error: 'Use a Google Maps / Business review link (google.com, g.page, or maps.app.goo.gl)',
+    };
+  }
+  return { ok: true, url: parsed.toString() };
+}

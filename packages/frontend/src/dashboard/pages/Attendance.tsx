@@ -8,15 +8,22 @@ import type {
   AttendanceStaffSummary,
 } from '../../types'
 
-const STATUSES: { value: AttendanceStatus; label: string; short: string; className: string }[] = [
-  { value: 'PRESENT', label: 'Present', short: 'P', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { value: 'HALF_DAY', label: 'Half-day', short: 'H', className: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { value: 'ABSENT', label: 'Absent', short: 'A', className: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'LEAVE', label: 'Leave', short: 'L', className: 'bg-blue-100 text-blue-800 border-blue-200' },
+const STATUSES: { value: AttendanceStatus; label: string; short: string; className: string; filled: string }[] = [
+  { value: 'PRESENT', label: 'Present', short: 'P', className: 'bg-emerald-100 text-emerald-800 border-emerald-200', filled: 'bg-emerald-500 text-white border-emerald-600' },
+  { value: 'HALF_DAY', label: 'Half-day', short: 'H', className: 'bg-amber-100 text-amber-900 border-amber-200', filled: 'bg-amber-500 text-white border-amber-600' },
+  { value: 'ABSENT', label: 'Absent', short: 'A', className: 'bg-red-100 text-red-800 border-red-200', filled: 'bg-red-500 text-white border-red-600' },
+  { value: 'LEAVE', label: 'Leave', short: 'L', className: 'bg-blue-100 text-blue-800 border-blue-200', filled: 'bg-blue-500 text-white border-blue-600' },
 ]
+
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
 function pad2(n: number) {
   return String(n).padStart(2, '0')
+}
+
+function weekdayIndex(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay()
 }
 
 function monthBounds(month: string): { from: string; to: string; days: string[] } {
@@ -152,11 +159,7 @@ export const AttendancePage: React.FC = () => {
     }
   }
 
-  const isOpenDay = (dateStr: string) => {
-    const [y, m, d] = dateStr.split('-').map(Number)
-    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
-    return openWeekdays.includes(dow)
-  }
+  const isOpenDay = (dateStr: string) => openWeekdays.includes(weekdayIndex(dateStr))
 
   if (!config?.enableMultiStaff) {
     return (
@@ -173,43 +176,44 @@ export const AttendancePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Attendance</h1>
+      {/* Toolbar: title + legend + controls */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight">Attendance</h1>
           <p className="text-sm text-gray-500 mt-1">
             Mark daily attendance for salary estimates and see performance for the month.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            {STATUSES.map((s) => (
+              <span key={s.value} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${s.className}`}>
+                <span className={`w-5 h-5 rounded-md text-[10px] font-bold inline-flex items-center justify-center ${s.filled}`}>{s.short}</span>
+                {s.label}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-dashed border-gray-300 text-gray-500 bg-gray-50">
+              Closed day
+            </span>
+            <span className="text-gray-500 pl-1">
+              Working days: <strong className="text-gray-800">{workingDays}</strong>
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center shrink-0">
           <input
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white shadow-sm"
           />
           <button
             type="button"
             disabled={saving || loading || staff.length === 0}
             onClick={() => void markAllPresentToday()}
-            className="px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            className="px-3.5 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50 shadow-sm hover:bg-primary-dark"
           >
             Mark all present today
           </button>
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2 text-xs">
-        {STATUSES.map((s) => (
-          <span key={s.value} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border ${s.className}`}>
-            <span className="font-semibold">{s.short}</span> {s.label}
-          </span>
-        ))}
-        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 text-gray-500 bg-gray-50">
-          Grey = closed weekday
-        </span>
-        <span className="text-gray-500 self-center">
-          Working days this month: <strong>{workingDays}</strong>
-        </span>
       </div>
 
       {loading ? (
@@ -222,63 +226,89 @@ export const AttendancePage: React.FC = () => {
       ) : (
         <>
           {/* Desktop grid */}
-          <div className="hidden lg:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
-            <table className="w-full text-xs border-collapse min-w-[640px]">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="sticky left-0 bg-gray-50 text-left px-3 py-2 font-medium text-gray-600 min-w-[140px]">Staff</th>
-                  {days.map((d) => {
-                    const dayNum = Number(d.slice(-2))
-                    const open = isOpenDay(d)
-                    return (
-                      <th
-                        key={d}
-                        className={`px-0.5 py-2 text-center font-normal w-8 ${!open ? 'text-gray-300' : 'text-gray-500'} ${d === today ? 'text-primary font-semibold' : ''}`}
-                        title={d}
-                      >
-                        {dayNum}
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {staff.map((s) => (
-                  <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="sticky left-0 bg-white px-3 py-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                        <span className="font-medium truncate">{s.name}</span>
-                      </div>
-                    </td>
+          <div className="hidden lg:block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="border-collapse text-sm" style={{ minWidth: `${200 + days.length * 40}px` }}>
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="sticky left-0 z-20 bg-gray-50 text-left px-4 py-3 font-semibold text-gray-700 min-w-[180px] shadow-[4px_0_8px_-4px_rgba(0,0,0,0.12)]">
+                      Staff
+                    </th>
                     {days.map((d) => {
-                      const st = map[key(s.id, d)]
-                      const meta = statusMeta(st)
+                      const dayNum = Number(d.slice(-2))
                       const open = isOpenDay(d)
+                      const isToday = d === today
+                      const letter = WEEKDAY_LETTERS[weekdayIndex(d)]
                       return (
-                        <td key={d} className="px-0.5 py-1 text-center">
-                          <button
-                            type="button"
-                            disabled={saving}
-                            onClick={() => setPicker({ staffId: s.id, date: d, name: s.name })}
-                            className={`w-7 h-7 rounded-md border text-[10px] font-semibold transition-colors ${
-                              meta
-                                ? meta.className
-                                : open
-                                  ? 'bg-white border-gray-200 text-gray-300 hover:border-primary'
-                                  : 'bg-gray-50 border-transparent text-gray-200'
-                            }`}
-                            title={`${s.name} · ${d}${meta ? ` · ${meta.label}` : ''}`}
-                          >
-                            {meta?.short || '·'}
-                          </button>
-                        </td>
+                        <th
+                          key={d}
+                          title={d}
+                          className={`px-0.5 pt-2.5 pb-1.5 text-center font-normal w-10 ${
+                            isToday ? 'bg-primary-light/50' : open ? 'bg-gray-50' : 'bg-gray-100/80'
+                          }`}
+                        >
+                          <div className={`text-[10px] uppercase tracking-wide leading-none mb-0.5 ${
+                            isToday ? 'text-primary font-semibold' : open ? 'text-gray-400' : 'text-gray-300'
+                          }`}>
+                            {letter}
+                          </div>
+                          <div className={`text-xs leading-none ${
+                            isToday ? 'text-primary font-bold' : open ? 'text-gray-700 font-medium' : 'text-gray-400'
+                          }`}>
+                            {dayNum}
+                          </div>
+                        </th>
                       )
                     })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {staff.map((s, rowIdx) => (
+                    <tr key={s.id} className={`border-b border-gray-100 last:border-0 ${rowIdx % 2 === 1 ? 'bg-gray-50/40' : 'bg-white'}`}>
+                      <td className={`sticky left-0 z-10 px-4 py-2.5 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.12)] ${rowIdx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}`}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0" style={{ backgroundColor: s.color }}>
+                            {s.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate leading-tight">{s.name}</p>
+                            {s.role && <p className="text-[11px] text-gray-500 truncate leading-tight mt-0.5">{s.role}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      {days.map((d) => {
+                        const st = map[key(s.id, d)]
+                        const meta = statusMeta(st)
+                        const open = isOpenDay(d)
+                        const isToday = d === today
+                        return (
+                          <td
+                            key={d}
+                            className={`px-0.5 py-1.5 text-center ${isToday ? 'bg-primary-light/40' : !open ? 'bg-[repeating-linear-gradient(-45deg,transparent,transparent_3px,#f3f4f6_3px,#f3f4f6_4px)]' : ''}`}
+                          >
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => setPicker({ staffId: s.id, date: d, name: s.name })}
+                              className={`w-9 h-9 rounded-lg border text-xs font-bold transition-all hover:ring-2 hover:ring-primary/30 hover:scale-105 ${
+                                meta
+                                  ? meta.filled
+                                  : open
+                                    ? 'bg-white border-gray-200 text-gray-300 hover:border-primary hover:text-primary'
+                                    : 'bg-transparent border-gray-200/60 text-gray-300 hover:border-gray-300'
+                              }`}
+                              title={`${s.name} · ${d}${meta ? ` · ${meta.label}` : open ? '' : ' · closed weekday'}`}
+                            >
+                              {meta?.short || '·'}
+                            </button>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Mobile cards */}
@@ -320,7 +350,7 @@ export const AttendancePage: React.FC = () => {
                             onClick={() => setPicker({ staffId: s.id, date: d, name: s.name })}
                             className={`aspect-square rounded-lg border text-[10px] font-semibold flex flex-col items-center justify-center ${
                               meta
-                                ? meta.className
+                                ? meta.filled
                                 : dayOpen
                                   ? 'bg-white border-gray-200 text-gray-400'
                                   : 'bg-gray-50 border-transparent text-gray-300'
@@ -343,39 +373,43 @@ export const AttendancePage: React.FC = () => {
       {/* Salary + performance summary */}
       {!loading && summary.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Month summary</h2>
-          <p className="text-xs text-gray-500">
-            Estimated salary = (Present + ½×Half-day) × monthly salary ÷ {workingDays || '—'} working days.
-            Performance uses bookings and collections attributed to each staff member.
-          </p>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Month summary</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Estimated salary = (Present + ½×Half-day) × monthly salary ÷ {workingDays || '—'} working days.
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {summary.map((s) => (
-              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-                  <p className="font-medium text-sm">{s.name}</p>
+              <div key={s.id} className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-gray-900 truncate">{s.name}</p>
+                    {s.role && <p className="text-[11px] text-gray-500 truncate">{s.role}</p>}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5 flex items-end justify-between gap-2">
                   <div>
-                    <p className="text-gray-400">Attendance</p>
-                    <p>{s.presentDays}P · {s.halfDays}H · {s.absentDays}A · {s.leaveDays}L</p>
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Est. salary</p>
+                    <p className="text-lg font-bold text-gray-900 leading-tight">{inr(s.estimatedPayable)}</p>
                   </div>
-                  <div>
-                    <p className="text-gray-400">Est. salary</p>
-                    <p className="font-semibold text-gray-900">{inr(s.estimatedPayable)}</p>
-                    {s.salary != null && (
-                      <p className="text-gray-400">of {inr(s.salary)}/mo</p>
-                    )}
+                  <div className="text-right text-xs text-gray-500">
+                    <p className="font-medium text-gray-700">{s.presentDays}P · {s.halfDays}H · {s.absentDays}A · {s.leaveDays}L</p>
+                    {s.salary != null && <p className="text-[11px]">of {inr(s.salary)}/mo</p>}
                   </div>
-                  <div>
-                    <p className="text-gray-400">Bookings</p>
-                    <p>{s.completedBookings}/{s.totalBookings} done ({s.completionRate}%)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg border border-gray-100 px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Bookings</p>
+                    <p className="font-semibold text-gray-800 mt-0.5">{s.completedBookings}/{s.totalBookings}</p>
+                    <p className="text-gray-500">{s.completionRate}% done</p>
                   </div>
-                  <div>
-                    <p className="text-gray-400">Collections</p>
-                    <p>{inr(s.collected)}</p>
+                  <div className="rounded-lg border border-gray-100 px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Collections</p>
+                    <p className="font-semibold text-gray-800 mt-0.5">{inr(s.collected)}</p>
                     {s.commissionPercent != null && (
-                      <p className="text-gray-400">Comm. {inr(s.commissionEarned)} ({s.commissionPercent}%)</p>
+                      <p className="text-gray-500">Comm. {inr(s.commissionEarned)}</p>
                     )}
                   </div>
                 </div>

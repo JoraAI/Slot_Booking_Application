@@ -149,6 +149,8 @@ model Business {
   address                 String?
   latitude                Float?
   longitude               Float?
+  /// Google Business / Maps “Write a review” HTTPS link (owner-only; shown on invoices).
+  googleReviewUrl         String?
   notifyOwnerEmail        Boolean   @default(true)
   notifyOwnerWhatsapp     Boolean   @default(false)
   notifyCustomerEmail     Boolean   @default(true)

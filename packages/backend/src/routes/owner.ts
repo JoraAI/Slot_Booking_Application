@@ -16,7 +16,7 @@ import { timeService } from '../services/TimeService';
 import { subscriptionService } from '../services/SubscriptionService';
 import { walletService } from '../services/WalletService';
 import { whatsappPricingService } from '../services/WhatsAppPricingService';
-import { validateLocation } from '../services/LocationService';
+import { validateLocation, normalizeGoogleReviewUrl } from '../services/LocationService';
 import { encryptSecret } from '../services/secretCrypto';
 import {
   orderBelongsToBusiness,
@@ -1102,7 +1102,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       'paymentMode', 'depositAmount', 'depositPercentage',
       'razorpayKeyId', 'refundPolicy', 'embedAllowedOrigins',
       'razorpayTestMode',
-      'address', 'latitude', 'longitude',
+      'address', 'latitude', 'longitude', 'googleReviewUrl',
       'smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFromName',
       'gstin', 'legalName', 'stateCode', 'defaultGstPercent',
       // Shared-platform WhatsApp: owners do NOT supply Meta Phone Number ID / tokens.
@@ -1310,6 +1310,14 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     });
     if (locationError) {
       return res.status(400).json({ error: locationError });
+    }
+
+    if (updateData.googleReviewUrl !== undefined) {
+      const review = normalizeGoogleReviewUrl(updateData.googleReviewUrl);
+      if (!review.ok) {
+        return res.status(400).json({ error: review.error });
+      }
+      updateData.googleReviewUrl = review.url;
     }
 
     // Batch 4 — notification prerequisites. Refuse ENABLING a channel when its

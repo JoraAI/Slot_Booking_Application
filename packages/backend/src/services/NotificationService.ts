@@ -1771,9 +1771,18 @@ class NotificationService {
             invoice.currency === 'INR' || !invoice.currency
               ? `Rs. ${Number(invoice.total).toLocaleString('en-IN')}`
               : `${invoice.currency} ${invoice.total}`;
+          const reviewUrl =
+            typeof business.googleReviewUrl === 'string' && business.googleReviewUrl.trim()
+              ? business.googleReviewUrl.trim()
+              : '';
+          // Free-text body is a fallback companion to the approved document template.
+          // Review line only when the owner configured a Google review URL.
+          const waBody =
+            `Hi ${invoice.customerName}, your invoice ${invoice.invoiceNumber} from ${business.name} for ${amountLabel} is ready.` +
+            (reviewUrl ? ` Leave a Google review: ${reviewUrl}` : '');
           await this.sendWhatsApp(
             phone,
-            `Hi ${invoice.customerName}, your invoice ${invoice.invoiceNumber} from ${business.name} for ${amountLabel} is ready.`,
+            waBody,
             {
               throwOnError: true,
               throwOnInsufficient: true,
