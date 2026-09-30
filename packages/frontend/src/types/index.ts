@@ -209,6 +209,64 @@ export interface Staff {
   commissionPercent?: number | null
 }
 
+export type AttendanceStatus = 'PRESENT' | 'HALF_DAY' | 'ABSENT' | 'LEAVE'
+
+export interface StaffAttendanceRow {
+  id?: string
+  staffId: string
+  date: string
+  status: AttendanceStatus | null
+  note?: string | null
+}
+
+export interface AttendanceListResponse {
+  from: string
+  to: string
+  openWeekdays: number[]
+  workingDaysInRange: number
+  staff: Array<{
+    id: string
+    name: string
+    role: string | null
+    color: string
+    salary: number | null
+    commissionPercent: number | null
+  }>
+  attendances: StaffAttendanceRow[]
+}
+
+export interface AttendanceStaffSummary {
+  id: string
+  name: string
+  role: string | null
+  color: string
+  salary: number | null
+  commissionPercent: number | null
+  presentDays: number
+  halfDays: number
+  absentDays: number
+  leaveDays: number
+  earnedUnits: number
+  workingDaysInMonth: number
+  estimatedPayable: number | null
+  totalBookings: number
+  completedBookings: number
+  cancelledBookings: number
+  noShowBookings: number
+  completionRate: number
+  collected: number
+  commissionEarned: number
+}
+
+export interface AttendanceSummaryResponse {
+  month: string
+  from: string
+  to: string
+  workingDaysInMonth: number
+  openWeekdays: number[]
+  staff: AttendanceStaffSummary[]
+}
+
 export interface ServiceCategory {
   id: string
   businessId: string

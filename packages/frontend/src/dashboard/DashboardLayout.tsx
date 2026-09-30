@@ -16,6 +16,7 @@ const navItems = [
   { path: '/dashboard/blocks', label: 'Block Slots', icon: '🚫' },
   { path: '/dashboard/waitlist', label: 'Waitlist', icon: '⏳', feature: 'waitlist' as const },
   { path: '/dashboard/staff', label: 'Staff', icon: '👥', feature: 'multiStaff' as const },
+  { path: '/dashboard/attendance', label: 'Attendance', icon: '✅', feature: 'multiStaff' as const },
   { path: '/dashboard/payments', label: 'Payments', icon: '💳', feature: 'payments' as const },
   { path: '/dashboard/analytics', label: 'Analytics', icon: '📈' },
   { path: '/dashboard/form-builder', label: 'Form Builder', icon: '📝' },

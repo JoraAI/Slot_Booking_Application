@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useStore } from '../../store'
 import toast from 'react-hot-toast'
@@ -178,9 +179,17 @@ export const StaffPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Staff</h1>
-        <button onClick={openAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
-          + Add Staff
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to="/dashboard/attendance"
+            className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            Attendance
+          </Link>
+          <button onClick={openAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">
+            + Add Staff
+          </button>
+        </div>
       </div>
 
       {showForm && (

@@ -206,6 +206,7 @@ model Business {
   bookings                Booking[]
   blockedSlots            BlockedSlot[]
   staff                   Staff[]
+  staffAttendances        StaffAttendance[]
   waitlistEntries         WaitlistEntry[]
   serviceCategories       ServiceCategory[]
   services                Service[]
@@ -338,9 +339,36 @@ model Staff {
   services     StaffService[]
   workingHours StaffWorkingHour[]
   paymentAttempts PaymentAttempt[]
+  attendances  StaffAttendance[]
   createdAt    DateTime       @default(now())
 
   @@index([businessId, isActive])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  HALF_DAY
+  ABSENT
+  LEAVE
+}
+
+/// Owner-marked daily attendance (v1). No check-in/out timestamps yet.
+model StaffAttendance {
+  id         String           @id @default(cuid())
+  businessId String
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staffId    String
+  staff      Staff            @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  /// Business-local calendar day stored as UTC midnight (same as Booking.date).
+  date       DateTime
+  status     AttendanceStatus
+  note       String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([businessId, staffId, date])
+  @@index([businessId, date])
+  @@index([staffId, date])
 }
 
 model ServiceCategory {
