@@ -727,6 +727,21 @@ class InvoiceService {
       doc.fontSize(9).fillColor('#6b7280').text(String(invoice.notes), { width: 480 });
     }
 
+    const reviewUrl =
+      typeof business.googleReviewUrl === 'string' && business.googleReviewUrl.trim()
+        ? business.googleReviewUrl.trim()
+        : null;
+    if (reviewUrl) {
+      if (doc.y > 720) doc.addPage();
+      doc.moveDown(1);
+      doc.fontSize(11).fillColor('#1957CA').text('Loved your visit? Leave us a Google review', {
+        width: 480,
+        link: reviewUrl,
+        underline: true,
+      });
+      doc.fontSize(8).fillColor('#6b7280').text(reviewUrl, { width: 480, link: reviewUrl });
+    }
+
     doc.end();
     return done;
   }
@@ -864,8 +879,17 @@ class InvoiceService {
     .totals .disc { color: #059669; }
     .grand { font-weight: 700; font-size: 1.1rem; }
     .meta { margin: 4px 0 0; }
+    .review {
+      margin-top: 22px; padding: 16px 18px; border-radius: 14px;
+      background: #E8EFFC; border: 1px solid #c7d7f5; text-align: center;
+    }
+    .review p { margin: 0 0 10px; font-size: 0.9rem; color: #1341A0; }
+    .review a {
+      display: inline-block; background: #1957CA; color: #fff; text-decoration: none;
+      border-radius: 10px; padding: 10px 18px; font-size: 0.9rem; font-weight: 600;
+    }
     .actions { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
-    button { background: #7c3aed; color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-size: 0.9rem; cursor: pointer; }
+    button { background: #1957CA; color: #fff; border: 0; border-radius: 10px; padding: 10px 16px; font-size: 0.9rem; cursor: pointer; }
     @media print {
       body { background: #fff; padding: 0; }
       .sheet { border: 0; border-radius: 0; box-shadow: none; }
@@ -911,6 +935,14 @@ class InvoiceService {
       </div>
       ${invoice.paymentMethod ? `<p class="muted" style="margin-top:16px">Payment: ${this.esc(invoice.paymentMethod)}${invoice.paymentRef ? ` · Ref ${this.esc(invoice.paymentRef)}` : ''}</p>` : ''}
       ${invoice.notes ? `<p class="muted">${this.esc(invoice.notes)}</p>` : ''}
+      ${
+        typeof business.googleReviewUrl === 'string' && business.googleReviewUrl.trim()
+          ? `<div class="review">
+        <p>Loved your visit? Leave us a Google review</p>
+        <a href="${this.esc(business.googleReviewUrl.trim())}" target="_blank" rel="noopener noreferrer">Leave a Google review</a>
+      </div>`
+          : ''
+      }
       <div class="actions"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
     </div>
   </div>

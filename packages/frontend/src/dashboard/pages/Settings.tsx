@@ -89,6 +89,7 @@ export const Settings: React.FC = () => {
     address: config?.address || '',
     latitude: config?.latitude ?? null,
     longitude: config?.longitude ?? null,
+    googleReviewUrl: config?.googleReviewUrl || '',
     slotGranularityMinutes: config?.slotGranularityMinutes || 15,
     remindersEnabled: config?.remindersEnabled ?? true,
     reminderOffsetsMinutes: config?.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
@@ -146,6 +147,7 @@ export const Settings: React.FC = () => {
         address: config.address || '',
         latitude: config.latitude ?? null,
         longitude: config.longitude ?? null,
+        googleReviewUrl: config.googleReviewUrl || '',
         slotGranularityMinutes: config.slotGranularityMinutes || 15,
         remindersEnabled: config.remindersEnabled ?? true,
         reminderOffsetsMinutes: config.reminderOffsetsMinutes?.length ? config.reminderOffsetsMinutes : [1440, 120],
@@ -1216,6 +1218,20 @@ export const Settings: React.FC = () => {
         {geoError && (
           <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">{geoError}</p>
         )}
+        <div>
+          <label className="block text-sm font-medium mb-1">Google review link</label>
+          <input
+            type="url"
+            value={form.googleReviewUrl || ''}
+            onChange={(e) => setForm((p) => ({ ...p, googleReviewUrl: e.target.value }))}
+            placeholder="https://g.page/r/…/review"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Optional. Google Business → Share / Ask for reviews → copy link. When set, invoices show a
+            “Leave a Google review” button; leave blank to hide it.
+          </p>
+        </div>
         <p className="text-xs text-gray-400">
           Geolocation requires a secure context (HTTPS or localhost) and your permission.
           If either latitude or longitude is set, both must be set (lat −90…90, lng −180…180).
