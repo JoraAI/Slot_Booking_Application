@@ -10,6 +10,7 @@ import { refundService } from '../services/RefundService';
 import { notificationService } from '../services/NotificationService';
 import { reminderService } from '../services/ReminderService';
 import { analyticsService } from '../services/AnalyticsService';
+import { attendanceService } from '../services/AttendanceService';
 import { ownerFeatureGuard } from '../services/FeatureGuard';
 import { timeService } from '../services/TimeService';
 import { subscriptionService } from '../services/SubscriptionService';
@@ -2622,6 +2623,68 @@ ownerRouter.get('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthRequ
     res.json(staff);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /owner/attendance?from=&to= — day grid data for a date range. */
+ownerRouter.get('/attendance', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const from = String(req.query.from || '');
+    const to = String(req.query.to || '');
+    const data = await attendanceService.list(req.owner!.businessId, from, to);
+    res.json(data);
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+/** GET /owner/attendance/summary?month=YYYY-MM — salary + performance for the month. */
+ownerRouter.get('/attendance/summary', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const month = String(req.query.month || '');
+    const data = await attendanceService.summary(req.owner!.businessId, month);
+    res.json(data);
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+/** PUT /owner/attendance — upsert or clear one day for one staff. */
+ownerRouter.put('/attendance', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      staffId: z.string().min(1),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      status: z.enum(['PRESENT', 'HALF_DAY', 'ABSENT', 'LEAVE']).nullable(),
+      note: z.string().max(200).nullable().optional(),
+    });
+    const parsed = schema.parse(req.body);
+    const row = await attendanceService.upsert(req.owner!.businessId, parsed);
+    res.json(row);
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: error.errors?.[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+/** POST /owner/attendance/bulk — mark many staff for one date (e.g. all present today). */
+ownerRouter.post('/attendance/bulk', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      status: z.enum(['PRESENT', 'HALF_DAY', 'ABSENT', 'LEAVE']),
+      staffIds: z.array(z.string().min(1)).optional(),
+    });
+    const parsed = schema.parse(req.body);
+    const result = await attendanceService.bulk(req.owner!.businessId, parsed);
+    res.json(result);
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: error.errors?.[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 

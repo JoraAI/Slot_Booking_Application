@@ -721,6 +721,39 @@ class ApiClient {
     return this.request<import('../types').Staff[]>('/owner/staff')
   }
 
+  getAttendance(from: string, to: string) {
+    const qs = new URLSearchParams({ from, to }).toString()
+    return this.request<import('../types').AttendanceListResponse>(`/owner/attendance?${qs}`)
+  }
+
+  getAttendanceSummary(month: string) {
+    const qs = new URLSearchParams({ month }).toString()
+    return this.request<import('../types').AttendanceSummaryResponse>(`/owner/attendance/summary?${qs}`)
+  }
+
+  upsertAttendance(data: {
+    staffId: string
+    date: string
+    status: import('../types').AttendanceStatus | null
+    note?: string | null
+  }) {
+    return this.request<import('../types').StaffAttendanceRow>('/owner/attendance', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  bulkAttendance(data: {
+    date: string
+    status: import('../types').AttendanceStatus
+    staffIds?: string[]
+  }) {
+    return this.request<{ updated: number; date: string; status: string }>('/owner/attendance/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
   getProducts() {
     return this.request<import('../types').Product[]>('/owner/products')
   }

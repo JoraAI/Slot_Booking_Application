@@ -9,6 +9,7 @@ import { CalendarPage } from './dashboard/pages/Calendar'
 import { BlockSlots } from './dashboard/pages/BlockSlots'
 import { WaitlistPage } from './dashboard/pages/Waitlist'
 import { StaffPage } from './dashboard/pages/Staff'
+import { AttendancePage } from './dashboard/pages/Attendance'
 import { PaymentsPage } from './dashboard/pages/Payments'
 import { Analytics } from './dashboard/pages/Analytics'
 import { FormBuilder } from './dashboard/pages/FormBuilder'
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="blocks" element={<BlockSlots />} />
         <Route path="waitlist" element={<WaitlistPage />} />
         <Route path="staff" element={<StaffPage />} />
+        <Route path="attendance" element={<AttendancePage />} />
         <Route path="services" element={<ServicesPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
