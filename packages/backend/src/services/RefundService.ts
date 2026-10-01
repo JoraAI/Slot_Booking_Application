@@ -5,7 +5,7 @@ import { reminderService } from './ReminderService';
 
 export interface RefundResult {
   status: 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
-  amount: number; // rupees — what was actually collected (paymentAmount)
+  amount: number; // rupees - what was actually collected (paymentAmount)
   amountMinor: number;
   razorpayRefundId: string | null;
   message: string;
@@ -39,7 +39,7 @@ function notesMatch(refund: any, key: string | null | undefined): boolean {
 }
 
 /**
- * Batch 2A — durable, idempotent refund pipeline.
+ * Batch 2A - durable, idempotent refund pipeline.
  *
  * - Cancellation + the durable refund intent commit atomically in
  *   `cancelBookingWithRefundIntent` BEFORE any Razorpay I/O, so a crash never
@@ -149,7 +149,7 @@ class RefundService {
 
   /**
    * Post-commit step: initiate or reconcile the external refund for a booking.
-   * Returns null when there is nothing to refund. Never throws — failures are
+   * Returns null when there is nothing to refund. Never throws - failures are
    * persisted durably and surfaced in the result.
    */
   async initiateOrReconcileRefund(
@@ -164,7 +164,7 @@ class RefundService {
       if (refundIntent.razorpayRefundId) return this.reconcileOne(refundIntent, booking);
       if (!opts.createdIntent) {
         // Another request owns this in-flight refund. Never start a second
-        // external refund here — the reconciliation job retries with the SAME
+        // external refund here - the reconciliation job retries with the SAME
         // idempotency key. Report the truthful current state.
         return this.toResult(refundIntent);
       }
@@ -207,7 +207,7 @@ class RefundService {
       return this.mapRazorpayRefund(refundIntent, rzp, booking);
     } catch (e: any) {
       if (e?.status === 409) {
-        // "Already processing" for this key — reconcile, never re-create.
+        // "Already processing" for this key - reconcile, never re-create.
         return this.reconcileOne(refundIntent, booking);
       }
       if (e?.isNetworkError) {
@@ -292,7 +292,7 @@ class RefundService {
 
     if (!target) {
       // No refund exists yet (crash before the network call): retry with the
-      // same key — Razorpay dedupes, so this can never duplicate.
+      // same key - Razorpay dedupes, so this can never duplicate.
       return this.initiateAndMap(refundIntent, booking);
     }
     return this.mapRazorpayRefund({ ...refundIntent, razorpayRefundId: target.id }, target, booking);

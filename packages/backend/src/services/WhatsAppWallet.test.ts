@@ -13,7 +13,7 @@ import { publicRouter } from '../routes/public';
 import { timeService } from './TimeService';
 
 /**
- * Batch 5 — WhatsApp multi-tenant prepaid wallet acceptance tests.
+ * Batch 5 - WhatsApp multi-tenant prepaid wallet acceptance tests.
  */
 
 let business: any;

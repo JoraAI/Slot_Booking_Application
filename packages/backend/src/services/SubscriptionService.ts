@@ -10,7 +10,7 @@ interface SubscriptionView {
   dueInr: number;
   paidInr: number;
   currentMonthKey: string | null; // YYYY-MM for commission
-  currentCycleEndsAt: string | null; // ISO string — paid-until or commission period end
+  currentCycleEndsAt: string | null; // ISO string - paid-until or commission period end
 }
 
 function currentMonthKey(tz: string, now: Date): string {
@@ -128,10 +128,10 @@ export function computePlanSwitch(input: PlanSwitchInput): PlanSwitchResult {
   };
 }
 
-/** Flat yearly plan price (INR). Not 12× monthly — promotional yearly rate. */
+/** Flat yearly plan price (INR). Not 12× monthly - promotional yearly rate. */
 export const YEARLY_PLAN_INR = 7499;
 
-/** Pure helpers for unit tests — same rules as getSubscriptionView for fixed plans. */
+/** Pure helpers for unit tests - same rules as getSubscriptionView for fixed plans. */
 export function fixedPlanDueAndCycle(input: {
   plan: 'MONTHLY_799' | 'YEARLY_799';
   monthlyInr: number;
@@ -230,7 +230,7 @@ class SubscriptionService {
     const tz = business.timezone || 'Asia/Kolkata';
     const plan = (business.subscriptionPlan || 'COMMISSION') as SubscriptionPlan;
 
-    // Trial: ACTIVE, never paid, within grace window — booking stays open.
+    // Trial: ACTIVE, never paid, within grace window - booking stays open.
     // Fixed plans may still show due so owners can optionally prepay.
     const trialDays = Math.max(0, Number(process.env.SUBSCRIPTION_TRIAL_DAYS ?? 14));
     const withinTrialWindow =
@@ -269,7 +269,7 @@ class SubscriptionService {
         isTrial,
       });
 
-      // Prepaid credit from a previous monthly/yearly plan — no commission due until it ends.
+      // Prepaid credit from a previous monthly/yearly plan - no commission due until it ends.
       const paidUntil = business.subscriptionPaidUntil
         ? new Date(business.subscriptionPaidUntil)
         : null;

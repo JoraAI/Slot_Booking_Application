@@ -30,7 +30,7 @@ async function main() {
     include: { staff: true, business: true },
   });
   if (!booking) {
-    console.log('No confirmed booking — skipping customer view check');
+    console.log('No confirmed booking - skipping customer view check');
   } else {
     const view = bookingManagementService.customerBookingView({
       ...booking,
@@ -76,7 +76,7 @@ async function main() {
     if (again.id !== paidInv.id) throw new Error('Paid invoice should be idempotent');
     console.log('Paid invoice idempotent: ok');
   } else {
-    console.log('No paid booking found — skipping paid invoice check');
+    console.log('No paid booking found - skipping paid invoice check');
   }
 
   // 5) Completed unpaid booking invoice
@@ -95,7 +95,7 @@ async function main() {
     });
     console.log('Completed booking invoice:', inv.invoiceNumber);
   } else {
-    console.log('No eligible completed unpaid booking — skipping');
+    console.log('No eligible completed unpaid booking - skipping');
   }
 
   // Cleanup walk-in test invoice only (keep real invoices if created from existing bookings)

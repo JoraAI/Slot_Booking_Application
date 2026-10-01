@@ -1,7 +1,7 @@
 const PAID_STATES = new Set(['paid', 'partial']);
 const REFUND_STATES = new Set(['refunded', 'refund_pending', 'refund_failed']);
 
-/** Money still held from a booking — listed price of cancelled/unpaid rows is not collected. */
+/** Money still held from a booking - listed price of cancelled/unpaid rows is not collected. */
 export function netCollectedAmount(b: {
   status?: string | null;
   paymentStatus?: string | null;

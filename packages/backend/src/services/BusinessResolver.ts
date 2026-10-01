@@ -23,7 +23,7 @@ class BusinessResolver {
         where: { publicCode: identifier },
       });
       if (byCode) return byCode;
-      // Not a valid code format hit — fall through to legacy slug lookup
+      // Not a valid code format hit - fall through to legacy slug lookup
     }
     return db.business.findUnique({ where: { slug: identifier } });
   }

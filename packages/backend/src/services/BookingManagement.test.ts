@@ -12,7 +12,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1C — customer management tokens + optional OTP.
+ * Batch 1C - customer management tokens + optional OTP.
  */
 
 let business: any;

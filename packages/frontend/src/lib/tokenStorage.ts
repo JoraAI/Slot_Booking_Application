@@ -1,8 +1,8 @@
 /**
  * Owner token storage:
- * - Native (Android/iOS): Capacitor Preferences — survives app close / next-day reopen
+ * - Native (Android/iOS): Capacitor Preferences - survives app close / next-day reopen
  *   until JWT expiry (~7d) or explicit Logout.
- * - Web: sessionStorage only — closing the browser/tab ends the session.
+ * - Web: sessionStorage only - closing the browser/tab ends the session.
  */
 import { Preferences } from '@capacitor/preferences'
 import { isNativePlatform } from './native'
@@ -96,7 +96,7 @@ export async function setOwnerToken(token: string | null): Promise<void> {
     return
   }
 
-  // Web: do not use localStorage — session ends when the browser tab/session closes.
+  // Web: do not use localStorage - session ends when the browser tab/session closes.
   clearLegacyWebLocalStorage()
   try {
     if (token) sessionStorage.setItem(KEY, token)

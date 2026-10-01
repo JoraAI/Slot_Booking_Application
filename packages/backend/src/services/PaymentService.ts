@@ -5,7 +5,7 @@ import { verifyRazorpayPaymentSignature } from './razorpaySecurity';
 
 /** Razorpay refund notes key (written on create / retry). */
 export const REFUND_NOTES_KEY = 'reservly_idempotency_key';
-/** Legacy notes key — still accepted when matching existing refunds. */
+/** Legacy notes key - still accepted when matching existing refunds. */
 export const LEGACY_REFUND_NOTES_KEY = 'slotbook_idempotency_key';
 
 interface RazorpayOrder {
@@ -193,7 +193,7 @@ class PaymentService {
 
     const body: any = { speed: 'optimum' };
     if (amount) body.amount = Math.round(amount * 100);
-    // Carry the stable key in notes (JSON object — the official Razorpay format)
+    // Carry the stable key in notes (JSON object - the official Razorpay format)
     // so reconciliation can match a refund even before we have its refund id
     // (byte-identical for a repeated key).
     if (idempotencyKey) body.notes = { [REFUND_NOTES_KEY]: idempotencyKey };

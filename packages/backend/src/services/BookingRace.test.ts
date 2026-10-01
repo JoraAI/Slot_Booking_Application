@@ -10,7 +10,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 3 — §10.11 unpaid booking race serialization.
+ * Batch 3 - §10.11 unpaid booking race serialization.
  *
  * Every capacity-consuming slot insert (unpaid/free/recurring booking create and
  * payment-hold creation) shares one advisory lock keyed by

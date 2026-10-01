@@ -100,7 +100,7 @@ test('createOwnerWorkspace creates org + primary shop + OWNER memberships', asyn
   });
   const listed3 = await orgAuthService.listManagers({ ownerUserId: user.id, orgId: org.id });
   assert.equal(listed3.length, 0);
-  // user was cleaned up — drop from cleanup list
+  // user was cleaned up - drop from cleanup list
   const idx = cleanupUserIds.indexOf(invited.userId);
   if (idx >= 0) cleanupUserIds.splice(idx, 1);
 });

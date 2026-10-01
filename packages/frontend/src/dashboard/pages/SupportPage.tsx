@@ -129,7 +129,7 @@ export const SupportPage: React.FC = () => {
   const finishRecording = (blob: Blob, mimeType: string) => {
     if (cancelledRef.current || !mountedRef.current) return
     if (!blob.size) {
-      toast.error('Recording was empty — try again')
+      toast.error('Recording was empty - try again')
       return
     }
     if (blob.size > MAX_VOICE_BYTES) {
@@ -354,7 +354,7 @@ export const SupportPage: React.FC = () => {
               rows={8}
               placeholder={
                 hasVoice
-                  ? 'Optional written details — your voice note will be emailed as an attachment…'
+                  ? 'Optional written details - your voice note will be emailed as an attachment…'
                   : 'What happened? Steps to reproduce, device/browser, or what you’d like improved…'
               }
               className={`${inputClass} min-h-[160px] resize-y`}

@@ -1,6 +1,6 @@
 /**
  * Isolation smoke: attendance mutations always scope by businessId + staff ownership.
- * (Pure assertions on service validation — no live DB required.)
+ * (Pure assertions on service validation - no live DB required.)
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'

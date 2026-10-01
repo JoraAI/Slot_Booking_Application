@@ -1,4 +1,4 @@
-# Reservly environments — `main` (prod) vs `demo`
+# Reservly environments - `main` (prod) vs `demo`
 
 Two Git branches and two Neon databases. Matching Razorpay keys when you use them.
 
@@ -22,7 +22,7 @@ Keep the **existing Neon** on the live deploy (demo data). Create / hold the **n
 It already has (or can be seeded with) demo salon data. Point the **`demo`** branch / `reservly-api-demo` at this database.
 
 **Create a second Neon project for PRODUCTION** (e.g. name `reservly-prod`).  
-Leave it empty except for migrations — **do not** run `pnpm db:seed` on it. Point **`main`** / `reservly-api` at this database.
+Leave it empty except for migrations - **do not** run `pnpm db:seed` on it. Point **`main`** / `reservly-api` at this database.
 
 For each project, copy pooled + direct URLs onto the matching Render service:
 
@@ -41,7 +41,7 @@ For each project, copy pooled + direct URLs onto the matching Render service:
 
 ## Razorpay (two layers)
 
-### 1) Platform keys (Render env) — wallet top-up + owner subscriptions
+### 1) Platform keys (Render env) - wallet top-up + owner subscriptions
 - **Demo service:** Razorpay Dashboard → **Test mode** → Key Id / Secret → `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`
 - **Prod service:** same dashboard → **Live mode** → different Key Id / Secret
 
@@ -55,8 +55,8 @@ Do not put live salon keys in the demo database.
 
 Use `render.yaml` (two services) or create manually:
 
-1. **reservly-api** — branch `main`, `RESERVLY_ENV=production`, prod Neon + live Razorpay  
-2. **reservly-api-demo** — branch `demo`, `RESERVLY_ENV=demo`, demo Neon + test Razorpay  
+1. **reservly-api** - branch `main`, `RESERVLY_ENV=production`, prod Neon + live Razorpay  
+2. **reservly-api-demo** - branch `demo`, `RESERVLY_ENV=demo`, demo Neon + test Razorpay  
 
 Also set per service: `FRONTEND_URL`, `FRONTEND_PUBLIC_URL`, `JWT_SECRET`, `CRON_SECRET`, WhatsApp/email as needed.
 Use **different** `JWT_SECRET` and `CRON_SECRET` per env.
@@ -70,7 +70,7 @@ Use **different** `JWT_SECRET` and `CRON_SECRET` per env.
 ### Demo (`demo`)
 Option A (simplest): second Vercel project “reservly-demo”, Production Branch = `demo`, use `vercel.demo.json` as `vercel.json` (or paste the same rewrites pointing at `https://reservly-api-demo.onrender.com`).
 
-Option B: one Vercel project — Production = `main`, connect `demo` for Previews and set Preview env / rewrite to the demo API (Preview rewrites are limited; Option A is clearer).
+Option B: one Vercel project - Production = `main`, connect `demo` for Previews and set Preview env / rewrite to the demo API (Preview rewrites are limited; Option A is clearer).
 
 ## Migrate / seed safely
 
@@ -79,11 +79,11 @@ Option B: one Vercel project — Production = `main`, connect `demo` for Preview
 export DATABASE_URL="…demo-pooler…"
 export DIRECT_URL="…demo-direct…"
 pnpm --filter backend db:migrate:prod   # prisma migrate deploy
-pnpm --filter backend db:seed           # demo logins / sample data — DEMO ONLY
+pnpm --filter backend db:seed           # demo logins / sample data - DEMO ONLY
 ```
 
 ```bash
-# Against PROD — migrate only, never seed
+# Against PROD - migrate only, never seed
 export DATABASE_URL="…prod-pooler…"
 export DIRECT_URL="…prod-direct…"
 pnpm --filter backend db:migrate:prod
@@ -111,4 +111,4 @@ curl -s https://reservly-api.onrender.com/api/health
 # expect "env":"production"
 ```
 
-Demo logins (demo DB after seed): see README — e.g. `owner@demosalon.com` / `admin123`.
+Demo logins (demo DB after seed): see README - e.g. `owner@demosalon.com` / `admin123`.

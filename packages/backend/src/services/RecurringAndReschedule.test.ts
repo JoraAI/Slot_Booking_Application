@@ -12,7 +12,7 @@ import { publicRouter } from '../routes/public';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1D — recurring timezone purity + reschedule reminder rebuild.
+ * Batch 1D - recurring timezone purity + reschedule reminder rebuild.
  */
 
 let business: any;
@@ -89,7 +89,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
-  // Scope cleanup to this test file's own bookings — a global wipe would race
+  // Scope cleanup to this test file's own bookings - a global wipe would race
   // with ReminderService.test.ts running in the same parallel suite.
   await prisma.bookingReminder.deleteMany({ where: { booking: { businessId: business.id } } });
   await prisma.booking.deleteMany({ where: { businessId: business.id } });

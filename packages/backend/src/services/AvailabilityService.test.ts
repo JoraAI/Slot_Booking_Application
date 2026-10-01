@@ -285,7 +285,7 @@ test('11. Existing interval starts inside candidate interval', async () => {
 test('12. Existing interval surrounds candidate interval', async () => {
   const d = dateStr();
   const service = await makeService({ durationMinutes: 60, bufferMinutes: 0 });
-  // booking 09:30-10:30; candidate 09:00-10:00 surrounds? No — existing is inside candidate.
+  // booking 09:30-10:30; candidate 09:00-10:00 surrounds? No - existing is inside candidate.
   // Use a longer existing booking: 09:00-11:00 (create directly with 120min snapshot)
   await prisma.booking.create({
     data: {

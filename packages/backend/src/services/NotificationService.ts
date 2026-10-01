@@ -198,7 +198,7 @@ class NotificationService {
 
   /**
    * Digits-only WhatsApp destination for providers (Gupshup/Meta/Twilio).
-   * Indian 10-digit mobiles are prefixed with 91 when country code is missing —
+   * Indian 10-digit mobiles are prefixed with 91 when country code is missing -
    * otherwise the provider may accept the API call but never deliver.
    */
   private normalizeWhatsappDestination(value: string): string {
@@ -235,7 +235,7 @@ class NotificationService {
       const parsed = JSON.parse(bodyText || '{}');
       if (parsed?.status === 'error') return false;
     } catch {
-      /* non-JSON body — rely on HTTP status */
+      /* non-JSON body - rely on HTTP status */
     }
     return true;
   }
@@ -509,7 +509,7 @@ class NotificationService {
     document?: { link: string; filename: string } | null
   ): Promise<Response> {
     // Body vars: sanitize Meta-sensitive chars. Last param may be Visit Website
-    // URL suffix (path+query) — keep as-is aside from trim.
+    // URL suffix (path+query) - keep as-is aside from trim.
     const raw = params.length ? params : ['Your booking was updated.'];
     const cleaned = raw.map((p, i) => {
       const isLikelyButtonSuffix = i === raw.length - 1 && /^b\//i.test(String(p).trim());
@@ -856,7 +856,7 @@ class NotificationService {
       return;
     }
 
-    // Wallet gate — hard stop on insufficient credits: no provider call, no debit.
+    // Wallet gate - hard stop on insufficient credits: no provider call, no debit.
     const reserve = await walletService.reserve(businessId, costPaise, {
       description: `WhatsApp ${category} message to +${toDigits}`,
       referenceType: opts.bookingId ? 'booking' : opts.customerId ? 'customer' : undefined,
@@ -867,7 +867,7 @@ class NotificationService {
         `Wallet ${reserve.reason}: ${costPaise} paise needed for ${category}`);
       console.log(`WhatsApp skipped for ${businessId}: ${reserve.reason} (${costPaise} paise needed)`);
       if (opts.throwOnInsufficient) {
-        throw new Error('WhatsApp wallet has insufficient credits — please recharge');
+        throw new Error('WhatsApp wallet has insufficient credits - please recharge');
       }
       return; // booking / flow unaffected
     }
@@ -987,7 +987,7 @@ class NotificationService {
     const contactEmailHtml = ownerPhoneDisplay
       ? `<p><strong>Contact:</strong> ${this.esc(ownerPhoneDisplay)}</p>`
       : '';
-    // One-time manage/cancel link — customer reschedule remains disabled (405).
+    // One-time manage/cancel link - customer reschedule remains disabled (405).
     const manageLink = booking.managementUrl
       ? `<p><a href="${this.esc(booking.managementUrl)}" style="display:inline-block; background:#1957CA; color:#ffffff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:600;">Cancel booking</a></p>`
       : '';
@@ -1026,7 +1026,7 @@ class NotificationService {
       const waDate = new Intl.DateTimeFormat('en-IN', {
         weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: tz,
       }).format(new Date(booking.date));
-      // appointment_confirmation_2 has only {{1}}…{{5}} — fold contact into {{2}}
+      // appointment_confirmation_2 has only {{1}}…{{5}} - fold contact into {{2}}
       // (salon). Meta strips URLs from template params, so use the phone digits only.
       const salonWithContact = ownerPhoneDisplay
         ? `${business.name || 'us'} (contact ${ownerPhoneDisplay})`
@@ -1121,7 +1121,7 @@ class NotificationService {
         { business }
       );
     }
-    // Cancellations are email-only — WhatsApp is reserved for booking confirms + promos.
+    // Cancellations are email-only - WhatsApp is reserved for booking confirms + promos.
 
     // ONE owner message: paid amount + durable refund state + manual-action
     // warning when applicable.
@@ -1306,7 +1306,7 @@ class NotificationService {
   /**
    * Customer message after an automatic refund was initiated/processed.
    * Accurate timing: instant where the network supports it, otherwise the
-   * normal banking timeline — never promise a fixed 1-2 day SLA.
+   * normal banking timeline - never promise a fixed 1-2 day SLA.
    */
   /**
    * Single refund notification for the owner manual-refund flow (booking is
@@ -1362,7 +1362,7 @@ class NotificationService {
     const serviceName = this.esc(this.bookingServiceName(booking));
     const subject = `Reminder: ${serviceName} at ${this.esc(business.name)}`;
     const line = `${booking.dateDisplay} at ${booking.startTime}${booking.endTime ? ` - ${booking.endTime}` : ''}`;
-    // Reminders intentionally omit manage/cancel links — the token is returned
+    // Reminders intentionally omit manage/cancel links - the token is returned
     // once at booking creation and is never recreated.
     const locHtml = this.locationHtml(business);
     const { address, directions, contact } = this.locationText(business);
@@ -1544,22 +1544,22 @@ class NotificationService {
         if (wanted.includes('email')) {
           if (canEmail) {
             if (smtpReady) channels.push('email');
-            else reasons.push('email not sent — SMTP is not configured');
+            else reasons.push('email not sent - SMTP is not configured');
           } else if (customer.email) {
-            reasons.push(`email not sent — invalid address (${customer.email})`);
+            reasons.push(`email not sent - invalid address (${customer.email})`);
           } else {
-            reasons.push('email not sent — no email saved');
+            reasons.push('email not sent - no email saved');
           }
         }
 
         if (wanted.includes('whatsapp')) {
           if (canWhatsapp) {
             if (whatsappReady) channels.push('whatsapp');
-            else reasons.push('WhatsApp not sent — platform WhatsApp is not configured');
+            else reasons.push('WhatsApp not sent - platform WhatsApp is not configured');
           } else if (customer.phone) {
-            reasons.push(`WhatsApp not sent — invalid number (${customer.phone})`);
+            reasons.push(`WhatsApp not sent - invalid number (${customer.phone})`);
           } else {
-            reasons.push('WhatsApp not sent — no number saved');
+            reasons.push('WhatsApp not sent - no number saved');
           }
         }
 
@@ -1589,7 +1589,7 @@ class NotificationService {
         if (gotWhatsapp) whatsapped += 1;
         if (gotEmail || gotWhatsapp) reached += 1;
         else {
-          const failed = results.filter((r) => !r.ok).map((r) => `${r.channel} failed — ${r.error || 'delivery failed'}`);
+          const failed = results.filter((r) => !r.ok).map((r) => `${r.channel} failed - ${r.error || 'delivery failed'}`);
           unsent.push({
             id: customer.id,
             name: customer.name,
@@ -1607,15 +1607,15 @@ class NotificationService {
       const rows = unsent.map((person) =>
         `<tr>
           <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.name)}</td>
-          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.email || '—')}</td>
-          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.phone || '—')}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.email || '-')}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.phone || '-')}</td>
           <td style="padding:6px 10px;border-bottom:1px solid #E5E7EB;">${this.esc(person.reason)}</td>
         </tr>`
       ).join('');
       try {
         await this.sendEmail(
           business.ownerEmail,
-          `Broadcast incomplete — ${unsent.length} customer${unsent.length === 1 ? '' : 's'} were not sent`,
+          `Broadcast incomplete - ${unsent.length} customer${unsent.length === 1 ? '' : 's'} were not sent`,
           `<h2>These customers were not sent your message</h2>
           <p>Your broadcast from <strong>${this.esc(business.name)}</strong> reached ${reached} of ${customers.length} matched customers.</p>
           <p>The people below had no valid email/WhatsApp number, or delivery failed:</p>

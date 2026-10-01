@@ -1,4 +1,4 @@
-# DeepSeek-V4-Flash Prompt — Owner Google Sign-In + Email OTP Signup / Forgot Password
+# DeepSeek-V4-Flash Prompt - Owner Google Sign-In + Email OTP Signup / Forgot Password
 
 **How to use:** Paste this entire file into DeepSeek-V4-Flash with repo access.  
 **Product:** Reservly (repo: Slot_Booking_Application).  
@@ -25,7 +25,7 @@ Senior full-stack engineer. Add **Google Sign-In** and **email OTP** for **owner
 
 ---
 
-## Product decisions (locked — do not re-ask)
+## Product decisions (locked - do not re-ask)
 
 | Topic | Decision |
 |-------|----------|
@@ -42,16 +42,16 @@ Senior full-stack engineer. Add **Google Sign-In** and **email OTP** for **owner
 
 ---
 
-## VERIFICATION STATUS (2026-08-23) — start here
+## VERIFICATION STATUS (2026-08-23) - start here
 
 ### Already implemented (do not recreate)
 
 | Area | Location / notes |
 |------|------------------|
 | Schema | `Business.ownerPassword` nullable; `googleSub` unique; `emailVerifiedAt`; model `OwnerAuthOtp` |
-| Migration | `packages/backend/prisma/migrations/20260904000000_owner_google_otp/` (**must** stay after `20260903_*`; do not reuse `20260902000000_*` — that timestamp is taken by WhatsApp pricing) |
-| OTP service | `OwnerAuthOtpService.ts` — hash, TTL, attempts, cooldown, platform SMTP via `sendOtpEmail(..., undefined)` |
-| Google verify | `GoogleTokenVerifier.ts` — JWKS + audience/`email_verified` checks (no `google-auth-library` required) |
+| Migration | `packages/backend/prisma/migrations/20260904000000_owner_google_otp/` (**must** stay after `20260903_*`; do not reuse `20260902000000_*` - that timestamp is taken by WhatsApp pricing) |
+| OTP service | `OwnerAuthOtpService.ts` - hash, TTL, attempts, cooldown, platform SMTP via `sendOtpEmail(..., undefined)` |
+| Google verify | `GoogleTokenVerifier.ts` - JWKS + audience/`email_verified` checks (no `google-auth-library` required) |
 | Signup API | `POST /auth/signup/request-otp`, `/verify-otp`; `POST /signup` requires `signupToken` (no unverified create) |
 | Forgot API | `POST /auth/forgot/request-otp` (generic ok), `/verify-otp`, `/reset` |
 | Google API | `POST /auth/google`, `POST /auth/google/complete` |
@@ -63,7 +63,7 @@ Senior full-stack engineer. Add **Google Sign-In** and **email OTP** for **owner
 
 ### Bugs already fixed in-repo (do not reintroduce)
 
-1. **`/auth/google/complete` was nested inside `/auth/google`** — complete handler only registered after a new-user Google hit. Handlers must be **sibling** top-level `publicRouter.post(...)` registrations.
+1. **`/auth/google/complete` was nested inside `/auth/google`** - complete handler only registered after a new-user Google hit. Handlers must be **sibling** top-level `publicRouter.post(...)` registrations.
 2. Migration folder renamed to **`20260904000000_owner_google_otp`** to avoid colliding with `20260902000000_whatsapp_pricing_2x_markup`.
 3. `embedOriginGuard` must skip identifier **`auth`** (same as `signup`).
 4. Owner-auth OTP email copy should not say “Verify your booking” when `business` is omitted.
@@ -80,12 +80,12 @@ Senior full-stack engineer. Add **Google Sign-In** and **email OTP** for **owner
 
 ---
 
-## CURRENT architecture (inspect — do not invent)
+## CURRENT architecture (inspect - do not invent)
 
 ### Auth baseline (pre-feature)
 - Tenant = `Business` (`packages/backend/prisma/schema.prisma`).
-- Login: `POST /api/owner/login` — email + password → JWT `{ businessId, email }`.
-- Legacy signup created business immediately — **replaced** by OTP-gated `POST /signup` + `signupToken`.
+- Login: `POST /api/owner/login` - email + password → JWT `{ businessId, email }`.
+- Legacy signup created business immediately - **replaced** by OTP-gated `POST /signup` + `signupToken`.
 - Password change (logged-in): `PUT /api/owner/password`.
 - UI: `packages/frontend/src/dashboard/pages/LoginPage.tsx`.
 - API client: `packages/frontend/src/lib/api.ts`.
@@ -124,7 +124,7 @@ Senior full-stack engineer. Add **Google Sign-In** and **email OTP** for **owner
 4. New email → `needsSignupCompletion` + `googleSignupToken` → complete with name + timezone (`ownerPassword` null).
 5. Env: backend `GOOGLE_CLIENT_ID`; frontend `VITE_GOOGLE_CLIENT_ID` (same OAuth client).
 
-### E) Settings — set password
+### E) Settings - set password
 - `POST /owner/password/set` when no password yet.
 - `PUT /owner/password` when password already set (require current).
 

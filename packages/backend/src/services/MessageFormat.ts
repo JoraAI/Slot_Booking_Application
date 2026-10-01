@@ -27,7 +27,7 @@ const ALLOWED_TAGS = new Set([
 export function sanitizeMessageHtml(input: string): string {
   const raw = String(input || '').trim();
   if (!raw) return '';
-  // Already plain text — escape and keep newlines.
+  // Already plain text - escape and keep newlines.
   if (!/<[a-z][\s\S]*>/i.test(raw)) {
     return raw
       .replace(/&/g, '&amp;')

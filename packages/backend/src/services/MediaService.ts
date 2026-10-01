@@ -10,9 +10,9 @@ export const MEDIA_MAX_STORED_BYTES = 80 * 1024;
 export const MEDIA_MAX_DOCUMENT_BYTES = 500 * 1024;
 /** Support voice notes (webm/mp4/mpeg/ogg/wav). */
 export const MEDIA_MAX_AUDIO_BYTES = 2 * 1024 * 1024;
-/** Per salon — enough for service photos, cover, and invoice PDFs. */
+/** Per salon - enough for service photos, cover, and invoice PDFs. */
 export const MEDIA_MAX_ASSETS = 100;
-/** Per salon — 8MB after compression. */
+/** Per salon - 8MB after compression. */
 export const MEDIA_MAX_BUSINESS_BYTES = 8 * 1024 * 1024;
 /** Platform-wide cap so ~10 salons fit on Neon free (0.5GB) with room for bookings. */
 export const MEDIA_MAX_PLATFORM_BYTES = 10 * MEDIA_MAX_BUSINESS_BYTES;

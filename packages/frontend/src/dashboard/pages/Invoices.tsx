@@ -79,7 +79,7 @@ const CustomerSuggestField: React.FC<{
   const [loading, setLoading] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const reqId = useRef(0)
-  /** Only search after the user types in this field — ignore parent fills from another field's select. */
+  /** Only search after the user types in this field - ignore parent fills from another field's select. */
   const userTypedRef = useRef(false)
 
   useEffect(() => {

@@ -310,7 +310,7 @@ async function main() {
   const existingEclatSections = await prisma.pageSection.count({ where: { businessId: eclat.id } });
   if (existingEclatSections === 0) {
     await prisma.pageSection.createMany({ data: [
-      { businessId: eclat.id, type: 'HERO', title: 'Style, care, and confidence—made for you', configuration: { subtitle: 'Book your next salon appointment online', ctaLabel: 'Book Now' }, displayOrder: 0, isVisible: true },
+      { businessId: eclat.id, type: 'HERO', title: 'Style, care, and confidence-made for you', configuration: { subtitle: 'Book your next salon appointment online', ctaLabel: 'Book Now' }, displayOrder: 0, isVisible: true },
       { businessId: eclat.id, type: 'SERVICES', title: 'Our Services', configuration: {}, displayOrder: 1, isVisible: true },
       { businessId: eclat.id, type: 'BUSINESS_HOURS', title: 'Opening Hours', configuration: {}, displayOrder: 2, isVisible: true },
       { businessId: eclat.id, type: 'ABOUT', title: 'About Eclat', content: 'A modern unisex salon for precision cuts, color, smoothing treatments, grooming, and bridal styling.', configuration: {}, displayOrder: 3, isVisible: true },

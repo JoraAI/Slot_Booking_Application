@@ -270,7 +270,7 @@ class AnalyticsService {
     let discountsGiven = activeRows.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
     const discountUsageCount = activeRows.filter(b => (b.discountAmount || 0) > 0).length;
 
-    // Cash / walk-in invoices — Analytics previously ignored these, so salon-floor
+    // Cash / walk-in invoices - Analytics previously ignored these, so salon-floor
     // collections never moved. Booking cash invoices use appointment date (same as
     // Razorpay); walk-ins use issuedAt. De-dupe against already-paid bookings.
     const bookingInvoiceWhere: any = {
@@ -286,7 +286,7 @@ class AnalyticsService {
       source: { in: ['walk_in', 'manual'] },
       issuedAt: { gte: from, lte: to },
     };
-    // Walk-ins have no staff — omit them when a staff filter is active.
+    // Walk-ins have no staff - omit them when a staff filter is active.
     const [bookingInvoiceRows, walkInInvoiceRows] = await Promise.all([
       prisma.invoice.findMany({
         where: bookingInvoiceWhere,

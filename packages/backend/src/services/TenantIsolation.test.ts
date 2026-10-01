@@ -12,7 +12,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1D — multi-tenant isolation. Owner JWT endpoints exercised at the HTTP
+ * Batch 1D - multi-tenant isolation. Owner JWT endpoints exercised at the HTTP
  * route level with the same scoping rules the routes use.
  */
 

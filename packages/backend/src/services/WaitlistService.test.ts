@@ -6,7 +6,7 @@ import { waitlistService } from './WaitlistService';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1D — durable waitlist expiry (DB-backed, cron-processed).
+ * Batch 1D - durable waitlist expiry (DB-backed, cron-processed).
  */
 
 let business: any;

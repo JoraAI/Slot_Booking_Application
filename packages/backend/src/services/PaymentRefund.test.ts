@@ -15,7 +15,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 2 — automatic source refunds on customer cancel + live-credential
+ * Batch 2 - automatic source refunds on customer cancel + live-credential
  * validation (DEEPSEEK_V4_ENHANCEMENT_PROMPT.md §12.6).
  */
 

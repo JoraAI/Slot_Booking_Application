@@ -13,7 +13,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 4 — §18.1 salon location + confirmation notifications acceptance tests.
+ * Batch 4 - §18.1 salon location + confirmation notifications acceptance tests.
  */
 
 let business: any;

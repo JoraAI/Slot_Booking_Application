@@ -62,7 +62,7 @@ export const LoginPage: React.FC = () => {
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)))
       }
     }
-    // Keep the token even if profile load failed — dashboard will retry without logging out.
+    // Keep the token even if profile load failed - dashboard will retry without logging out.
     setIsAuthenticated(true)
     navigate('/dashboard')
     const message = lastError instanceof Error ? lastError.message : 'Signed in, but shop data is still loading'

@@ -1,5 +1,5 @@
 # Local development database ONLY.
-# This does NOT start the backend or frontend — run those with pnpm.
+# This does NOT start the backend or frontend - run those with pnpm.
 #
 # Host port 5433 is used deliberately so we do not collide with another
 # Postgres already listening on the common host port 5432.

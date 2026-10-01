@@ -6,7 +6,7 @@ datasource db {
   provider  = "postgresql"
   // App runtime: prefer Neon pooled URL + ?pgbouncer=true
   url       = env("DATABASE_URL")
-  // Migrations/introspect: Neon direct (non-pooler) URL — avoids P1002 advisory-lock stalls
+  // Migrations/introspect: Neon direct (non-pooler) URL - avoids P1002 advisory-lock stalls
   directUrl = env("DIRECT_URL")
 }
 
@@ -144,7 +144,7 @@ model Business {
   bookingManagementOtpEnabled Boolean @default(false)
   bookingManagementOtpChannel String? // 'EMAIL' (email-only; SMS removed)
   allowCustomerCancel       Boolean   @default(true)
-  // Batch 4 — salon location (address + optional lat/lng pair, directions
+  // Batch 4 - salon location (address + optional lat/lng pair, directions
   // links are generated server-side; no Maps API key is used).
   address                 String?
   latitude                Float?
@@ -287,7 +287,7 @@ model CustomerContact {
   bookingCount    Int      @default(0)
   lastBookedAt    DateTime?
   lastServiceName String?
-  /// Intake answers useful for targeting (gender, etc.) — keyed by normalized label.
+  /// Intake answers useful for targeting (gender, etc.) - keyed by normalized label.
   attributes      Json     @default("{}")
   tags            String[] @default([])
   birthday        DateTime?
@@ -681,7 +681,7 @@ model BookingManagementSession {
 }
 
 // Owner auth email OTP (signup + forgot-password only). Deliberately NOT tied
-// to a business row — email verification happens before a workspace exists.
+// to a business row - email verification happens before a workspace exists.
 // Code is stored SHA-256 hashed, never plaintext (mirrors BookingManagementOtp).
 model OwnerAuthOtp {
   id          String    @id @default(cuid())
@@ -722,11 +722,11 @@ model Wallet {
   id                      String   @id @default(cuid())
   businessId              String   @unique
   business                Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  balancePaise            Int      @default(0) // integer paise — never Float
+  balancePaise            Int      @default(0) // integer paise - never Float
   currency                String   @default("INR")
   status                  String   @default("ACTIVE") // 'ACTIVE' | 'FROZEN'
   version                 Int      @default(0) // incremented on every mutation (optimistic-ish guard)
-  lowBalanceThresholdPaise Int     @default(500) // ₹5 — dashboard low-balance warning
+  lowBalanceThresholdPaise Int     @default(500) // ₹5 - dashboard low-balance warning
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 }
@@ -743,7 +743,7 @@ model WalletTransaction {
   status             String   @default("COMPLETED") // 'COMPLETED' | 'PENDING' | 'CANCELLED' | 'FAILED'
   referenceType      String? // e.g. 'booking' | 'customer' | 'razorpay_order'
   referenceId        String?
-  providerPaymentId  String?  @unique // Razorpay payment id — idempotency key for RECHARGE
+  providerPaymentId  String?  @unique // Razorpay payment id - idempotency key for RECHARGE
   description        String?
   metadata           Json?
   createdAt          DateTime @default(now())

@@ -70,7 +70,7 @@ function statusMeta(status: AttendanceStatus | null | undefined) {
 }
 
 function inr(n: number | null | undefined) {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 }
 
@@ -144,7 +144,7 @@ export const AttendancePage: React.FC = () => {
 
   const markAllPresentToday = async () => {
     if (!days.includes(today)) {
-      toast.error('Today is outside this month — switch to the current month')
+      toast.error('Today is outside this month - switch to the current month')
       return
     }
     setSaving(true)
@@ -376,7 +376,7 @@ export const AttendancePage: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Month summary</h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Estimated salary = (Present + ½×Half-day) × monthly salary ÷ {workingDays || '—'} working days.
+              Estimated salary = (Present + ½×Half-day) × monthly salary ÷ {workingDays || '-'} working days.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

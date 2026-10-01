@@ -14,10 +14,10 @@ import { platformEmailConfigured, platformWhatsappConfigured, getWhatsappProvide
 
 const app = express();
 // Render/Fly inject PORT (often 10000). Local default stays 3001.
-// Do not hardcode 3001 in cloud env vars — that breaks public routing.
+// Do not hardcode 3001 in cloud env vars - that breaks public routing.
 const PORT = Number(process.env.PORT) || (process.env.NODE_ENV === 'production' ? 10000 : 3001);
 
-// Root route — health check + API info
+// Root route - health check + API info
 app.get('/', (_req, res) => {
   res.json({
     name: 'Reservly API',
@@ -216,7 +216,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: 'Reservly API Docs',
 }));
 
-// Middleware — allow web frontend + Capacitor (Android/iOS) WebView origins.
+// Middleware - allow web frontend + Capacitor (Android/iOS) WebView origins.
 function resolveCorsOrigins(): (string | RegExp)[] {
   const primary = process.env.FRONTEND_URL || 'http://localhost:5173';
   const extras = (process.env.CORS_ORIGINS || '')
@@ -253,7 +253,7 @@ app.use('/api/owner/support', express.json({ limit: '6mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check — RESERVLY_ENV distinguishes demo vs production (see ENVIRONMENTS.md)
+// Health check - RESERVLY_ENV distinguishes demo vs production (see ENVIRONMENTS.md)
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -293,7 +293,7 @@ app.get('*', (_req, res, next) => {
   }
   res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
     if (err) {
-      // Frontend not built — skip to 404
+      // Frontend not built - skip to 404
       next();
     }
   });
@@ -314,7 +314,7 @@ const server = app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 Server running on http://0.0.0.0:${PORT} (RESERVLY_ENV=${reservlyEnv})`);
   const emailVia = resolveResend() ? 'Resend' : platformEmailConfigured() ? 'SMTP' : 'MISSING';
   console.log(
-    `Platform email (signup/forgot OTP): ${emailVia === 'MISSING' ? 'MISSING — set RESEND_API_KEY (Render free) or SMTP_USER/SMTP_PASS' : emailVia}`
+    `Platform email (signup/forgot OTP): ${emailVia === 'MISSING' ? 'MISSING - set RESEND_API_KEY (Render free) or SMTP_USER/SMTP_PASS' : emailVia}`
   );
   const waProvider = getWhatsappProvider();
   const waVia = platformWhatsappConfigured()
@@ -325,7 +325,7 @@ const server = app.listen(Number(PORT), '0.0.0.0', () => {
         : 'Meta'
     : 'MISSING';
   console.log(
-    `Platform WhatsApp: ${waVia === 'MISSING' ? `MISSING — set WHATSAPP_PROVIDER=${waProvider} credentials` : waVia}`
+    `Platform WhatsApp: ${waVia === 'MISSING' ? `MISSING - set WHATSAPP_PROVIDER=${waProvider} credentials` : waVia}`
   );
 });
 

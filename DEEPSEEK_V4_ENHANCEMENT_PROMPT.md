@@ -44,7 +44,7 @@ The final product must feel as though it was built specifically for each owner a
 
 ---
 
-# CURRENT REPOSITORY STATE — AUDIT BEFORE ADDING ANYTHING
+# CURRENT REPOSITORY STATE - AUDIT BEFORE ADDING ANYTHING
 
 This repository has already received a large partial implementation of this specification. Treat this document as a **gap-driven correctness and completion brief**, not as instructions to recreate everything from scratch.
 
@@ -78,7 +78,7 @@ pnpm --filter backend exec prisma migrate status
 → 11/11 migrations applied; database schema up to date
 ```
 
-## Completed work — DO NOT REIMPLEMENT
+## Completed work - DO NOT REIMPLEMENT
 
 Treat these as **Exists** unless source inspection proves a regression:
 
@@ -94,14 +94,14 @@ Treat these as **Exists** unless source inspection proves a regression:
 - Legacy business fields `parallelSeats`, `slotDurationMinutes`, `servicePrice` removed from schema/UI; capacity/price/duration are per-service.
 - `APPLICATION_CONTEXT.md` and `DEPLOYMENT.md` exist.
 - **Batch 2 + 2A + 2B (verified, payment track complete)**: durable `PaymentRefund` + `idempotencyKey`, atomic `cancelBookingWithRefundIntent`, `X-Refund-Idempotency`, notes as `{ reservly_idempotency_key }` (legacy `slotbook_idempotency_key` still matched on read), only explicit `processed` → PROCESSED (absent/unknown stays PROCESSING), reconciliation cron, legacy public booking-ID routes → 410, owner cancel/manual refund through durable pipeline, UPI-first Checkout, paid `formData`, deduplicated notifications, deposit/dashboard consistency. Do not reopen §12.8 or §12.9.
-- **Batch 3 + 3A (verified, race track complete)**: day-scoped shared advisory locks — POOLED `serviceDayLockKey` = `slot:{businessId}:{serviceId}:{date}`; STAFF_BASED `staffDayLockKey` = `staff:{businessId}:{staffId}:{date}`. Booking create and payment-hold initiate share the same keys. Evidence: `BookingRace.test.ts` B3-1…B3-8. Still advisory-lock based (no DB exclusion). Do not reopen §10.11.
+- **Batch 3 + 3A (verified, race track complete)**: day-scoped shared advisory locks - POOLED `serviceDayLockKey` = `slot:{businessId}:{serviceId}:{date}`; STAFF_BASED `staffDayLockKey` = `staff:{businessId}:{staffId}:{date}`. Booking create and payment-hold initiate share the same keys. Evidence: `BookingRace.test.ts` B3-1…B3-8. Still advisory-lock based (no DB exclusion). Do not reopen §10.11.
 - **Batch 4 (verified, location + confirmation notifications complete)**: migration `20260822000000_business_location` (`address` / `latitude` / `longitude`); `LocationService.directionsUrl`; owner Settings Location card + geolocation helper; public config + confirmation/manage “Get directions”; confirmation email/WhatsApp with address, directions, one-time `managementUrl`, `replyTo = ownerEmail`, `wa.me` contact (platform Twilio From); reminders location-only (no recreated manage token); prerequisite guards on enabling notify flags; `Batch4.test.ts`; frontend **2/2**; backend **98/98**. Do not reopen §18.1 except as regression.
 
-## Active next batch for DeepSeek V4 Flash — none required
+## Active next batch for DeepSeek V4 Flash - none required
 
 **Specified enhancement batches through Batch 4 are verified complete.** There is no mandatory next DeepSeek batch.
 
-Optional leftover (not blocking): `packages/backend/src/routes/owner.ts` registers `GET /owner/settings/status` twice — the Batch 4 readiness handler (first) wins; the older SMTP/SMS-only handler later in the file is dead code and should be removed in a tiny cleanup if touched.
+Optional leftover (not blocking): `packages/backend/src/routes/owner.ts` registers `GET /owner/settings/status` twice - the Batch 4 readiness handler (first) wins; the older SMTP/SMS-only handler later in the file is dead code and should be removed in a tiny cleanup if touched.
 
 Honest remaining product/ops limitations (documented, not open code defects for a required batch):
 
@@ -112,7 +112,7 @@ Honest remaining product/ops limitations (documented, not open code defects for 
 - Refund timing / UPI merchant-mobile / reconciliation cron latency.
 - Owner mobile app (PWA/Capacitor) is a future product decision, not specified here.
 
-If a new product request arrives, add a new batch section and retarget §34 — do not reopen completed batches.
+If a new product request arrives, add a new batch section and retarget §34 - do not reopen completed batches.
 
 ---
 
@@ -287,24 +287,24 @@ Razorpay initiation creates a server-side `PaymentAttempt` that holds the select
 - Verification consumes the hold and creates the confirmed booking idempotently.
 - The browser cannot select the hold duration or alter held booking details.
 
-## 2.9a UPI Intent and settlement (Batch 2 — FIXED)
+## 2.9a UPI Intent and settlement (Batch 2 - FIXED)
 
 Product decision (do not deviate):
 
 1. **Each salon owner uses their own Razorpay merchant credentials** (`razorpayKeyId` + write-only `razorpayKeySecret`). Funds settle to the bank account linked in that owner's Razorpay dashboard.
-2. On mobile, Checkout must preferentially open **installed UPI apps** (Google Pay, PhonePe, Paytm, and other apps via Razorpay's `any` intent). This is Razorpay UPI Intent — **not** a raw `upi://pay?pa=...` deep link to an owner VPA.
+2. On mobile, Checkout must preferentially open **installed UPI apps** (Google Pay, PhonePe, Paytm, and other apps via Razorpay's `any` intent). This is Razorpay UPI Intent - **not** a raw `upi://pay?pa=...` deep link to an owner VPA.
 3. **Do not add a free-text “receiver UPI ID” field.** A raw VPA cannot be reliably verified server-side and cannot support automatic source refunds.
 4. Checkout must show the **server-confirmed payable amount** and the **salon business name** as the receiver branding before opening Razorpay.
 5. Preserve full and deposit modes. Deposit refunds return only `Booking.paymentAmount` (what was actually collected).
 
-## 2.9b Cancellation refunds (Batch 2 — FIXED)
+## 2.9b Cancellation refunds (Batch 2 - FIXED)
 
 When a customer cancels a **paid** booking via the management link:
 
 1. Cancel the booking and free capacity **immediately**.
 2. Automatically initiate a **full source refund** of the amount paid (`Booking.paymentAmount`) through Razorpay with speed `optimum` (instant when supported; otherwise normal banking timeline).
 3. Persist a durable `PaymentRefund` row (unique per booking) so retries are idempotent.
-4. Customer message (accurate timing — do **not** promise 1–2 days):  
+4. Customer message (accurate timing - do **not** promise 1–2 days):  
    “Refund initiated to your original payment method. It may be instant; otherwise allow 5–7 working days.”
 5. Notify the owner that a paid booking was cancelled, including amount and refund status.
 6. If Razorpay refund initiation fails: booking stays cancelled, refund marked `FAILED`, owner notified for manual action; customer sees that automatic refund needs owner action. Never claim success falsely.
@@ -1149,20 +1149,20 @@ Immediately before insertion:
 2. Re-run availability for the exact interval.
 3. Insert only if still available.
 
-### Batch 3 — VERIFIED (2026-08-15) — same-startTime races closed
+### Batch 3 - VERIFIED (2026-08-15) - same-startTime races closed
 
-**Exists / verified:** unpaid/free/recurring booking creates and payment-hold initiate originally shared a per-`startTime` key; B3-1…B3-5 covered identical-slot / unpaid-vs-hold / HTTP conflict. Superseded by Batch 3A day-scoped keys — keep B3-1…B3-5 as regressions only.
+**Exists / verified:** unpaid/free/recurring booking creates and payment-hold initiate originally shared a per-`startTime` key; B3-1…B3-5 covered identical-slot / unpaid-vs-hold / HTTP conflict. Superseded by Batch 3A day-scoped keys - keep B3-1…B3-5 as regressions only.
 
-### Batch 3A — VERIFIED COMPLETE (2026-08-15) — overlapping / cross-service races closed
+### Batch 3A - VERIFIED COMPLETE (2026-08-15) - overlapping / cross-service races closed
 
 **Exists / verified:** day-scoped shared advisory locks used by **both** `BookingService.createBooking` and `PaymentFlowService.initiate`:
 
 - POOLED → `serviceDayLockKey` = `slot:{businessId}:{serviceId}:{date}`
 - STAFF_BASED → `staffDayLockKey` = `staff:{businessId}:{staffId}:{date}` (auto-assign probe-resolves staff, then locks staff-day, then authoritative re-check)
 
-Inside the lock: availability re-check → insert only if still available; loser gets clean `Slot is no longer available`. Evidence: `BookingRace.test.ts` B3-6 (overlapping starts), B3-7 (shared staff across services), B3-8 (non-overlapping both succeed), plus B3-1…B3-5 regressions; backend **92/92**. No migration (code-only). Still advisory-lock based — out-of-band SQL bypasses; no DB exclusion constraint.
+Inside the lock: availability re-check → insert only if still available; loser gets clean `Slot is no longer available`. Evidence: `BookingRace.test.ts` B3-6 (overlapping starts), B3-7 (shared staff across services), B3-8 (non-overlapping both succeed), plus B3-1…B3-5 regressions; backend **92/92**. No migration (code-only). Still advisory-lock based - out-of-band SQL bypasses; no DB exclusion constraint.
 
-Do not reopen this lock design. Do not implement location/notifications here — that is Batch 4 (§18.1).
+Do not reopen this lock design. Do not implement location/notifications here - that is Batch 4 (§18.1).
 
 ## 10.12 Required tests
 
@@ -1279,7 +1279,7 @@ Legacy `GET/PUT/DELETE /:identifier/bookings/:id` behavior must be audited and d
 
 # 12. PAYMENTS
 
-Preserve Razorpay. **PaymentAttempt hold + authoritative verify already exist** — do not rebuild them. Extend them for UPI-first checkout and refunds.
+Preserve Razorpay. **PaymentAttempt hold + authoritative verify already exist** - do not rebuild them. Extend them for UPI-first checkout and refunds.
 
 ## 12.1 Existing correct flow (keep)
 
@@ -1301,7 +1301,7 @@ Still required:
 - Free `finalPrice = 0` bypasses Razorpay.
 - Expire stale holds via authenticated cron.
 
-## 12.2 Batch 2 — Mobile UPI Intent checkout
+## 12.2 Batch 2 - Mobile UPI Intent checkout
 
 Files:
 
@@ -1318,10 +1318,10 @@ Requirements:
    - receiver branding = business name (`order.name` / config business name)
 4. Continue using owner `razorpayKeyId` as Checkout `key`.
 5. **Forbidden:** storing or collecting a raw owner UPI VPA for payment.
-6. Owner Settings copy must explain: “UPI payments via your Razorpay account — connect Key ID/Secret; customers pay with installed UPI apps; money settles to your Razorpay-linked bank account.”
+6. Owner Settings copy must explain: “UPI payments via your Razorpay account - connect Key ID/Secret; customers pay with installed UPI apps; money settles to your Razorpay-linked bank account.”
 7. Live mode + payments enabled requires usable credentials (Key ID + secret configured). Refuse enabling live paid checkout without them.
 
-## 12.3 Batch 2 — Durable PaymentRefund model
+## 12.3 Batch 2 - Durable PaymentRefund model
 
 Add a forward-only Prisma migration (do **not** edit older migrations), e.g. `20260820000000_payment_refund`.
 
@@ -1345,7 +1345,7 @@ PaymentRefund
 
 Also extend booking `paymentStatus` usage to include `refunded` / `refund_pending` / `refund_failed` as appropriate without breaking existing `paid` / `partial` / `pending` values.
 
-## 12.4 Batch 2 — Automatic refund on customer cancel
+## 12.4 Batch 2 - Automatic refund on customer cancel
 
 Primary route: `DELETE /:identifier/bookings/:id/manage` in `packages/backend/src/routes/public.ts` (cancel-only; PUT manage already returns 405).
 
@@ -1364,7 +1364,7 @@ Implement preferably via a dedicated service method (e.g. `PaymentFlowService.re
 
 Refund amount = `Booking.paymentAmount` converted to paise (or store minor units at book time if cleaner). Deposit bookings refund deposit only.
 
-## 12.5 Batch 2 — UX and notifications
+## 12.5 Batch 2 - UX and notifications
 
 Customer manage page (`ManageBookingPage.tsx`) after cancel:
 
@@ -1379,7 +1379,7 @@ Owner:
 
 API cancel response should include `{ booking, refund: { status, amount, message } | null }` so the UI does not invent state.
 
-## 12.6 Batch 2 — Required tests
+## 12.6 Batch 2 - Required tests
 
 Add/extend backend tests (tsx `--test`):
 
@@ -1393,7 +1393,7 @@ Add/extend backend tests (tsx `--test`):
 
 Frontend: ensure PaymentStep builds; no raw VPA field.
 
-## 12.7 Batch 2 — Explicit non-goals
+## 12.7 Batch 2 - Explicit non-goals
 
 - Marketplace/linked-account Razorpay Route.
 - Raw UPI VPA payment or manual “I paid” confirmation.
@@ -1401,69 +1401,69 @@ Frontend: ensure PaymentStep builds; no raw VPA field.
 - Automatic refund of unpaid/cash bookings.
 - Promising a 1–2 business day refund SLA (use 5–7 working days language).
 
-## 12.8 Batch 2A — VERIFIED COMPLETE (2026-08-15)
+## 12.8 Batch 2A - VERIFIED COMPLETE (2026-08-15)
 
-Source inspection after the first Batch 2 implementation found the defects below. **They are now fixed and verified** — do not reimplement. Evidence: migration `20260821000000_payment_refund_idempotency`, `RefundService.cancelBookingWithRefundIntent`, `PaymentService.initiateRefund` + `X-Refund-Idempotency`, `Batch2A.test.ts` A1–A8, frontend `razorpayDisplay.test.ts`, backend **82/82**, migrate status **10/10**.
+Source inspection after the first Batch 2 implementation found the defects below. **They are now fixed and verified** - do not reimplement. Evidence: migration `20260821000000_payment_refund_idempotency`, `RefundService.cancelBookingWithRefundIntent`, `PaymentService.initiateRefund` + `X-Refund-Idempotency`, `Batch2A.test.ts` A1–A8, frontend `razorpayDisplay.test.ts`, backend **82/82**, migrate status **10/10**.
 
-Historical findings (resolved — kept for audit trail only):
+Historical findings (resolved - kept for audit trail only):
 
-### P0. Refund creation is not safely idempotent — RESOLVED
+### P0. Refund creation is not safely idempotent - RESOLVED
 
 Was: advisory lock released before Razorpay; concurrent cancel could double-refund; sequential-only test.
 
 Fixed: stable `PaymentRefund.idempotencyKey` (UUID, `@unique`) → `X-Refund-Idempotency` on every attempt; byte-identical body; `PROCESSING` without refund id never re-initiated from a request path (reconciliation cron only); 409 → reconcile; A1 `Promise.all` concurrency test.
 
-### P0. Cancellation and durable refund intent are not atomic — RESOLVED
+### P0. Cancellation and durable refund intent are not atomic - RESOLVED
 
 Was: cancel committed, then separate refund transaction.
 
-Fixed: `cancelBookingWithRefundIntent` — lock → tenant re-read → idempotent CANCELLED + `cancelledAt` → reminders → refund intent in one transaction before Razorpay I/O.
+Fixed: `cancelBookingWithRefundIntent` - lock → tenant re-read → idempotent CANCELLED + `cancelledAt` → reminders → refund intent in one transaction before Razorpay I/O.
 
-### P0. Existing routes bypass the refund pipeline — RESOLVED
+### P0. Existing routes bypass the refund pipeline - RESOLVED
 
 Was: legacy public GET/PUT/DELETE by booking ID; owner DELETE without refund; manual refund bypassed `PaymentRefund`.
 
 Fixed: legacy public routes → **410**; owner PUT(CANCELLED)/DELETE + manual refund through durable pipeline (full amount only); unused frontend legacy callers removed.
 
-### P0. Razorpay response status is mapped incorrectly — RESOLVED (Batch 2B completed the unknown-status polish)
+### P0. Razorpay response status is mapped incorrectly - RESOLVED (Batch 2B completed the unknown-status polish)
 
 Was: every successful HTTP response marked PROCESSED.
 
-Fixed: `processed` → PROCESSED/`refunded`; `pending` → PROCESSING/`refund_pending`; `failed` → FAILED/`refund_failed`; durable `process-refund-reconciliation` cron. Batch 2B: absent/unknown stays PROCESSING — see §12.9.
+Fixed: `processed` → PROCESSED/`refunded`; `pending` → PROCESSING/`refund_pending`; `failed` → FAILED/`refund_failed`; durable `process-refund-reconciliation` cron. Batch 2B: absent/unknown stays PROCESSING - see §12.9.
 
-### P1. UPI Checkout is not explicitly UPI-first — RESOLVED
+### P1. UPI Checkout is not explicitly UPI-first - RESOLVED
 
 Fixed: `sequence: ['block.upi','block.other']`, `show_default_blocks: false`, two-step initiate → confirm → open, `formData` forwarded, no fake per-method buttons.
 
-### P1. Notifications are duplicated — RESOLVED
+### P1. Notifications are duplicated - RESOLVED
 
 Fixed: one customer + one owner message branching on refund state.
 
-### P1. Configuration and status consistency — RESOLVED
+### P1. Configuration and status consistency - RESOLVED
 
 Fixed: `refundPolicy` informational-only; deposit exactly one of amount/%; “Collected” nets refunds; singular `paymentRefund` on Booking.
 
-### Batch 2A acceptance tests — ALL PASSING
+### Batch 2A acceptance tests - ALL PASSING
 
 1–9 covered by `Batch2A.test.ts` + `razorpayDisplay.test.ts`; prior suites still green (82 total).
 
-## 12.9 Batch 2B — VERIFIED COMPLETE (2026-08-15)
+## 12.9 Batch 2B - VERIFIED COMPLETE (2026-08-15)
 
 Post–Batch 2A live-mode gaps are **fixed and verified**. Do not reopen. Evidence: `PaymentService.initiateRefund` notes object, `RefundService.mapRazorpayRefund` conservatism, `Batch2B.test.ts` B1–B2, A2 body capture updated, backend **84/84**, frontend 1/1, `pnpm build` exit 0. No Prisma migration (code-only).
 
-### P0. Refund `notes` must be a Razorpay JSON object — RESOLVED
+### P0. Refund `notes` must be a Razorpay JSON object - RESOLVED
 
 Was: `notes: [{ key, value }]`.
 
 Fixed: `notes: { reservly_idempotency_key: <idempotencyKey> }` on live + test-mode paths; byte-identical retries; `X-Refund-Idempotency` unchanged; `notesMatch` reads object (and still tolerates legacy array / `slotbook_idempotency_key`).
 
-### P1. Unknown / absent status must not become PROCESSED — RESOLVED
+### P1. Unknown / absent status must not become PROCESSED - RESOLVED
 
 Was: absent/unknown treated as PROCESSED.
 
 Fixed: only explicit `processed` → PROCESSED; absent/unknown → PROCESSING / `refund_pending` until reconciliation.
 
-### Batch 2B acceptance tests — ALL PASSING
+### Batch 2B acceptance tests - ALL PASSING
 
 B1 notes object + byte-identical retry; B2 unknown status → PROCESSING then reconcile to PROCESSED; prior suite green (84 total).
 
@@ -1710,23 +1710,23 @@ POST /api/internal/jobs/process-reminders
 
 Protect it using a strong `CRON_SECRET`, use constant-time comparison where appropriate, and never expose it in the frontend.
 
-## 18.1 Batch 4 — VERIFIED COMPLETE (2026-08-15)
+## 18.1 Batch 4 - VERIFIED COMPLETE (2026-08-15)
 
 **Exists / verified.** Migration `20260822000000_business_location`; `LocationService`; Settings Location card + geolocation helper; public config + confirmation/manage Get directions; confirmation email/WhatsApp with address, directions, `managementUrl`, `replyTo = ownerEmail`, `wa.me` contact; reminders location-only; prerequisite guards; `Batch4.test.ts`; backend **98/98**, frontend **2/2**, migrate **11/11**. Do not reimplement.
 
-Historical specification (resolved — kept for audit):
+Historical specification (resolved - kept for audit):
 
 ### Fixed product decisions
 
 1. **Salon location on `Business`** (migration required):
-   - `address String?` — trimmed, max length ~500.
-   - `latitude Float?` / `longitude Float?` — optional pair; if either is set both must be set; lat ∈ [-90,90], lng ∈ [-180,180].
+   - `address String?` - trimmed, max length ~500.
+   - `latitude Float?` / `longitude Float?` - optional pair; if either is set both must be set; lat ∈ [-90,90], lng ∈ [-180,180].
 2. **No Google Maps API key / Places / geocoding**. Browser geolocation fills editable lat/lng when the owner is at the salon. Directions URL is generated server-side and/or via a shared helper:
    - Prefer `https://www.google.com/maps/dir/?api=1&destination={lat},{lng}`
    - Else `...&destination={encodeURIComponent(address)}`
    - Never accept a client-supplied maps URL as authoritative storage.
-3. **Owner Settings** — Location card: address textarea; editable lat/lng; **Use my current location** (`navigator.geolocation`); clear permission/HTTPS/timeout/unsupported errors; map-preview link; clear/edit support.
-4. **Customer surfaces** — Confirmation screen and authenticated manage page show address + **Get directions** when location exists.
+3. **Owner Settings** - Location card: address textarea; editable lat/lng; **Use my current location** (`navigator.geolocation`); clear permission/HTTPS/timeout/unsupported errors; map-preview link; clear/edit support.
+4. **Customer surfaces** - Confirmation screen and authenticated manage page show address + **Get directions** when location exists.
 5. **Booking confirmation email + WhatsApp** (respect notify flags) include:
    - Salon address
    - Directions link
@@ -1768,7 +1768,7 @@ Document these in Settings readiness UI, `APPLICATION_CONTEXT.md`, and owner-fac
 **Test send / readiness**
 
 - Extend owner readiness/status (existing OTP status pattern) to report SMTP configured, Twilio WhatsApp configured, template readiness, and location completeness.
-- Test-send must surface real success/failure (current `NotificationService` helpers often swallow errors — fix for Batch 4 readiness paths).
+- Test-send must surface real success/failure (current `NotificationService` helpers often swallow errors - fix for Batch 4 readiness paths).
 
 ### Security / non-goals
 
@@ -1779,7 +1779,7 @@ Document these in Settings readiness UI, `APPLICATION_CONTEXT.md`, and owner-fac
 - No customer reschedule. No per-salon provider credentials. No Google billing API.
 - Do not reopen §10.11 lock design or §12.2–§12.9 payments.
 
-### Batch 4 acceptance tests — ALL PASSING
+### Batch 4 acceptance tests - ALL PASSING
 
 Historical list (covered by `Batch4.test.ts` + geolocation frontend test):
 
@@ -2372,7 +2372,7 @@ Also run Prisma validation/generation and migration tests using the repository's
 
 Do not implement this as one uncontrolled patch. Phase 0 must first classify every phase below as Exists, Partial, Missing, or Broken. Skip completed work and focus on defects. In particular, do not recreate the schema, `BusinessResolver`, `PricingService`, `TimeService`, `ReminderService`, owner CRUD pages, or service-first booking flow when they already exist.
 
-## Phase 0 — Baseline
+## Phase 0 - Baseline
 
 - Inspect code and git status.
 - Install existing dependencies if needed.
@@ -2382,7 +2382,7 @@ Do not implement this as one uncontrolled patch. Phase 0 must first classify eve
 
 Exit criterion: baseline understood and concise plan written.
 
-## Phase 1 — Schema and migration
+## Phase 1 - Schema and migration
 
 - Audit the existing enhancement migration and schema.
 - Add only corrective schema changes, especially reminder offset uniqueness, durable waitlist expiry, and persisted payment attempts.
@@ -2393,7 +2393,7 @@ Exit criterion: baseline understood and concise plan written.
 
 Exit criterion: old data survives and Prisma compiles.
 
-## Phase 2 — Backend foundations
+## Phase 2 - Backend foundations
 
 - Audit existing public business resolver, timezone utilities, PricingService, CRUD, hours, PageSections, and media signature.
 - Fix inconsistent identifier resolution and tenant scoping.
@@ -2401,7 +2401,7 @@ Exit criterion: old data survives and Prisma compiles.
 
 Exit criterion: backend tests for CRUD, pricing, and isolation pass.
 
-## Phase 3 — Availability and booking
+## Phase 3 - Availability and booking
 
 - Audit the existing duration-aware engine, staff/pool modes, buffer, next available, snapshots, and source.
 - Fix rescheduling with `excludeBookingId`.
@@ -2411,7 +2411,7 @@ Exit criterion: backend tests for CRUD, pricing, and isolation pass.
 
 Exit criterion: required availability, booking, and payment tests pass.
 
-## Phase 4 — Identity, signup, QR, reminders
+## Phase 4 - Identity, signup, QR, reminders
 
 - Audit existing signup, canonical opaque routes, legacy redirects, QR endpoint/UI, reminder records, and templates.
 - Fix `/b/` source misclassification.
@@ -2419,21 +2419,21 @@ Exit criterion: required availability, booking, and payment tests pass.
 
 Exit criterion: signup, QR attribution, and reminder tests pass.
 
-## Phase 5 — Owner frontend
+## Phase 5 - Owner frontend
 
 - Audit existing Services, staff assignment/hours, Page Builder, QR, branding, timezone, and reminder UI.
 - Complete missing API wiring, validation, media upload, loading/error states, accessibility, and responsive behavior.
 
 Exit criterion: owner can configure a complete demo business without direct database edits.
 
-## Phase 6 — Customer frontend
+## Phase 6 - Customer frontend
 
 - Audit the existing branded page, PageSections, service-first wizard, staff/pool flow, date/time, payment, and confirmation.
 - Fix behavior and complete missing mobile-first, accessibility, empty/loading/error states without rebuilding working components.
 
 Exit criterion: complete scan-to-book flow works on mobile and desktop.
 
-## Phase 7 — Deployment, regression, documentation
+## Phase 7 - Deployment, regression, documentation
 
 - Vercel frontend config.
 - External API/DB/Cloudinary docs.
@@ -2579,7 +2579,7 @@ It must be:
 
 ---
 
-# 34. DEEPSEEK V4 FLASH — COPY THIS EXECUTION BRIEF FIRST
+# 34. DEEPSEEK V4 FLASH - COPY THIS EXECUTION BRIEF FIRST
 
 **No mandatory batch.** Batches 2 / 2A / 2B / 3 / 3A / 4 are verified complete.
 

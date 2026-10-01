@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
  * Reachable without login at `/delete-account`.
  */
 export const DeleteAccountPage: React.FC = () => {
-  const subject = encodeURIComponent('Jora Reservly — account deletion request')
+  const subject = encodeURIComponent('Jora Reservly - account deletion request')
   const body = encodeURIComponent(
     [
       'Please delete my Jora Reservly owner account and associated data.',
@@ -54,7 +54,7 @@ export const DeleteAccountPage: React.FC = () => {
               <a className="text-primary underline font-medium" href={mailto}>admin@staffingpros.tech</a>
             </li>
             <li>
-              Use subject line: <strong>Jora Reservly — account deletion request</strong>
+              Use subject line: <strong>Jora Reservly - account deletion request</strong>
             </li>
             <li>
               Include your account email and business / salon name so we can verify ownership.

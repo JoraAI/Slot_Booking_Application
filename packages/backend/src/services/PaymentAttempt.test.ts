@@ -7,7 +7,7 @@ import { availabilityService } from './AvailabilityService';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1B — PaymentAttempt integrity and 10-minute capacity holds.
+ * Batch 1B - PaymentAttempt integrity and 10-minute capacity holds.
  */
 
 let business: any;
@@ -157,7 +157,7 @@ test('2. Active staff hold blocks that staff interval', async () => {
   const tenForA = forA.slots.find((s) => s.startTime === '10:00');
   assert.ok(!tenForA || !tenForA.eligibleStaffIds.includes(staffA.id), 'staff A is blocked at 10:00 by the hold');
 
-  // Staff B (no hold) is not affected — assign B and verify the slot stays available
+  // Staff B (no hold) is not affected - assign B and verify the slot stays available
   await prisma.staffService.create({ data: { staffId: staffB.id, serviceId: service.id, businessId: business.id } });
   const forB = await availabilityService.computeAvailability(business, service, dateStr(), staffB.id, { client: prisma });
   assert.ok(forB.slots.some((s) => s.startTime === '10:00'), 'staff B slot remains available');

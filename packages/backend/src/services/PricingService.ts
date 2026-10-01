@@ -1,8 +1,8 @@
 /**
  * Single authoritative pricing engine for services.
  *
- * All price/discount output — public config display, booking snapshots,
- * Razorpay order amounts, confirmation messages, and analytics — must come
+ * All price/discount output - public config display, booking snapshots,
+ * Razorpay order amounts, confirmation messages, and analytics - must come
  * from this service. Browser-supplied prices/discounts are never authoritative.
  */
 

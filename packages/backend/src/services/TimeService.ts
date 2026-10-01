@@ -94,7 +94,7 @@ export class TimeService {
 
   /**
    * Format an absolute Date in the business timezone as "HH:mm" (00-23).
-   * Uses the zone offset rather than Intl hour parts — `hour12: false` / `h23`
+   * Uses the zone offset rather than Intl hour parts - `hour12: false` / `h23`
    * can emit hour "24" just after local midnight, which then hides every slot.
    */
   toTimeStr(date: Date, tz: string): string {

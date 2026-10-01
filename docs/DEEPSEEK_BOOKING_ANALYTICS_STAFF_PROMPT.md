@@ -1,4 +1,4 @@
-# DeepSeek-V4-Flash Prompt — Booking detail, Analytics Excel export, Staff salary
+# DeepSeek-V4-Flash Prompt - Booking detail, Analytics Excel export, Staff salary
 
 **Use:** Paste into DeepSeek-V4-Flash with repo access. Product: **Reservly**.
 
@@ -23,12 +23,12 @@
 
 ---
 
-## CURRENT (inspect — do not invent)
+## CURRENT (inspect - do not invent)
 
-- List UI: `packages/frontend/src/dashboard/pages/Bookings.tsx` — table only; **no** row → detail.
+- List UI: `packages/frontend/src/dashboard/pages/Bookings.tsx` - table only; **no** row → detail.
 - Detail API already exists: `GET /api/owner/bookings/:id` in `owner.ts` (`include: { staff: true }`). Prefer reuse; enrich DTO if missing service/formData/payment.
-- Analytics UI: `Analytics.tsx` — preset ranges only (`today`/`7d`/`30d`/…). API: `getAnalytics({ dateFrom, dateTo })` + `AnalyticsService`.
-- Staff: `Staff.tsx` + `Staff` model (`name`, `role`, `phone`, `email`, `color`, `isActive`) — **no salary**.
+- Analytics UI: `Analytics.tsx` - preset ranges only (`today`/`7d`/`30d`/…). API: `getAnalytics({ dateFrom, dateTo })` + `AnalyticsService`.
+- Staff: `Staff.tsx` + `Staff` model (`name`, `role`, `phone`, `email`, `color`, `isActive`) - **no salary**.
 - Routes: check `App.tsx` / dashboard router for how Bookings is mounted.
 
 ---
@@ -38,7 +38,7 @@
 ### A) Booking detail + Back
 
 - Clicking a list row (not the action buttons) opens detail.
-- Prefer lightweight in-page state **or** route `/dashboard/bookings/:id` — pick one; if route, register it and use `navigate(-1)` / explicit Back to list.
+- Prefer lightweight in-page state **or** route `/dashboard/bookings/:id` - pick one; if route, register it and use `navigate(-1)` / explicit Back to list.
 - Detail shows at least: customer name/phone/email, service, staff, date, start/end, status, price fields, paymentStatus/amount, source, formData (readable), booking id.
 - **Back** returns to list (keep filter if possible).
 - Do not break Complete / No Show / Cancel.
@@ -55,7 +55,7 @@
 
 ### C) Optional staff salary
 
-- Schema: `Staff.salary` `Float?` (or `Int?` paise — prefer **INR Float nullable** to match existing `finalPrice` style) + migration.
+- Schema: `Staff.salary` `Float?` (or `Int?` paise - prefer **INR Float nullable** to match existing `finalPrice` style) + migration.
 - Owner create/update staff accepts optional `salary`; omit/null = no salary.
 - Show in Staff list/form; allow clear.
 - Do **not** expose salary on public booking APIs / public config DTO. Strip in public `config` if staff is returned.

@@ -172,7 +172,7 @@ function mapAuthError(error: any, res: Response) {
 }
 
 /**
- * POST /auth/signup/request-otp { email } — starts verified signup
+ * POST /auth/signup/request-otp { email } - starts verified signup
  * (email → OTP). 409 if the email is already registered.
  */
 publicRouter.post('/auth/signup/request-otp', async (req: Request, res: Response) => {
@@ -258,7 +258,7 @@ publicRouter.post('/signup', async (req: Request, res: Response) => {
 // ---------- Public config ----------
 
 /**
- * Safe public business config. Explicit DTO — never returns owner secrets or
+ * Safe public business config. Explicit DTO - never returns owner secrets or
  * inactive/hidden content.
  */
 publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
@@ -291,7 +291,7 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
         where: { businessId: business.id, isActive: true },
         select: {
           id: true, name: true, role: true, phone: true, email: true, color: true, isActive: true,
-          // salary intentionally excluded — never exposed publicly.
+          // salary intentionally excluded - never exposed publicly.
         },
       }),
       prisma.formField.findMany({
@@ -331,7 +331,7 @@ publicRouter.get('/:identifier/config', async (req: Request, res: Response) => {
           secondaryColor: business.secondaryColor,
           accentColor: business.accentColor,
         },
-        // Batch 4 — owner-consented salon location + server-generated directions.
+        // Batch 4 - owner-consented salon location + server-generated directions.
         location: locationInfo(business),
       },
       serviceCategories,
@@ -408,7 +408,7 @@ publicRouter.get('/:identifier/availability', async (req: Request, res: Response
 });
 
 /**
- * POST /auth/forgot/request-otp { email } — generic response either way
+ * POST /auth/forgot/request-otp { email } - generic response either way
  * (no account enumeration). OTP is only sent when an account exists.
  */
 publicRouter.post('/auth/forgot/request-otp', async (req: Request, res: Response) => {
@@ -448,7 +448,7 @@ publicRouter.post('/auth/forgot/verify-otp', async (req: Request, res: Response)
 });
 
 /**
- * POST /auth/forgot/reset { resetToken, newPassword } — set a new password
+ * POST /auth/forgot/reset { resetToken, newPassword } - set a new password
  * (works for Google-linked accounts too).
  */
 publicRouter.post('/auth/forgot/reset', async (req: Request, res: Response) => {
@@ -478,7 +478,7 @@ publicRouter.post('/auth/forgot/reset', async (req: Request, res: Response) => {
 
 
 /**
- * POST /auth/google { credential } — verify the GIS ID token server-side.
+ * POST /auth/google { credential } - verify the GIS ID token server-side.
  * Existing same-email account → auto-link + owner JWT.
  * New email → { needsSignupCompletion: true, googleSignupToken }.
  */
@@ -549,7 +549,7 @@ publicRouter.post('/auth/google', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /auth/google/complete { googleSignupToken, name, timezone } — finish a
+ * POST /auth/google/complete { googleSignupToken, name, timezone } - finish a
  * new Google signup (no password required; ownerPassword stays null until the
  * owner sets one in Settings).
  */
