@@ -257,16 +257,36 @@ export const DashboardLayout: React.FC = () => {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 overflow-y-auto">
-        {/* Mobile menu - fixed on the left (not a top content row). */}
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Open menu"
-          className="lg:hidden fixed left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top,0px))] p-2.5 rounded-full bg-white border border-gray-200 shadow-md hover:bg-gray-50 active:scale-95"
+        {/* Mobile top bar - full-width chrome instead of a floating hamburger orb */}
+        <header
+          className="lg:hidden sticky top-0 z-20 border-b border-gray-200/90 bg-white/95 backdrop-blur-md"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
         >
-          ☰
-        </button>
-        <div className="p-4 lg:p-8 flex flex-col min-h-full safe-top pl-14 lg:pl-8">
+          <div className="flex items-center gap-3 h-12 px-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-lg text-gray-700 hover:bg-gray-100 active:bg-gray-200"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+            <div className="min-w-0 flex-1 flex items-center gap-2.5">
+              <img
+                src="/brand/jora-reservly-mark.png"
+                alt=""
+                className="h-6 w-6 object-contain shrink-0"
+              />
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {config?.name || 'Reservly'}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <div className="p-4 lg:p-8 flex flex-col min-h-full lg:safe-top">
           <div className="flex-1">
             {!config && loadingSession ? (
               <div className="space-y-3 max-w-md">
