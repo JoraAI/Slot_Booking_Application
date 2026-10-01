@@ -134,21 +134,50 @@ export const DashboardLayout: React.FC = () => {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex shrink-0 items-center gap-2.5 px-5 py-4 border-b border-gray-200 dark:border-gray-800 safe-top">
-          <img
-            src="/brand/jora-reservly-mark.png"
-            alt=""
-            className="h-8 w-auto max-w-[32px] object-contain object-left shrink-0"
-          />
-          <div className="min-w-0 leading-tight">
-            <p className="font-bold text-[15px] truncate text-primary">Reservly</p>
-            <p className="text-[10px] text-gray-400 truncate">Powered by Jora AI</p>
+        <div
+          className="shrink-0 border-b border-gray-200 dark:border-gray-800 px-4 pb-3.5"
+          style={{ paddingTop: 'max(0.85rem, env(safe-area-inset-top, 0px))' }}
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/15 flex items-center justify-center overflow-hidden shrink-0">
+              {config?.logoUrl ? (
+                <img src={config.logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <img
+                  src="/brand/jora-reservly-mark.png"
+                  alt=""
+                  className="h-7 w-7 object-contain"
+                />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="font-semibold text-[15px] leading-snug text-gray-900 dark:text-gray-100 truncate">
+                {config?.name || 'Your shop'}
+              </p>
+              <p className="mt-0.5 text-[11px] text-gray-400 truncate">
+                <span className="text-primary/80 font-medium">Reservly</span>
+                <span className="mx-1 text-gray-300">·</span>
+                by Jora AI
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close menu"
+              className="lg:hidden -mr-1 mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
           </div>
         </div>
 
         {shops.length > 0 && (
           <div className="shrink-0 px-3 pt-3 pb-1 border-b border-gray-100 dark:border-gray-800 space-y-2">
-            <label className="block text-[11px] uppercase tracking-wide text-gray-400 px-1">Shop</label>
+            <label className="block text-[11px] uppercase tracking-wide text-gray-400 px-1">
+              {shops.length > 1 ? 'Switch shop' : 'Shop'}
+            </label>
             <select
               className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1.5"
               value={config?.id || ''}
@@ -274,13 +303,19 @@ export const DashboardLayout: React.FC = () => {
               </svg>
             </button>
             <div className="min-w-0 flex-1 flex items-center gap-2.5">
-              <img
-                src="/brand/jora-reservly-mark.png"
-                alt=""
-                className="h-6 w-6 object-contain shrink-0"
-              />
+              <div className="h-7 w-7 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center overflow-hidden shrink-0">
+                {config?.logoUrl ? (
+                  <img src={config.logoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <img
+                    src="/brand/jora-reservly-mark.png"
+                    alt=""
+                    className="h-4 w-4 object-contain"
+                  />
+                )}
+              </div>
               <p className="text-sm font-semibold text-gray-900 truncate">
-                {config?.name || 'Reservly'}
+                {config?.name || 'Your shop'}
               </p>
             </div>
           </div>
