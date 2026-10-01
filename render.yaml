@@ -1,8 +1,8 @@
-# Two Render services — one DB + Razorpay set per branch.
+# Two Render services - one DB + Razorpay set per branch.
 # Docs: https://render.com/docs/blueprint-spec
 # Full guide: ENVIRONMENTS.md
 services:
-  # Production — Git branch `main`, Neon reservly-prod, LIVE Razorpay
+  # Production - Git branch `main`, Neon reservly-prod, LIVE Razorpay
   - type: web
     name: reservly-api
     runtime: docker
@@ -37,7 +37,7 @@ services:
       - key: FRONTEND_PUBLIC_URL
         sync: false
 
-  # Demo — Git branch `demo`, Neon reservly-demo, TEST Razorpay
+  # Demo - Git branch `demo`, Neon reservly-demo, TEST Razorpay
   - type: web
     name: reservly-api-demo
     runtime: docker

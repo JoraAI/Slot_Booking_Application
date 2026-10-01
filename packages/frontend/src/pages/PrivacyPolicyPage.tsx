@@ -66,34 +66,34 @@ export const PrivacyPolicyPage: React.FC = () => {
           <h2 className="text-lg font-semibold">Data we collect</h2>
           <ul className="list-disc pl-5 space-y-2">
             <li>
-              <strong>Account data</strong> — owner name/email, password (stored hashed), optional Google
+              <strong>Account data</strong> - owner name/email, password (stored hashed), optional Google
               Sign-In identifiers (web), business name, timezone, and shop settings.
             </li>
             <li>
-              <strong>Business &amp; operations data</strong> — services, products, staff, working hours,
+              <strong>Business &amp; operations data</strong> - services, products, staff, working hours,
               bookings, invoices, analytics aggregates, uploaded images (logo/cover/service photos), and
               invoice PDFs needed for WhatsApp delivery.
             </li>
             <li>
-              <strong>Customer data you enter or collect via booking</strong> — typically name, phone,
+              <strong>Customer data you enter or collect via booking</strong> - typically name, phone,
               email, and answers to intake forms you configure. You are the controller of your customers’
               data; we process it to provide the service.
             </li>
             <li>
-              <strong>Payment data</strong> — payment amounts, statuses, and Razorpay transaction /
+              <strong>Payment data</strong> - payment amounts, statuses, and Razorpay transaction /
               refund identifiers. Card / UPI secrets are handled by Razorpay; we do not store full card
               numbers.
             </li>
             <li>
-              <strong>Location</strong> — optional salon pin from device location or map search, used only
+              <strong>Location</strong> - optional salon pin from device location or map search, used only
               when you set business location in Settings.
             </li>
             <li>
-              <strong>Support</strong> — ticket subject/details and optional short voice notes. Voice notes
+              <strong>Support</strong> - ticket subject/details and optional short voice notes. Voice notes
               are attached to support email and are not retained as media files in our database.
             </li>
             <li>
-              <strong>Device / session</strong> — authentication tokens on the device (mobile: Preferences;
+              <strong>Device / session</strong> - authentication tokens on the device (mobile: Preferences;
               web: session storage), and standard server logs needed to operate and secure the service.
             </li>
           </ul>
@@ -114,10 +114,10 @@ export const PrivacyPolicyPage: React.FC = () => {
           <h2 className="text-lg font-semibold">Sharing</h2>
           <p>We share data only as needed to run the product:</p>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Razorpay</strong> — payments, subscriptions, refunds.</li>
-            <li><strong>WhatsApp / messaging providers</strong> (e.g. Gupshup / Meta) — when you send WhatsApp messages.</li>
-            <li><strong>Email providers</strong> (e.g. Resend / SMTP) — transactional and support email.</li>
-            <li><strong>Hosting / database</strong> — cloud infrastructure that stores and serves the app.</li>
+            <li><strong>Razorpay</strong> - payments, subscriptions, refunds.</li>
+            <li><strong>WhatsApp / messaging providers</strong> (e.g. Gupshup / Meta) - when you send WhatsApp messages.</li>
+            <li><strong>Email providers</strong> (e.g. Resend / SMTP) - transactional and support email.</li>
+            <li><strong>Hosting / database</strong> - cloud infrastructure that stores and serves the app.</li>
           </ul>
           <p>We do not sell personal information. We do not use your data for third-party advertising.</p>
         </section>
@@ -125,9 +125,9 @@ export const PrivacyPolicyPage: React.FC = () => {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Permissions (Android)</h2>
           <ul className="list-disc pl-5 space-y-2">
-            <li><strong>Internet</strong> — required to use the app.</li>
-            <li><strong>Location</strong> — optional; used only to help set the salon location.</li>
-            <li><strong>Microphone</strong> — optional; used only if you record a support voice note.</li>
+            <li><strong>Internet</strong> - required to use the app.</li>
+            <li><strong>Location</strong> - optional; used only to help set the salon location.</li>
+            <li><strong>Microphone</strong> - optional; used only if you record a support voice note.</li>
           </ul>
         </section>
 

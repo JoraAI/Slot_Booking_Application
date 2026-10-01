@@ -1,4 +1,4 @@
-# Reservly — Flexible Reservations for Every Business
+# Reservly - Flexible Reservations for Every Business
 
 A self-contained, embeddable reservation platform for appointment and capacity-based businesses, including salons, clinics, studios, gyms, cafés, and restaurants.
 
@@ -7,25 +7,25 @@ A self-contained, embeddable reservation platform for appointment and capacity-b
 ## Features
 
 ### Core
-- **Service catalog** — Categories + services with per-service duration, buffer time, capacity, staff assignment, and pricing
-- **Server-side pricing engine** — Percentage/flat discounts with validity windows; prices and snapshots are always computed on the backend
-- **Service-aware availability** — Slot grids adapt to each service's duration, buffer, capacity, resource mode (staff-based vs pooled), and granularity
-- **Parallel seat booking** — Multiple simultaneous bookings per time slot
-- **Dynamic intake forms** — Drag-and-drop field builder with live preview
-- **Opaque public codes** — Each business gets a secure, URL-safe `publicCode`; customer links resolve to exactly one business
-- **Business timezone engine** — All booking dates/times resolve in the owner's IANA timezone
-- **Customizable public page** — Branding (colors, logo, cover) and page sections (Hero, Services, Offers, About, Hours…)
-- **QR codes** — Dedicated QR page; bookings from QR links are tracked as a distinct source
-- **Slot blocking** — Block individual time slots for holidays/maintenance
-- **Booking status workflow** — CONFIRMED → COMPLETED / NO_SHOW / CANCELLED
-- **Owner signup** — Create an isolated business workspace in seconds
+- **Service catalog** - Categories + services with per-service duration, buffer time, capacity, staff assignment, and pricing
+- **Server-side pricing engine** - Percentage/flat discounts with validity windows; prices and snapshots are always computed on the backend
+- **Service-aware availability** - Slot grids adapt to each service's duration, buffer, capacity, resource mode (staff-based vs pooled), and granularity
+- **Parallel seat booking** - Multiple simultaneous bookings per time slot
+- **Dynamic intake forms** - Drag-and-drop field builder with live preview
+- **Opaque public codes** - Each business gets a secure, URL-safe `publicCode`; customer links resolve to exactly one business
+- **Business timezone engine** - All booking dates/times resolve in the owner's IANA timezone
+- **Customizable public page** - Branding (colors, logo, cover) and page sections (Hero, Services, Offers, About, Hours…)
+- **QR codes** - Dedicated QR page; bookings from QR links are tracked as a distinct source
+- **Slot blocking** - Block individual time slots for holidays/maintenance
+- **Booking status workflow** - CONFIRMED → COMPLETED / NO_SHOW / CANCELLED
+- **Owner signup** - Create an isolated business workspace in seconds
 
 ### Optional Features (Owner-Toggled)
-- 🕐 **Waitlist** — Auto-notify customers when slots free up (30-min expiry cascade)
-- 🔄 **Recurring Bookings** — Weekly/bi-weekly/monthly with conflict preview
-- 👥 **Multi-Staff** — Book specific staff members, staff working hours, staff-per-service assignment
-- 💳 **Payments (Razorpay)** — UPI, Cards, Netbanking; full or deposit mode; authoritative server-side amounts
-- 🔔 **Reminders** — Database-backed appointment reminders (durable, cron-friendly)
+- 🕐 **Waitlist** - Auto-notify customers when slots free up (30-min expiry cascade)
+- 🔄 **Recurring Bookings** - Weekly/bi-weekly/monthly with conflict preview
+- 👥 **Multi-Staff** - Book specific staff members, staff working hours, staff-per-service assignment
+- 💳 **Payments (Razorpay)** - UPI, Cards, Netbanking; full or deposit mode; authoritative server-side amounts
+- 🔔 **Reminders** - Database-backed appointment reminders (durable, cron-friendly)
 
 ### Analytics Dashboard
 - KPI cards with real-time data
@@ -34,10 +34,10 @@ A self-contained, embeddable reservation platform for appointment and capacity-b
 - Feature-gated sections for payments, waitlist, staff performance
 
 ### Embed Modes
-- **Standalone** — Full page with header
-- **iframe/QR** — No chrome, postMessage for height sync
-- **Script tag** — Mounts into `#booking-widget` container
-- **Theme injection** — URL params override CSS custom properties
+- **Standalone** - Full page with header
+- **iframe/QR** - No chrome, postMessage for height sync
+- **Script tag** - Mounts into `#booking-widget` container
+- **Theme injection** - URL params override CSS custom properties
 
 ## Tech Stack
 
@@ -86,7 +86,7 @@ pnpm --filter frontend dev   # Frontend on http://localhost:5173
 ```
 
 ### 5. Access
-- **Customer Widget**: `http://localhost:5173/b/{publicCode}` — the demo's public code is shown at login/QR page; the legacy slug `demo-salon` redirects to it
+- **Customer Widget**: `http://localhost:5173/b/{publicCode}` - the demo's public code is shown at login/QR page; the legacy slug `demo-salon` redirects to it
 - **Owner Dashboard**: `http://localhost:5173/login`
 - **API Docs (Swagger)**: `http://localhost:3001/api-docs`
 - **API Health**: `http://localhost:3001/api/health`
@@ -94,7 +94,7 @@ pnpm --filter frontend dev   # Frontend on http://localhost:5173
 
 ### 6. Demo Credentials
 - **Owner Login**: `owner@demosalon.com` / `admin123`
-- **Business Slug / Public Code**: `demo-salon` (slug) — the opaque `publicCode` is generated per business and used in customer URLs
+- **Business Slug / Public Code**: `demo-salon` (slug) - the opaque `publicCode` is generated per business and used in customer URLs
 
 ## Docker Deployment
 

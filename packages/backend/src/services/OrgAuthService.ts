@@ -830,7 +830,7 @@ export const orgAuthService = {
     });
   },
 
-  /** Ensure a legacy Business (no org) is wrapped — used if migration missed a row. */
+  /** Ensure a legacy Business (no org) is wrapped - used if migration missed a row. */
   async ensureOrgForBusiness(businessId: string) {
     const business = await prisma.business.findUnique({ where: { id: businessId } });
     if (!business) return null;

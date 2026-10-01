@@ -1,4 +1,4 @@
-# Reservly Deployment Guide — Render + Vercel + Neon
+# Reservly Deployment Guide - Render + Vercel + Neon
 
 **Product:** Reservly  
 **Shape:** Vercel (frontend) + Render (API) + Neon (Postgres) + external cron.
@@ -18,20 +18,20 @@ See **[ENVIRONMENTS.md](./ENVIRONMENTS.md)** for the full branch / DB / Razorpay
 
 ---
 
-## Step 0 — Accounts (one-time)
+## Step 0 - Accounts (one-time)
 
 Create these (GitHub login is fine; card usually not required):
 
-1. [Render](https://render.com) — API
-2. [Neon](https://neon.tech) — Postgres (do **not** use Render free Postgres long-term; it expires ~30 days)
-3. [Vercel](https://vercel.com) — frontend
-4. [cron-job.org](https://cron-job.org) — scheduled jobs
+1. [Render](https://render.com) - API
+2. [Neon](https://neon.tech) - Postgres (do **not** use Render free Postgres long-term; it expires ~30 days)
+3. [Vercel](https://vercel.com) - frontend
+4. [cron-job.org](https://cron-job.org) - scheduled jobs
 
 Push this repo to **GitHub** if it is not already there (Render + Vercel deploy from Git).
 
 ---
 
-## Step 1 — Create free Postgres (Neon)
+## Step 1 - Create free Postgres (Neon)
 
 1. Neon → **New Project**
 2. Pick a region (any is fine for a pilot)
@@ -78,7 +78,7 @@ For local Docker Postgres, set `DIRECT_URL` to the same value as `DATABASE_URL`.
 
 ---
 
-## Step 2 — Create the Render Web Service
+## Step 2 - Create the Render Web Service
 
 1. Render Dashboard → **New** → **Web Service**
 2. Connect your GitHub account and select **Slot_Booking_Application**
@@ -95,7 +95,7 @@ For local Docker Postgres, set `DIRECT_URL` to the same value as `DATABASE_URL`.
 | Instance type | **Free** |
 | Health check path | `/api/health` |
 
-4. Do **not** click Create yet — add env vars first (Step 3), or create then add env and redeploy.
+4. Do **not** click Create yet - add env vars first (Step 3), or create then add env and redeploy.
 
 ### Optional: Blueprint instead of manual UI
 
@@ -108,7 +108,7 @@ If you prefer Infrastructure-as-Code:
 
 ---
 
-## Step 3 — Environment variables on Render
+## Step 3 - Environment variables on Render
 
 In the Web Service → **Environment**:
 
@@ -121,8 +121,8 @@ openssl rand -hex 32   # CRON_SECRET
 
 | Key | Value |
 |---|---|
-| `DATABASE_URL` | Neon connection string — **pooled** host + `?sslmode=require&pgbouncer=true` |
-| `DIRECT_URL` | Neon **direct** host (no `-pooler`) + `?sslmode=require` — required for migrate on boot |
+| `DATABASE_URL` | Neon connection string - **pooled** host + `?sslmode=require&pgbouncer=true` |
+| `DIRECT_URL` | Neon **direct** host (no `-pooler`) + `?sslmode=require` - required for migrate on boot |
 | `JWT_SECRET` | long random string |
 | `CRON_SECRET` | long random string |
 | `FRONTEND_URL` | `https://placeholder.vercel.app` (update after Step 5) |
@@ -131,7 +131,7 @@ openssl rand -hex 32   # CRON_SECRET
 
 Do **not** set `PORT=3001` on Render. Leave `PORT` unset so Render injects it (usually `10000`), or set `PORT=10000` explicitly. Listening on `3001` makes the service look live in logs but return `Not Found` on the public URL.
 
-Optional later (Cloudinary media, or platform WhatsApp via `WHATSAPP_PROVIDER`) — see `packages/backend/.env.example`.
+Optional later (Cloudinary media, or platform WhatsApp via `WHATSAPP_PROVIDER`) - see `packages/backend/.env.example`.
 Owners configure their own SMTP in Dashboard → Settings (encrypted). WhatsApp uses Reservly’s shared Gupshup/Meta/Twilio number + prepaid wallet.
 
 - `CLOUDINARY_*`
@@ -140,7 +140,7 @@ Save with **Save, rebuild, and deploy**.
 
 ---
 
-## Step 4 — Wait for deploy & verify API
+## Step 4 - Wait for deploy & verify API
 
 1. Open the service **Logs** / **Events** until deploy is Live
 2. Copy the URL, e.g. `https://reservly-api.onrender.com`
@@ -158,7 +158,7 @@ If migrate fails, check logs for `DATABASE_URL` / SSL errors. The container runs
 
 ---
 
-## Step 5 — Deploy the frontend (Vercel)
+## Step 5 - Deploy the frontend (Vercel)
 
 1. Vercel → **Add New** → **Project** → import the same GitHub repo
 2. Prefer **Root Directory = repository root** (pnpm workspace):
@@ -193,7 +193,7 @@ After any `VITE_*` change on Vercel: **Redeploy frontend** (Vite inlines env at 
 
 ---
 
-## Step 6 — External cron (required)
+## Step 6 - External cron (required)
 
 Free Render sleeps after ~15 minutes idle. Cron wakes the API and runs jobs.
 
@@ -221,7 +221,7 @@ If the tool cannot set headers, use JSON body: `{ "secret": "YOUR_CRON_SECRET" }
 
 ---
 
-## Step 7 — Smoke test
+## Step 7 - Smoke test
 
 1. Open the Vercel site → **Sign up** as an owner
 2. Configure services / hours / location
@@ -246,7 +246,7 @@ DATABASE_URL="your-neon-url" pnpm --filter backend db:seed
 | Change API secrets | Render → Environment → Save & deploy |
 | Change `VITE_API_BASE_URL` | Vercel env → Redeploy frontend |
 | Logs | Render → Logs |
-| Cold start | First hit after ~15 min idle can take 30–60s — normal on free |
+| Cold start | First hit after ~15 min idle can take 30–60s - normal on free |
 
 ---
 
@@ -255,9 +255,9 @@ DATABASE_URL="your-neon-url" pnpm --filter backend db:seed
 - Render free web service **sleeps** after inactivity → cold starts
 - ~750 free instance hours / month per workspace
 - Neon free may suspend compute → first DB query after idle can be slow
-- Do **not** use Render free Postgres for long-term data (expires ~30 days) — use Neon/Supabase
+- Do **not** use Render free Postgres for long-term data (expires ~30 days) - use Neon/Supabase
 - Meta WhatsApp / Gupshup / Razorpay are paid third parties when you enable them
-- No in-process timers — external cron (Step 6) is required
+- No in-process timers - external cron (Step 6) is required
 
 ---
 
@@ -273,7 +273,7 @@ See `packages/backend/.env.example`.
 | `PORT` | Set by Render automatically |
 | `FRONTEND_URL` | Vercel origin (CORS) |
 | `FRONTEND_PUBLIC_URL` | Links / QR / manage URLs |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | **Platform** Razorpay — WhatsApp wallet recharges (same keys as subscription) |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | **Platform** Razorpay - WhatsApp wallet recharges (same keys as subscription) |
 | `WHATSAPP_PROVIDER` | Active WhatsApp transport: `meta` (default), `twilio`, or `gupshup` |
 | `META_WHATSAPP_PHONE_NUMBER_ID` / `META_WHATSAPP_ACCESS_TOKEN` | Meta Cloud API (when `WHATSAPP_PROVIDER=meta`) |
 | `META_WHATSAPP_DISPLAY_PHONE` / `META_WHATSAPP_TEMPLATE_*` | Display number + optional template names for outside-session fallback |
@@ -285,21 +285,21 @@ See `packages/backend/.env.example`.
 | `META_WEBHOOK_VERIFY_TOKEN` | Reserved for future Meta webhook (not required today) |
 | `META_API_VERSION` | Meta Graph API version, default `v20.0` (not required today) |
 | `GOOGLE_CLIENT_ID` | Owner Google Sign-In (ID-token verify). Optional; button hidden when unset. Must match `VITE_GOOGLE_CLIENT_ID` (frontend) for the same OAuth client |
-| `GOOGLE_CLIENT_SECRET` | Optional, only for a future server-side redirect flow — not required for GIS |
-| `RESEND_API_KEY` | **Recommended on Render free** — platform email (signup/forgot OTP) via HTTPS. Free Render blocks SMTP ports 25/465/587 |
+| `GOOGLE_CLIENT_SECRET` | Optional, only for a future server-side redirect flow - not required for GIS |
+| `RESEND_API_KEY` | **Recommended on Render free** - platform email (signup/forgot OTP) via HTTPS. Free Render blocks SMTP ports 25/465/587 |
 | `RESEND_FROM` | Sender, e.g. `Reservly <beth.t@example.com>` (test) or a verified domain address |
 | `SMTP_USER` / `SMTP_PASS` | Optional local/dev SMTP; **does not work on Render free** (connection timeout) |
 
 ### WhatsApp wallet notes
 
-- Shared platform WhatsApp only — owners Enable WhatsApp + top up wallet; they never paste provider secrets.
+- Shared platform WhatsApp only - owners Enable WhatsApp + top up wallet; they never paste provider secrets.
 - Wallet credits are prepaid, integer paise, never negative. Every WhatsApp send reserves the
   DB-configured price for the active `WHATSAPP_PROVIDER` → calls Meta/Twilio/Gupshup → finalizes (charge) or releases (refund to wallet).
 - Empty wallet → no provider call, message logged `INSUFFICIENT_CREDITS`; bookings and email keep working.
 - Per-message prices live in the `WhatsAppPricing` table (provider-aware, ≈**1.2×** modeled wholesale).
   Update without a code deploy via `POST /api/internal/whatsapp-pricing` with `x-cron-secret: <CRON_SECRET>`
   (`provider`: `meta` \| `twilio` \| `gupshup`).
-  Owners see wallet balance only — per-message rates are not shown in the dashboard.
+  Owners see wallet balance only - per-message rates are not shown in the dashboard.
 - Gupshup templates: create or reuse APPROVED TEXT templates with body `{{1}}` (utility + marketing),
   then set `GUPSHUP_TEMPLATE_*`. See `docs/whatsapp-wallet-architecture.md`.
 - Admin manual wallet adjustment: `POST /api/internal/wallet/adjust` with `x-cron-secret`.
@@ -315,7 +315,7 @@ See `packages/backend/.env.example`.
 | `render.yaml` | Optional Blueprint for one-click Render setup |
 | `.dockerignore` | Keeps image small / excludes secrets |
 | `packages/frontend/vercel.json` | SPA rewrites for deep links |
-| `fly.toml` | Leftover Fly config — ignore if you use Render |
+| `fly.toml` | Leftover Fly config - ignore if you use Render |
 
 ### Analytics export
 - `GET /api/owner/analytics/export?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD` returns a CSV

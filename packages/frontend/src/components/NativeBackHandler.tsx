@@ -26,7 +26,7 @@ export function useNativeBackButton() {
           navigate('/dashboard')
           return
         }
-        // At login or dashboard home: exit — never bounce authenticated users to /login.
+        // At login or dashboard home: exit - never bounce authenticated users to /login.
         void App.exitApp()
       })
     })()

@@ -10,7 +10,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1E — security polish: embed origins, write-only Razorpay secret,
+ * Batch 1E - security polish: embed origins, write-only Razorpay secret,
  * waitlist delete 404, next-available wiring.
  */
 

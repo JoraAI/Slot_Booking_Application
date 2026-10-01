@@ -6,7 +6,7 @@ import { reminderService } from './ReminderService';
 import { timeService } from './TimeService';
 
 /**
- * Batch 1A — reminder correctness.
+ * Batch 1A - reminder correctness.
  * Proves that BOTH default offsets (1,440 and 120 minutes) are persisted per
  * enabled channel and that repeated scheduling is idempotent.
  */

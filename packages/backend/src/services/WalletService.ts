@@ -1,7 +1,7 @@
 import prisma from '../lib/prisma';
 
 /**
- * WhatsApp prepaid wallet — integer paise only. Never negative.
+ * WhatsApp prepaid wallet - integer paise only. Never negative.
  *
  * Reserve/finalize/release is the core money path:
  *   reserve  → single atomic `updateMany(balancePaise >= amount)` decrement
@@ -58,7 +58,7 @@ class WalletService {
   }
 
   /**
-   * Reserve costPaise atomically. Hard stop on insufficient balance — caller must
+   * Reserve costPaise atomically. Hard stop on insufficient balance - caller must
    * NOT call Meta and MUST NOT record a charge.
    */
   async reserve(businessId: string, amountPaise: number, opts: ReserveOpts = {}): Promise<ReserveResult> {

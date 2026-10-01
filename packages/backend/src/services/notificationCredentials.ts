@@ -29,7 +29,7 @@ export type TwilioWhatsappConfig = {
   provider: 'twilio';
   accountSid: string;
   authToken: string;
-  /** E.164 or whatsapp:+E.164 — normalized with whatsapp: prefix at send time. */
+  /** E.164 or whatsapp:+E.164 - normalized with whatsapp: prefix at send time. */
   from: string;
   utilityContentSid?: string;
   marketingContentSid?: string;
@@ -41,7 +41,7 @@ export type GupshupWhatsappConfig = {
   apiKey: string;
   /** Gupshup app name for `src.name` (not the UUID). */
   appName: string;
-  /** App UUID — list templates / ops; send uses appName. */
+  /** App UUID - list templates / ops; send uses appName. */
   appId: string;
   /** Source WhatsApp number digits (country code, no +). */
   source: string;
@@ -168,7 +168,7 @@ export function resolvePlatformWhatsapp(): WhatsappPlatformConfig | null {
   return resolvePlatformMetaWhatsapp();
 }
 
-/** @deprecated Use resolvePlatformWhatsapp — kept for older call sites. */
+/** @deprecated Use resolvePlatformWhatsapp - kept for older call sites. */
 export function resolveMetaWhatsapp(_business?: DeliveryBusiness): WhatsappPlatformConfig | null {
   return resolvePlatformWhatsapp();
 }
@@ -218,7 +218,7 @@ export function resolveSmtp(business?: DeliveryBusiness): SmtpConfig | null {
   return resolveBusinessSmtp(business) || resolveEnvSmtp();
 }
 
-/** Resend HTTP API — works on Render free (HTTPS/443; SMTP 587 is blocked). */
+/** Resend HTTP API - works on Render free (HTTPS/443; SMTP 587 is blocked). */
 export function resolveResend(): ResendConfig | null {
   const apiKey = String(process.env.RESEND_API_KEY || '').trim();
   if (!apiKey) return null;

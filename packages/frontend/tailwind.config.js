@@ -29,7 +29,7 @@ export default {
     },
   },
   plugins: [],
-  // Class-based only — never follow OS dark mode. Mobile phones in dark
+  // Class-based only - never follow OS dark mode. Mobile phones in dark
   // theme were flipping sign-in / dashboard colors away from the desktop look.
   darkMode: 'class',
 }

@@ -1,4 +1,4 @@
-# DeepSeek-V4 Prompt — WhatsApp Multi-Tenant Wallet Migration
+# DeepSeek-V4 Prompt - WhatsApp Multi-Tenant Wallet Migration
 
 **How to use:** Paste this entire file into DeepSeek-V4 with repo access.  
 **Product name in code:** Reservly (repo: Slot_Booking_Application). Treat “SlotBook” in requirements as this app.
@@ -23,11 +23,11 @@ Senior full-stack engineer. Incremental migration: centralized platform WhatsApp
 
 ---
 
-## CURRENT architecture (inspect these — do not assume)
+## CURRENT architecture (inspect these - do not assume)
 
 ### Tenant model
 - Tenant = `Business` (`packages/backend/prisma/schema.prisma`).
-- Owner auth: JWT on `/api/owner/*` (`businessId` from token — **never** trust client `businessId`).
+- Owner auth: JWT on `/api/owner/*` (`businessId` from token - **never** trust client `businessId`).
 - Public booking: `/api/:identifier` via `publicCode` / `slug` (`BusinessResolver`).
 
 ### WhatsApp today (per-salon DIY Meta)
@@ -39,19 +39,19 @@ Senior full-stack engineer. Incremental migration: centralized platform WhatsApp
 - Toggles: `notifyCustomerWhatsapp`, `notifyOwnerWhatsapp`.
 - Custom msgs: `CustomerNotification` + owner `/notifications/send*`.
 - **No Meta webhook route today.** Reminders: DB `BookingReminder` + `POST /api/internal/jobs/process-reminders` (`CRON_SECRET`).
-- Confirmations: **sync** after booking create (`public.ts`, `PaymentFlowService`) via `sendBookingConfirmation` — keep booking success independent of WhatsApp success.
+- Confirmations: **sync** after booking create (`public.ts`, `PaymentFlowService`) via `sendBookingConfirmation` - keep booking success independent of WhatsApp success.
 
 ### Money / payments today
-- Money often stored as `Float` / `Int` INR (legacy). **New wallet must use integer paise (minor units) or Prisma `Decimal` — never float for wallet.**
-- Platform subscription Razorpay: env `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — `owner.ts` `/subscription/pay` + `/subscription/verify` (HMAC signature). **Reuse this pattern for wallet recharge.**
-- Per-salon booking Razorpay: business keys — unrelated to wallet; do not mix.
+- Money often stored as `Float` / `Int` INR (legacy). **New wallet must use integer paise (minor units) or Prisma `Decimal` - never float for wallet.**
+- Platform subscription Razorpay: env `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` - `owner.ts` `/subscription/pay` + `/subscription/verify` (HMAC signature). **Reuse this pattern for wallet recharge.**
+- Per-salon booking Razorpay: business keys - unrelated to wallet; do not mix.
 
 ### Gaps vs target
 - No wallet / ledger / reservation.
 - No message cost pricing table.
 - No billable WhatsApp message history with provider IDs.
 - No Meta Embedded Signup; owners paste tokens.
-- No platform admin UI for pricing (may add internal routes protected by secret/admin if no admin role exists — check before inventing users).
+- No platform admin UI for pricing (may add internal routes protected by secret/admin if no admin role exists - check before inventing users).
 
 ---
 
@@ -89,7 +89,7 @@ Business → Wallet (paise) + WhatsAppConfig
 
 ## Suggested schema (adapt names to Prisma conventions)
 
-Use **integer paise** (`Int`) for wallet amounts unless project already uses `Decimal` for money — prefer Int paise for atomic SQL.
+Use **integer paise** (`Int`) for wallet amounts unless project already uses `Decimal` for money - prefer Int paise for atomic SQL.
 
 ```text
 WhatsAppConfig          1:1 Business
@@ -123,12 +123,12 @@ Migration: for each existing Business with Meta fields → create `WhatsAppConfi
 |---------|----------------|
 | Credentials | Extend `notificationCredentials.ts`; prefer tenant `WhatsAppConfig` + optional platform system token from env |
 | Send path | Gate **all** WhatsApp in `NotificationService.sendWhatsApp` through wallet reserve/finalize |
-| Events | confirmation, cancellation, reminder (`ReminderService.processDue`), waitlist, custom, owner alerts — same gate |
+| Events | confirmation, cancellation, reminder (`ReminderService.processDue`), waitlist, custom, owner alerts - same gate |
 | Wallet service | new `WalletService.ts`: getOrCreate, reserve, finalize, release, recharge, adjust |
 | Recharge | Mirror `/owner/subscription/pay` + `/verify` → `/owner/whatsapp-wallet/recharge` + `/verify` using **platform** Razorpay keys |
 | Pricing | `WhatsAppPricingService.getPricePaise(category, country)` |
-| Webhooks | Optional Phase-B: `POST /api/webhooks/meta-whatsapp` — map `phone_number_id` → Business; update `WhatsAppMessageLog`; validate Meta signature |
-| Internal jobs | Reminders already async — check wallet **at send time**, not at schedule time |
+| Webhooks | Optional Phase-B: `POST /api/webhooks/meta-whatsapp` - map `phone_number_id` → Business; update `WhatsAppMessageLog`; validate Meta signature |
+| Internal jobs | Reminders already async - check wallet **at send time**, not at schedule time |
 | Admin pricing | If no admin role: `INTERNAL` route with `CRON_SECRET` or env `PLATFORM_ADMIN_SECRET` + document; or seed pricing via migration |
 
 **Env (platform):** `META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_API_VERSION`, existing `META_WHATSAPP_*` fallbacks, `RAZORPAY_*` for wallet top-ups.
@@ -141,7 +141,7 @@ Migration: for each existing Business with Meta fields → create `WhatsAppConfi
 
 ```text
 GET  /owner/whatsapp/status
-POST /owner/whatsapp/connect          # Embedded Signup or OAuth exchange — stub if blocked
+POST /owner/whatsapp/connect          # Embedded Signup or OAuth exchange - stub if blocked
 POST /owner/whatsapp/disconnect
 
 GET  /owner/whatsapp-wallet
@@ -192,14 +192,14 @@ verify signature → upsert by razorpay_payment_id → RECHARGE tx → balance +
 
 ## Phases (execute in order)
 
-1. **Docs** — keep this file; add short `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migration only, &lt;200 lines).
-2. **Prisma migration** — models above + backfill wallets/configs.
-3. **WalletService + tests** — ledger, reserve, concurrency, idempotent recharge.
-4. **Wire NotificationService** — all WhatsApp paths.
+1. **Docs** - keep this file; add short `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migration only, &lt;200 lines).
+2. **Prisma migration** - models above + backfill wallets/configs.
+3. **WalletService + tests** - ledger, reserve, concurrency, idempotent recharge.
+4. **Wire NotificationService** - all WhatsApp paths.
 5. **Owner APIs + Razorpay recharge**.
-6. **Frontend** — connect UX + wallet UI; strip primary DIY token UX.
-7. **Meta connect** — Embedded Signup if feasible; else LEGACY + clear limitation.
-8. **Webhook** (optional) — status updates only; do not auto-refund on delivery failure.
+6. **Frontend** - connect UX + wallet UI; strip primary DIY token UX.
+7. **Meta connect** - Embedded Signup if feasible; else LEGACY + clear limitation.
+8. **Webhook** (optional) - status updates only; do not auto-refund on delivery failure.
 9. **Run existing tests** + new wallet/WhatsApp tests; fix regressions.
 
 ---
@@ -225,7 +225,7 @@ Meta may require Business verification + WhatsApp Embedded Signup / Tech Provide
 
 ---
 
-## Final report (when done — concise)
+## Final report (when done - concise)
 
 Architecture deltas · key files · migrations · APIs · wallet reserve mechanics · payment idempotency · security · tests run · migration for existing salons · env/deploy · known limitations.
 

@@ -43,7 +43,7 @@ class ApiClient {
     void setOwnerToken(token)
   }
 
-  /** Await native Preferences write — use after login so cold starts keep the session. */
+  /** Await native Preferences write - use after login so cold starts keep the session. */
   async setTokenPersisted(token: string | null): Promise<void> {
     this.token = token
     await setOwnerToken(token)

@@ -57,7 +57,7 @@ export const DashboardLayout: React.FC = () => {
       setConfig(me)
       setSessionError(null)
     } catch (err) {
-      // Network / cold-start / 5xx must NOT wipe the stored token — that caused
+      // Network / cold-start / 5xx must NOT wipe the stored token - that caused
       // repeated Android logouts when the API was briefly unreachable.
       if (err instanceof ApiError && err.status === 401) {
         forceLogout()
@@ -257,10 +257,16 @@ export const DashboardLayout: React.FC = () => {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 overflow-y-auto">
-        <div className="p-4 lg:p-8 flex flex-col min-h-full safe-top">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden mb-4 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
-            ☰
-          </button>
+        {/* Mobile menu - fixed on the left (not a top content row). */}
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open menu"
+          className="lg:hidden fixed left-3 z-20 top-[max(0.75rem,env(safe-area-inset-top,0px))] p-2.5 rounded-full bg-white border border-gray-200 shadow-md hover:bg-gray-50 active:scale-95"
+        >
+          ☰
+        </button>
+        <div className="p-4 lg:p-8 flex flex-col min-h-full safe-top pl-14 lg:pl-8">
           <div className="flex-1">
             {!config && loadingSession ? (
               <div className="space-y-3 max-w-md">
@@ -272,7 +278,7 @@ export const DashboardLayout: React.FC = () => {
               <div className="max-w-md space-y-3 bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 rounded-xl p-5">
                 <h2 className="font-semibold text-lg">Couldn’t reach the server</h2>
                 <p className="text-sm text-gray-500">
-                  You’re still signed in. This is usually a temporary network or server delay — try again in a moment.
+                  You’re still signed in. This is usually a temporary network or server delay - try again in a moment.
                 </p>
                 <p className="text-xs text-gray-400 break-words">{sessionError}</p>
                 <div className="flex flex-wrap gap-2">

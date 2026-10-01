@@ -36,7 +36,8 @@ const biz = {
 test('INV-CTA-1. No CTA when googleReviewUrl missing', () => {
   for (const url of [null, '', '   ']) {
     const html = invoiceService.renderInvoiceHtml(inv, { ...biz, googleReviewUrl: url });
-    assert.equal(html.includes('Leave a Google review'), false);
+    assert.equal(html.includes('Rate us on Google'), false);
+    assert.equal(html.includes('How was your visit?'), false);
   }
 });
 
@@ -45,6 +46,8 @@ test('INV-CTA-2. CTA when googleReviewUrl set', () => {
     ...biz,
     googleReviewUrl: 'https://g.page/r/AbCd/review',
   });
-  assert.equal(html.includes('Leave a Google review'), true);
+  assert.equal(html.includes('How was your visit?'), true);
+  assert.equal(html.includes('Rate us on Google'), true);
   assert.equal(html.includes('https://g.page/r/AbCd/review'), true);
+  assert.equal(html.includes('class="review"'), true);
 });

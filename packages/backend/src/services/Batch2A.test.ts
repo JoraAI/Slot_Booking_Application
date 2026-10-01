@@ -15,7 +15,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 2A — §12.8 verification hotfix acceptance tests.
+ * Batch 2A - §12.8 verification hotfix acceptance tests.
  */
 
 let business: any;

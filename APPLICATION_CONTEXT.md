@@ -1,4 +1,4 @@
-# Reservly — Application Context (source of truth)
+# Reservly - Application Context (source of truth)
 
 This document is generated from the current codebase. Source code is authoritative
 when this document differs.
@@ -6,8 +6,8 @@ when this document differs.
 ## Architecture & monorepo
 
 - **Monorepo** with pnpm workspaces:
-  - `packages/backend` — Node.js + Express + TypeScript + Prisma + PostgreSQL.
-  - `packages/frontend` — React 18 + Vite + TypeScript + Zustand + Tailwind CSS + Framer Motion.
+  - `packages/backend` - Node.js + Express + TypeScript + Prisma + PostgreSQL.
+  - `packages/frontend` - React 18 + Vite + TypeScript + Zustand + Tailwind CSS + Framer Motion.
 - Backend single Express app: `packages/backend/src/index.ts`. Route mounting order
   is intentional: **`/api/owner` and `/api/internal` are mounted before `/api`** so the
   public `/:identifier/...` routes can never shadow the owner/internal namespaces.
@@ -30,9 +30,9 @@ when this document differs.
 - `Service` carries `durationMinutes`, `bufferMinutes`, `price`, `resourceMode`,
   `capacity`, discount fields, and optional per-service working hours.
 - **Resource modes:**
-  - `STAFF_BASED` — each eligible staff member is capacity one; a booking requires
+  - `STAFF_BASED` - each eligible staff member is capacity one; a booking requires
     an assigned staff member (`StaffService`).
-  - `POOLED` — capacity is per-service (e.g. `capacity: 3` allows three overlapping
+  - `POOLED` - capacity is per-service (e.g. `capacity: 3` allows three overlapping
     appointments); legacy rows with a null `serviceId` still consume pool units.
 - Staff-service assignments are validated to belong to the same business.
 
@@ -71,7 +71,7 @@ when this document differs.
 - Stale holds are expired by `POST /api/internal/jobs/process-payment-expirations`
   (CRON_SECRET protected).
 
-## Batch 2 — UPI Intent checkout + automatic refunds
+## Batch 2 - UPI Intent checkout + automatic refunds
 
 - **UPI-first checkout** (`PaymentStep.tsx`): truthful primary CTA "Pay with UPI apps".
   The Razorpay Checkout is opened with a `display.blocks` config that puts a UPI
@@ -89,14 +89,14 @@ when this document differs.
   (PENDING | PROCESSING | PROCESSED | FAILED), `failureReason?`, `initiatedAt?`,
   `processedAt?`.
 - **Automatic source refund on customer cancel** (`DELETE /api/:identifier/bookings/:id/manage`):
-  1. The booking is cancelled immediately (capacity freed — availability only counts
+  1. The booking is cancelled immediately (capacity freed - availability only counts
      CONFIRMED) and reminders/waitlist are processed as before.
   2. `RefundService.refundForCancelledBooking` runs only when the booking has a paid
      Razorpay payment (`razorpayPaymentId` + `paymentAmount > 0`). It is idempotent:
      an advisory lock serializes concurrent cancels, the unique `bookingId` guarantees
      one row, and a PROCESSED (or PROCESSING-with-refund-id) row short-circuits before
      any Razorpay call. FAILED/PENDING rows retry.
-  3. `PaymentService.initiateRefund` now sends `{ amount, speed: 'optimum' }` — instant
+  3. `PaymentService.initiateRefund` now sends `{ amount, speed: 'optimum' }` - instant
      where the payment network supports it, otherwise normal banking timeline.
   4. Success → refund PROCESSED + `razorpayRefundId`, booking `paymentStatus = refunded`.
      Failure → refund FAILED + `failureReason`, booking stays CANCELLED with
@@ -114,7 +114,7 @@ when this document differs.
   statuses and the durable refund row (`paymentRefund` singular, included in
   `/owner/payments`).
 
-## Batch 2A — verification hotfix (idempotent refunds, atomic cancel, UPI-first)
+## Batch 2A - verification hotfix (idempotent refunds, atomic cancel, UPI-first)
 
 - **Idempotent refund creation**: every `PaymentRefund` owns a stable
   `idempotencyKey` (UUID, `@unique`, migration `20260821000000_payment_refund_idempotency`)
@@ -131,7 +131,7 @@ when this document differs.
   `DELETE`, owner `PUT /bookings/:id` with `status=CANCELLED`, and owner
   `DELETE /bookings/:id`.
 - **Owner manual refund** (`POST /owner/payments/:id/refund`) goes through the
-  durable pipeline too — full paid amount only, rejects any other `amount`
+  durable pipeline too - full paid amount only, rejects any other `amount`
   (integer minor units must equal the full paid amount), and cannot duplicate an
   existing auto-refund. A `PROCESSING` row without a refund id is never
   re-initiated from a request path (only the reconciliation cron retries it with
@@ -139,12 +139,12 @@ when this document differs.
 - **Razorpay status mapping**: `processed` → PROCESSED / `refunded` /
   `processedAt`; `pending` → PROCESSING / `refund_pending`; `failed` → FAILED /
   `refund_failed` + `failureReason`; **absent/unknown status stays PROCESSING**
-  (never claimed done — reconciliation resolves it). Durable reconciliation:
+  (never claimed done - reconciliation resolves it). Durable reconciliation:
   `POST /api/internal/jobs/process-refund-reconciliation` (CRON_SECRET protected)
   fetches `/v1/payments/:id/refunds`, matches by refund id or the idempotency
   note, and retries missing refunds with the original key.
 - **Legacy public booking-ID routes** (`GET/PUT/DELETE /:identifier/bookings/:id`)
-  now return 410 Gone — a booking ID alone never exposes or mutates a booking.
+  now return 410 Gone - a booking ID alone never exposes or mutates a booking.
   Frontend legacy callers were removed.
 - **Notifications deduplicated**: one customer message and one owner message per
   cancellation, branching on the durable refund state (initiated / needs salon
@@ -161,7 +161,7 @@ when this document differs.
   refunded/refund-pending/refund-failed transactions; `refundPolicy` is
   informational-only and cannot override the automatic full refund.
 
-## Batch 2B — live Razorpay notes + status conservatism (§12.9, code-only)
+## Batch 2B - live Razorpay notes + status conservatism (§12.9, code-only)
 
 - **Notes are a JSON object** on every live and test-mode create/retry:
   `notes: { reservly_idempotency_key: <idempotencyKey> }` (the official Razorpay
@@ -173,7 +173,7 @@ when this document differs.
   absent/unknown stays PROCESSING with `booking.paymentStatus = refund_pending`
   until the reconciliation cron observes the real status.
 
-## Batch 3 / 3A — unpaid booking race serialization (§10.11)
+## Batch 3 / 3A - unpaid booking race serialization (§10.11)
 
 - Every capacity-consuming slot insert runs in ONE DB transaction that acquires a
   **day-scoped resource lock** shared by unpaid/free/recurring booking creates AND
@@ -183,7 +183,7 @@ when this document differs.
     (auto-assign resolves the staff via a first availability pass, then locks, then
     re-checks authoritatively).
 - Inside the lock the path re-loads authoritative data, re-runs availability for the
-  exact interval, and inserts only if still available — a losing request fails with a
+  exact interval, and inserts only if still available - a losing request fails with a
   clean `Slot is no longer available` conflict and no partial write.
 - Widening the lock from the per-`startTime` key (Batch 3) to day-scoped resource
   keys (Batch 3A) closes two remaining races:
@@ -199,7 +199,7 @@ when this document differs.
   conflict; non-overlapping creates both succeed; the HTTP layer surfaces one
   201 + one 400.
 
-## Batch 4 — salon location + confirmation notifications (§18.1) — COMPLETE
+## Batch 4 - salon location + confirmation notifications (§18.1) - COMPLETE
 
 - **Salon location** on `Business` (`address` ≤ 500, optional `latitude`/`longitude`
   pair with bounds; migration `20260822000000_business_location`). Validated on
@@ -218,9 +218,9 @@ when this document differs.
   directions link, and the one-time `managementUrl` labelled **View or cancel
   booking** (reschedule stays disabled/405). Customer emails set
   `replyTo = ownerEmail`; WhatsApp bodies carry the salon `ownerWhatsapp` as a
-  `wa.me` contact link — the salon number is **never** used as the Twilio `From`.
+  `wa.me` contact link - the salon number is **never** used as the Twilio `From`.
   Templates HTML-escape user-controlled values.
-- **Reminders** include location/directions only — they never recreate the
+- **Reminders** include location/directions only - they never recreate the
   manage/cancel token (only `managementTokenHash` is stored).
 - **Prerequisite enforcement**: `PUT /owner/config` refuses *enabling*
   `notifyCustomerEmail` without SMTP and `notifyCustomerWhatsapp` /
@@ -229,7 +229,7 @@ when this document differs.
   reported by `GET /owner/settings/status` and surfaced in Settings/Notifications;
   the test-send endpoint now reports real per-channel success/failure.
 
-## Batch 5 — WhatsApp multi-tenant prepaid wallet — COMPLETE
+## Batch 5 - WhatsApp multi-tenant prepaid wallet - COMPLETE
 
 Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migration).
 
@@ -246,7 +246,7 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
 - **Wallet gate** in `NotificationService.sendWhatsApp` (the single choke point for
   booking confirm/cancel, reminders, waitlist, custom, broadcast, owner alerts):
   resolve price from `WhatsAppPricing` → `WalletService.reserve` (atomic
-  `updateMany(balancePaise >= amount)` — hard stop on insufficient, no Meta call,
+  `updateMany(balancePaise >= amount)` - hard stop on insufficient, no Meta call,
   no debit, log `INSUFFICIENT_CREDITS`, never throws into the booking flow) →
   Meta call → `finalize` (WHATSAPP_CHARGE) on accept with `providerMessageId`, or
   `release` (credit back) on failure. Reminders pass `throwOnInsufficient` so an
@@ -254,7 +254,7 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
 - **Recharge** mirrors platform subscription pay/verify with **platform** Razorpay
   keys: `POST /owner/whatsapp-wallet/recharge` (₹100 min, order) → client pays →
   `POST /owner/whatsapp-wallet/verify` (HMAC signature + order amount fetched from
-  Razorpay — never from the client) → idempotent credit keyed on
+  Razorpay - never from the client) → idempotent credit keyed on
   `providerPaymentId @unique`; cross-tenant replay of a payment id is rejected.
 - **Admin pricing** is DB-configurable without a deploy:
   `GET/POST /api/internal/whatsapp-pricing` and `POST /api/internal/wallet/adjust`
@@ -264,12 +264,12 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   Notifications has a WhatsApp Wallet card (balance, low-balance banner,
   Razorpay top-up, recent ledger + usage history). Setup guide copy updated.
 - **Prisma transaction budget** raised to 15s default (`transactionOptions` in
-  `lib/prisma.ts`) — the 5s interactive-transaction default flakes on slow/remote
+  `lib/prisma.ts`) - the 5s interactive-transaction default flakes on slow/remote
   Postgres (Neon) under parallel test load (advisory-lock refund flows). Also the
   local `.env` Neon **pooled** URL now includes `pgbouncer=true` (documented
   Prisma+Neon requirement so interactive transactions stay pinned to one
   connection instead of dying with “Transaction not found”).
-- **Tests**: `WhatsAppWallet.test.ts` (8) — parallel reserve concurrency
+- **Tests**: `WhatsAppWallet.test.ts` (8) - parallel reserve concurrency
   (balance 20, two reserves of 12 → one wins, balance 8), reserve/release,
   reserve/finalize, idempotent recharge + replay rejection, empty-wallet no-Meta-call
   hard stop, funded send (mocked Meta) ACCEPTED + charge, owner connect/status/recharge
@@ -280,14 +280,14 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   with Prisma transaction timeouts. This is environmental (was 98/98 earlier the
   same day); re-run once the compute budget resets.
 
-## Batch 6 — Owner Google Sign-In + email OTP signup / forgot-password — COMPLETE
+## Batch 6 - Owner Google Sign-In + email OTP signup / forgot-password - COMPLETE
 
 - **Schema** (migration `20260902000000_owner_google_otp`, non-breaking): `Business.ownerPassword`
   is now nullable (Google-only accounts; existing rows keep their hashes), `Business.googleSub`
   `@unique` (Google subject, set on auto-link/Google signup), `Business.emailVerifiedAt` (set on
   OTP-verified signup or Google email verify; null = legacy trusted). New `OwnerAuthOtp` table
   (email + purpose SIGNUP/PASSWORD_RESET, SHA-256 code hash, TTL 10 min, attempts 5, consume-once,
-  per-email/per-IP rate limits + 60s resend cooldown) — deliberately not tied to a Business row.
+  per-email/per-IP rate limits + 60s resend cooldown) - deliberately not tied to a Business row.
 - **Locked behaviors** (per `docs/DEEPSEEK_OWNER_AUTH_GOOGLE_OTP_PROMPT.md`):
   - OTP only for signup + forgot-password; **normal login stays password-only**, existing accounts
     unchanged. `POST /api/owner/login` returns `{ code: 'NO_PASSWORD' }` for Google-only accounts.
@@ -310,15 +310,15 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   and a Google Identity Services button (rendered only when `VITE_GOOGLE_CLIENT_ID` is set; GIS
   script loaded lazily; if GIS is blocked locally the button hides but the backend verify path is
   wired). `Settings.tsx` set-password for Google-only. `api.ts` + types extended.
-- **Tests**: `OwnerAuthOtp.test.ts` (9) — hash-at-rest (no plaintext), verify consume-once, wrong
+- **Tests**: `OwnerAuthOtp.test.ts` (9) - hash-at-rest (no plaintext), verify consume-once, wrong
   code attempts + lockout, resend cooldown, full signup flow + duplicate rejection + unverified
   signup blocked, forgot flow, no-enumeration, Google auto-link, Google new-user + password/set.
-  `GoogleTokenVerifier.test.ts` (3) — self-signed RS256 JWT + injected JWKS: valid token verifies;
+  `GoogleTokenVerifier.test.ts` (3) - self-signed RS256 JWT + injected JWKS: valid token verifies;
   wrong audience / unverified email / bad signature / missing kid / expired rejected; fails closed
   without `GOOGLE_CLIENT_ID`.
 
 
-## Batch 7 — Booking detail, Analytics Excel export, Staff salary — COMPLETE
+## Batch 7 - Booking detail, Analytics Excel export, Staff salary - COMPLETE
 
 - **Booking detail**: `Bookings.tsx` rows are clickable (except the action cell) → in-page
   detail view with Back to list (status filter preserved). Detail shows customer
@@ -342,7 +342,7 @@ Architecture doc: `docs/whatsapp-wallet-architecture.md` (CURRENT/TARGET/migrati
   **Never exposed publicly**: the public config `staff` array is selected without `salary`
   (the only place staff is returned publicly); `assignedStaffIds` in services already strips
   staff objects.
-- **Tests**: `BookingAnalyticsStaff.test.ts` (5) — staff salary create/update/clear via owner
+- **Tests**: `BookingAnalyticsStaff.test.ts` (5) - staff salary create/update/clear via owner
   routes, public config has no salary key, booking detail returns service/staff/formData/
   pricing, CSV export contains header + booking + service + staff rows, and range validation
   (`from > to` → 400).
@@ -411,7 +411,7 @@ Razorpay (`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`), Cloudinary
 
 ## Known limitations (honest)
 
-- **Refund timing**: refunds use Razorpay speed `optimum` — instant where the network
+- **Refund timing**: refunds use Razorpay speed `optimum` - instant where the network
   supports it (e.g. UPI), otherwise the normal banking timeline (5–7 working days).
   The UI/docs never promise a fixed 1–2 day SLA.
 - **Live UPI Intent**: installed-UPI-app checkout requires a mobile browser and a
@@ -425,7 +425,7 @@ Razorpay (`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`), Cloudinary
   status; without the cron the row remains PROCESSING (never falsely marked done).
 - **Slot-race protection is advisory-lock based (no DB exclusion constraint)**:
   unpaid/free/recurring booking creates and payment-hold creates serialize on
-  day-scoped resource locks — `slot:{businessId}:{serviceId}:{date}` for POOLED,
+  day-scoped resource locks - `slot:{businessId}:{serviceId}:{date}` for POOLED,
   `staff:{businessId}:{staffId}:{date}` for STAFF_BASED (Batch 3/3A). This closes
   identical-slot, overlapping-start, and shared-staff races for all in-app paths.
   The lock is per business-day/resource (coarse but correct); direct out-of-band
@@ -450,7 +450,7 @@ Razorpay (`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`), Cloudinary
   app/Tech Provider assets (`META_APP_ID`/`META_APP_SECRET`) and is future work.
 - **Wallet pricing is DB-seeded, not authoritative Meta billing**: `WhatsAppPricing`
   rows for IN/INR use a **≈1.2× markup** over modeled wholesale (Meta fee; + Twilio fee when
-  on Twilio; Gupshup mirrors Meta). Owners see wallet balance only — per-message rates are
+  on Twilio; Gupshup mirrors Meta). Owners see wallet balance only - per-message rates are
   not shown in the dashboard. Adjust via
   `POST /api/internal/whatsapp-pricing` (`x-cron-secret`) or a migration. WhatsApp
   is skipped (logged `FAILED`) when no active pricing row matches a category.

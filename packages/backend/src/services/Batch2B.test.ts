@@ -12,7 +12,7 @@ import { ownerRouter } from '../routes/owner';
 import { timeService } from './TimeService';
 
 /**
- * Batch 2B — §12.9 live Razorpay notes (JSON object) + status conservatism.
+ * Batch 2B - §12.9 live Razorpay notes (JSON object) + status conservatism.
  */
 
 let business: any;

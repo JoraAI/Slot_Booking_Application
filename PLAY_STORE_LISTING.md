@@ -1,4 +1,4 @@
-# Google Play Console — Jora Reservly production listing kit
+# Google Play Console - Jora Reservly production listing kit
 
 > **Paused on Org account:** Production was rejected (Personal account + financial features). See **`PLAY_CONSOLE_ORG_HANDOFF.md`** for transfer / D-U-N-S resume steps. No new AAB required for that rejection.
 
@@ -14,7 +14,7 @@ Assets folder: `play-store-assets/` (feature graphic). Screenshots you capture o
 
 ---
 
-## 1) Main store listing — copy (paste)
+## 1) Main store listing - copy (paste)
 
 ### App name (≤ 30)
 ```
@@ -23,12 +23,12 @@ Jora Reservly
 
 ### Short description (≤ 80)
 ```
-Owner app for salon bookings, invoices, staff, and WhatsApp — by Jora AI.
+Owner app for salon bookings, invoices, staff, and WhatsApp - by Jora AI.
 ```
 
 ### Full description (≤ 4000)
 ```
-Jora Reservly is the owner dashboard for salon and service businesses — manage appointments, customers, staff, invoices, and notifications from your phone.
+Jora Reservly is the owner dashboard for salon and service businesses - manage appointments, customers, staff, invoices, and notifications from your phone.
 
 Built for owners and managers
 • View and update bookings and calendar
@@ -47,7 +47,7 @@ Use your owner email and password. Google Sign-In remains on the web dashboard.
 Need help?
 Email admin@staffingpros.tech or open Support inside the app.
 
-Powered by Jora AI — https://jora.co.in
+Powered by Jora AI - https://jora.co.in
 ```
 
 ### Category
@@ -106,15 +106,15 @@ Declare based on current app behavior. Adjust if you change features.
 | **Audio files** | Yes only if owner records a **support** voice note (emailed; not stored as media DB files) | Yes (email provider as attachment) | App functionality / Support | Yes | Effectively ephemeral for our storage |
 | **Approximate / precise location** | Yes if owner sets salon pin via device GPS | No ads | App functionality | Yes | No |
 | **Purchase history** | Yes (subscriptions / wallet via Razorpay ids & amounts) | Yes (Razorpay) | App functionality, Fraud prevention | No for paid features | No |
-| **Other financial info** | Payment status / Razorpay ids (not full card numbers) | Yes (Razorpay) | App functionality | — | No |
-| **App interactions / crash** | Basic server logs as needed to operate | No ads | Analytics / Fraud prevention | — | — |
+| **Other financial info** | Payment status / Razorpay ids (not full card numbers) | Yes (Razorpay) | App functionality | - | No |
+| **App interactions / crash** | Basic server logs as needed to operate | No ads | Analytics / Fraud prevention | - | - |
 
 **Not collected for advertising / resale.** Do **not** claim “no data collected.”
 
 ### Data shared with
-- **Razorpay** — payments / subscriptions / refunds  
-- **Email provider** — transactional + support mail  
-- **WhatsApp BSP** (e.g. Gupshup) — when owner sends WhatsApp  
+- **Razorpay** - payments / subscriptions / refunds  
+- **Email provider** - transactional + support mail  
+- **WhatsApp BSP** (e.g. Gupshup) - when owner sends WhatsApp  
 
 ### Security practices
 - Data encrypted in transit: **Yes**  
@@ -133,7 +133,7 @@ Suggested answers for this B2B owner utility:
 - May include **in-app purchases** (subscription / wallet top-up via Razorpay) → answer purchase questions honestly  
 - Not primarily for children  
 
-Expected outcome: low maturity rating (e.g. Everyone / PEGI 3 equivalent — follow the form result).
+Expected outcome: low maturity rating (e.g. Everyone / PEGI 3 equivalent - follow the form result).
 
 ---
 
@@ -167,7 +167,7 @@ Expected outcome: low maturity rating (e.g. Everyone / PEGI 3 equivalent — fol
 - [ ] Open QR page / save PNG  
 - [ ] Settings location (optional)  
 - [ ] Support ticket (optional voice)  
-- [ ] Subscription / wallet screen opens (live Razorpay — careful on real money)
+- [ ] Subscription / wallet screen opens (live Razorpay - careful on real money)
 
 ---
 

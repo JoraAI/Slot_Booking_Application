@@ -63,7 +63,7 @@ class BookingService {
     // Batch 3A: every standalone (unpaid/free/recurring) capacity-consuming
     // insert runs inside one DB transaction that acquires a day-scoped
     // resource lock (service-day for POOLED, staff-day for STAFF_BASED) and
-    // re-checks availability inside the lock before inserting — a losing
+    // re-checks availability inside the lock before inserting - a losing
     // request fails with a clean conflict and no partial write. The payment
     // verify path passes `client` without `lock` (its hold is the reserved
     // capacity and consume-once guards it).

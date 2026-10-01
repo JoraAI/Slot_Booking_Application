@@ -13,7 +13,7 @@ import { verifyOwnerPassword } from '../src/services/OwnerPassword';
 const checks: { name: string; ok: boolean; detail?: string }[] = [];
 function check(name: string, ok: boolean, detail?: string) {
   checks.push({ name, ok, detail });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`);
 }
 
 async function main() {
@@ -195,7 +195,7 @@ async function main() {
       check('staff commissionPercent writable', refreshed?.commissionPercent === 10);
       await prisma.staff.update({ where: { id: staff.id }, data: { commissionPercent: staff.commissionPercent } });
     } else {
-      check('staff commissionPercent writable', true, 'no staff — skipped');
+      check('staff commissionPercent writable', true, 'no staff - skipped');
     }
 
     // analytics shape

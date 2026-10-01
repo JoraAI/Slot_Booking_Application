@@ -261,7 +261,7 @@ ownerRouter.get('/me', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /owner/shops — list shops the current user can access.
+ * GET /owner/shops - list shops the current user can access.
  */
 ownerRouter.get('/shops', async (req: AuthRequest, res: Response) => {
   try {
@@ -281,7 +281,7 @@ ownerRouter.get('/shops', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/shops/switch { businessId } — re-issue JWT for another shop.
+ * POST /owner/shops/switch { businessId } - re-issue JWT for another shop.
  */
 ownerRouter.post('/shops/switch', async (req: AuthRequest, res: Response) => {
   try {
@@ -305,7 +305,7 @@ ownerRouter.post('/shops/switch', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/shops — owner creates an additional shop (non-primary).
+ * POST /owner/shops - owner creates an additional shop (non-primary).
  */
 ownerRouter.post('/shops', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -345,7 +345,7 @@ ownerRouter.post('/shops', requireOwnerRole, async (req: AuthRequest, res: Respo
 });
 
 /**
- * POST /owner/members/invite — owner invites a manager to selected shops.
+ * POST /owner/members/invite - owner invites a manager to selected shops.
  */
 ownerRouter.post('/members/invite', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -373,7 +373,7 @@ ownerRouter.post('/members/invite', requireOwnerRole, async (req: AuthRequest, r
 });
 
 /**
- * GET /owner/members — list managers in the org.
+ * GET /owner/members - list managers in the org.
  */
 ownerRouter.get('/members', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -391,7 +391,7 @@ ownerRouter.get('/members', requireOwnerRole, async (req: AuthRequest, res: Resp
 });
 
 /**
- * PUT /owner/members/:userId — update which shops a manager can access.
+ * PUT /owner/members/:userId - update which shops a manager can access.
  */
 ownerRouter.put('/members/:userId', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -415,7 +415,7 @@ ownerRouter.put('/members/:userId', requireOwnerRole, async (req: AuthRequest, r
 });
 
 /**
- * DELETE /owner/members/:userId — remove a manager from the org.
+ * DELETE /owner/members/:userId - remove a manager from the org.
  */
 ownerRouter.delete('/members/:userId', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -434,7 +434,7 @@ ownerRouter.delete('/members/:userId', requireOwnerRole, async (req: AuthRequest
 });
 
 /**
- * POST /owner/members/:userId/reset-password — set a new temporary password for a manager.
+ * POST /owner/members/:userId/reset-password - set a new temporary password for a manager.
  */
 ownerRouter.post('/members/:userId/reset-password', requireOwnerRole, async (req: AuthRequest, res: Response) => {
   try {
@@ -522,7 +522,7 @@ ownerRouter.put('/password', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/password/set — set a password for a Google-only account that has
+ * POST /owner/password/set - set a password for a Google-only account that has
  * none yet (no current password required). Owners who already have a password
  * must keep using PUT /owner/password (current password required).
  */
@@ -640,7 +640,7 @@ ownerRouter.get('/bookings/:id', async (req: AuthRequest, res: Response) => {
     });
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
-    // formData keys are FormField ids — resolve to human labels for the owner UI.
+    // formData keys are FormField ids - resolve to human labels for the owner UI.
     const formFields = await prisma.formField.findMany({
       where: { businessId },
       select: { id: true, label: true, fieldType: true, order: true },
@@ -706,7 +706,7 @@ ownerRouter.put('/bookings/:id', async (req: AuthRequest, res: Response) => {
     // rebuild reminders only after success.
     if (req.body.date || req.body.startTime) {
       // Full business row: sendBookingUpdate needs name, ownerWhatsapp, address,
-      // lat/lng, and SMTP fields — not just notify flags.
+      // lat/lng, and SMTP fields - not just notify flags.
       const business = await prisma.business.findUnique({
         where: { id: req.owner!.businessId },
       });
@@ -1230,7 +1230,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.bookingManagementOtpChannel = 'EMAIL';
     }
 
-    // Batch 2 — live paid checkout requires usable Razorpay credentials.
+    // Batch 2 - live paid checkout requires usable Razorpay credentials.
     // Test mode keeps working with no real keys. Refuse enabling a live
     // (non-test) paid checkout when Key ID or Key Secret are missing.
     const livePayments = updateData.enablePayments !== undefined ? updateData.enablePayments : existing.enablePayments;
@@ -1297,7 +1297,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       );
     }
 
-    // Batch 4 — salon location validation (address ≤ 500; lat/lng pair; bounds).
+    // Batch 4 - salon location validation (address ≤ 500; lat/lng pair; bounds).
     // Merge with existing so a partial save (e.g. address only) still validates the pair.
     if (typeof updateData.address === 'string') {
       updateData.address = updateData.address.trim() || null;
@@ -1320,7 +1320,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
       updateData.googleReviewUrl = review.url;
     }
 
-    // Batch 4 — notification prerequisites. Refuse ENABLING a channel when its
+    // Batch 4 - notification prerequisites. Refuse ENABLING a channel when its
     // platform prerequisites fail (same pattern as the OTP channel guards).
     // A flag already true in the DB (legacy default) is left alone so unrelated
     // settings saves are not blocked; the readiness UI warns about it.
@@ -1335,7 +1335,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
     if (enabling('notifyCustomerWhatsapp')) {
       if (!platformWa) {
-        return res.status(400).json({ error: 'WhatsApp is not available yet — Reservly platform WhatsApp is not configured. Contact support.' });
+        return res.status(400).json({ error: 'WhatsApp is not available yet - Reservly platform WhatsApp is not configured. Contact support.' });
       }
       if (!optedIn) {
         return res.status(400).json({ error: 'Enable WhatsApp in Settings (Connect) before turning on customer WhatsApp notifications.' });
@@ -1346,7 +1346,7 @@ ownerRouter.put('/config', async (req: AuthRequest, res: Response) => {
     }
     if (enabling('notifyOwnerWhatsapp')) {
       if (!platformWa) {
-        return res.status(400).json({ error: 'WhatsApp is not available yet — Reservly platform WhatsApp is not configured. Contact support.' });
+        return res.status(400).json({ error: 'WhatsApp is not available yet - Reservly platform WhatsApp is not configured. Contact support.' });
       }
       if (!optedIn) {
         return res.status(400).json({ error: 'Enable WhatsApp in Settings (Connect) before turning on owner WhatsApp notifications.' });
@@ -2166,7 +2166,7 @@ ownerRouter.get('/whatsapp/status', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/whatsapp/connect — opt in to Reservly's shared Cloud API number.
+ * POST /owner/whatsapp/connect - opt in to Reservly's shared Cloud API number.
  * Owners never supply Phone Number ID or access tokens.
  */
 ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) => {
@@ -2174,7 +2174,7 @@ ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) =>
     const businessId = req.owner!.businessId;
     if (!platformWhatsappConfigured()) {
       return res.status(503).json({
-        error: 'Reservly WhatsApp is not configured yet. Contact support — salons do not add their own WhatsApp API credentials.',
+        error: 'Reservly WhatsApp is not configured yet. Contact support - salons do not add their own WhatsApp API credentials.',
       });
     }
     const displayPhone = platformWhatsappDisplayPhone();
@@ -2206,7 +2206,7 @@ ownerRouter.post('/whatsapp/connect', async (req: AuthRequest, res: Response) =>
 });
 
 /**
- * POST /owner/whatsapp/disconnect — opt out of WhatsApp sends (platform credentials unchanged).
+ * POST /owner/whatsapp/disconnect - opt out of WhatsApp sends (platform credentials unchanged).
  */
 ownerRouter.post('/whatsapp/disconnect', async (req: AuthRequest, res: Response) => {
   try {
@@ -2228,7 +2228,7 @@ ownerRouter.post('/whatsapp/disconnect', async (req: AuthRequest, res: Response)
 });
 
 /**
- * GET /owner/whatsapp-wallet — balance + low-balance flag + usage estimate.
+ * GET /owner/whatsapp-wallet - balance + low-balance flag + usage estimate.
  */
 ownerRouter.get('/whatsapp-wallet', async (req: AuthRequest, res: Response) => {
   try {
@@ -2243,7 +2243,7 @@ ownerRouter.get('/whatsapp-wallet', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /owner/whatsapp-wallet/transactions — immutable ledger (recent).
+ * GET /owner/whatsapp-wallet/transactions - immutable ledger (recent).
  */
 ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: Response) => {
   try {
@@ -2256,7 +2256,7 @@ ownerRouter.get('/whatsapp-wallet/transactions', async (req: AuthRequest, res: R
 });
 
 /**
- * POST /owner/whatsapp-wallet/recharge — create a Razorpay order using the
+ * POST /owner/whatsapp-wallet/recharge - create a Razorpay order using the
  * platform Razorpay keys (mirror of /subscription/pay). Min recharge ₹100.
  * Order notes bind the payment to this business (anti cross-tenant credit).
  */
@@ -2306,7 +2306,7 @@ ownerRouter.post('/whatsapp-wallet/recharge', requireOwnerRole, async (req: Auth
 });
 
 /**
- * POST /owner/whatsapp-wallet/verify — HMAC signature + Razorpay order amount +
+ * POST /owner/whatsapp-wallet/verify - HMAC signature + Razorpay order amount +
  * businessId notes binding + idempotent ledger credit. Never credits from the
  * frontend "success" alone.
  */
@@ -2360,7 +2360,7 @@ ownerRouter.post('/whatsapp-wallet/verify', requireOwnerRole, async (req: AuthRe
 });
 
 /**
- * GET /owner/whatsapp/messages — billable WhatsApp usage history (recent).
+ * GET /owner/whatsapp/messages - billable WhatsApp usage history (recent).
  */
 ownerRouter.get('/whatsapp/messages', async (req: AuthRequest, res: Response) => {
   try {
@@ -2490,7 +2490,7 @@ ownerRouter.post('/subscription/verify', requireOwnerRole, async (req: AuthReque
     if (!Number.isInteger(orderPaise) || orderPaise <= 0) {
       return res.status(400).json({ error: 'Invalid order amount' });
     }
-    // Idempotent: period already paid — do not activate again (order ownership already verified).
+    // Idempotent: period already paid - do not activate again (order ownership already verified).
     if (view.dueInr <= 0) {
       return res.json({
         ok: true,
@@ -2634,7 +2634,7 @@ ownerRouter.get('/staff', ownerFeatureGuard('multi-staff'), async (req: AuthRequ
   }
 });
 
-/** GET /owner/attendance?from=&to= — day grid data for a date range. */
+/** GET /owner/attendance?from=&to= - day grid data for a date range. */
 ownerRouter.get('/attendance', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
     const from = String(req.query.from || '');
@@ -2646,7 +2646,7 @@ ownerRouter.get('/attendance', ownerFeatureGuard('multi-staff'), async (req: Aut
   }
 });
 
-/** GET /owner/attendance/summary?month=YYYY-MM — salary + performance for the month. */
+/** GET /owner/attendance/summary?month=YYYY-MM - salary + performance for the month. */
 ownerRouter.get('/attendance/summary', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
     const month = String(req.query.month || '');
@@ -2657,7 +2657,7 @@ ownerRouter.get('/attendance/summary', ownerFeatureGuard('multi-staff'), async (
   }
 });
 
-/** PUT /owner/attendance — upsert or clear one day for one staff. */
+/** PUT /owner/attendance - upsert or clear one day for one staff. */
 ownerRouter.put('/attendance', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
@@ -2677,7 +2677,7 @@ ownerRouter.put('/attendance', ownerFeatureGuard('multi-staff'), async (req: Aut
   }
 });
 
-/** POST /owner/attendance/bulk — mark many staff for one date (e.g. all present today). */
+/** POST /owner/attendance/bulk - mark many staff for one date (e.g. all present today). */
 ownerRouter.post('/attendance/bulk', ownerFeatureGuard('multi-staff'), async (req: AuthRequest, res: Response) => {
   try {
     const schema = z.object({
@@ -2847,7 +2847,7 @@ ownerRouter.delete('/staff/:id', ownerFeatureGuard('multi-staff'), async (req: A
     if (!staff) return res.status(404).json({ error: 'Staff not found' });
 
     // StaffService / StaffWorkingHour / BlockedSlot cascade via Prisma FK.
-    // Booking + PaymentAttempt SetNull. WaitlistEntry.staffId has no FK — clear orphans here.
+    // Booking + PaymentAttempt SetNull. WaitlistEntry.staffId has no FK - clear orphans here.
     await prisma.$transaction([
       prisma.waitlistEntry.updateMany({
         where: { businessId: req.owner!.businessId, staffId: staff.id },
@@ -3572,7 +3572,7 @@ const supportTicketSchema = z.object({
 });
 
 /**
- * POST /owner/support — owners/managers raise a ticket emailed to admin@staffingpros.tech
+ * POST /owner/support - owners/managers raise a ticket emailed to admin@staffingpros.tech
  */
 ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
   try {
@@ -3651,7 +3651,7 @@ ownerRouter.post('/support', async (req: AuthRequest, res: Response) => {
     const subject = String(parsed.data.subject || '').trim()
       || (voiceAttachment ? 'Voice support note' : '');
     const message = String(parsed.data.message || '').trim()
-      || (voiceAttachment ? '(Voice note attached — no written details provided.)' : '');
+      || (voiceAttachment ? '(Voice note attached - no written details provided.)' : '');
 
     await notificationService.sendSupportTicketEmail({
       to: SUPPORT_ADMIN_EMAIL,
@@ -3707,7 +3707,7 @@ ownerRouter.post('/media/upload', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/media/upload-audio — short support voice notes (webm/mp4/mpeg/ogg/wav).
+ * POST /owner/media/upload-audio - short support voice notes (webm/mp4/mpeg/ogg/wav).
  */
 ownerRouter.post('/media/upload-audio', async (req: AuthRequest, res: Response) => {
   try {
@@ -3739,7 +3739,7 @@ ownerRouter.post('/media/upload-audio', async (req: AuthRequest, res: Response) 
 });
 
 /**
- * DELETE /owner/media/:id — remove an owned media asset (e.g. discarded voice notes).
+ * DELETE /owner/media/:id - remove an owned media asset (e.g. discarded voice notes).
  */
 ownerRouter.delete('/media/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -3755,7 +3755,7 @@ ownerRouter.delete('/media/:id', async (req: AuthRequest, res: Response) => {
 // ---------- Retail products + product sales (owner-only) ----------
 
 /**
- * GET /owner/products — catalog for the authenticated business (active first).
+ * GET /owner/products - catalog for the authenticated business (active first).
  */
 ownerRouter.get('/products', async (req: AuthRequest, res: Response) => {
   try {
@@ -3770,7 +3770,7 @@ ownerRouter.get('/products', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/products — add a retail product (name + price required).
+ * POST /owner/products - add a retail product (name + price required).
  */
 ownerRouter.post('/products', async (req: AuthRequest, res: Response) => {
   try {
@@ -3805,7 +3805,7 @@ ownerRouter.post('/products', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * PUT /owner/products/:id — update product. `isActive: false` deactivates
+ * PUT /owner/products/:id - update product. `isActive: false` deactivates
  * (history is preserved); explicit null clears sku/cost.
  */
 ownerRouter.put('/products/:id', async (req: AuthRequest, res: Response) => {
@@ -3839,7 +3839,7 @@ ownerRouter.put('/products/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * DELETE /owner/products/:id — soft-deactivate (sales history stays intact).
+ * DELETE /owner/products/:id - soft-deactivate (sales history stays intact).
  */
 ownerRouter.delete('/products/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -3858,7 +3858,7 @@ ownerRouter.delete('/products/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/product-sales — mark a retail sale. unitPrice snapshots the
+ * POST /owner/product-sales - mark a retail sale. unitPrice snapshots the
  * product's current price; totalAmount = quantity × unitPrice.
  */
 ownerRouter.post('/product-sales', async (req: AuthRequest, res: Response) => {
@@ -3906,7 +3906,7 @@ ownerRouter.post('/product-sales', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /owner/product-sales?dateFrom=&dateTo= — sales list for the range
+ * GET /owner/product-sales?dateFrom=&dateTo= - sales list for the range
  * (soldAt window), newest first.
  */
 ownerRouter.get('/product-sales', async (req: AuthRequest, res: Response) => {
@@ -3966,7 +3966,7 @@ const issueBookingInvoiceSchema = z.object({
 }).strict();
 
 /**
- * GET /owner/invoices — list invoices for the authenticated business.
+ * GET /owner/invoices - list invoices for the authenticated business.
  */
 ownerRouter.get('/invoices', async (req: AuthRequest, res: Response) => {
   try {
@@ -4032,7 +4032,7 @@ ownerRouter.get('/invoices', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /owner/invoices/eligible-bookings — completed bookings without an invoice yet.
+ * GET /owner/invoices/eligible-bookings - completed bookings without an invoice yet.
  */
 ownerRouter.get('/invoices/eligible-bookings', async (req: AuthRequest, res: Response) => {
   try {
@@ -4075,7 +4075,7 @@ ownerRouter.get('/invoices/eligible-bookings', async (req: AuthRequest, res: Res
 });
 
 /**
- * POST /owner/invoices — create a walk-in / manual invoice.
+ * POST /owner/invoices - create a walk-in / manual invoice.
  */
 ownerRouter.post('/invoices', async (req: AuthRequest, res: Response) => {
   try {
@@ -4098,7 +4098,7 @@ ownerRouter.post('/invoices', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /owner/invoices/from-booking/:bookingId — issue invoice for a completed unpaid booking.
+ * POST /owner/invoices/from-booking/:bookingId - issue invoice for a completed unpaid booking.
  */
 ownerRouter.post('/invoices/from-booking/:bookingId', async (req: AuthRequest, res: Response) => {
   try {
@@ -4123,7 +4123,7 @@ ownerRouter.post('/invoices/from-booking/:bookingId', async (req: AuthRequest, r
 });
 
 /**
- * GET /owner/invoices/:id — invoice detail JSON.
+ * GET /owner/invoices/:id - invoice detail JSON.
  */
 ownerRouter.get('/invoices/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -4146,7 +4146,7 @@ ownerRouter.get('/invoices/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /owner/invoices/:id/html — printable invoice HTML.
+ * GET /owner/invoices/:id/html - printable invoice HTML.
  */
 ownerRouter.get('/invoices/:id/html', async (req: AuthRequest, res: Response) => {
   try {
@@ -4176,7 +4176,7 @@ ownerRouter.get('/invoices/:id/html', async (req: AuthRequest, res: Response) =>
 });
 
 /**
- * POST /owner/invoices/:id/send — email and/or WhatsApp the invoice to the customer.
+ * POST /owner/invoices/:id/send - email and/or WhatsApp the invoice to the customer.
  * Channels require matching contact fields on the invoice.
  */
 ownerRouter.post('/invoices/:id/send', async (req: AuthRequest, res: Response) => {

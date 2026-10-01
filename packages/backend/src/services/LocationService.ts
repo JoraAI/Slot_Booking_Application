@@ -1,8 +1,8 @@
 /**
- * Batch 4 — salon location helpers.
+ * Batch 4 - salon location helpers.
  *
  * Google Maps directions links are generated server-side using the free
- * `https://www.google.com/maps/dir/?api=1&destination=...` endpoint — no Maps
+ * `https://www.google.com/maps/dir/?api=1&destination=...` endpoint - no Maps
  * API key, no Places, no geocoding. Coordinates are preferred when both are
  * present; otherwise the (URI-encoded) address is used. A client-supplied maps
  * URL is never stored as authoritative.

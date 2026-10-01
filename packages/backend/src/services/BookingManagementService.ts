@@ -86,7 +86,7 @@ class BookingManagementService {
       paymentAmount: booking.paymentAmount ?? null,
       allowCustomerCancel: business?.allowCustomerCancel ?? true,
       canDownloadInvoice: invoiceService.bookingHasInvoiceAccess(booking),
-      // Batch 4 — salon location (address + server-generated directions link).
+      // Batch 4 - salon location (address + server-generated directions link).
       location: business ? locationInfo(business) : null,
     };
   }

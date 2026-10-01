@@ -2,8 +2,8 @@
 
 The owner dashboard is wrapped with [Capacitor](https://capacitorjs.com/) so the same React app runs as:
 
-- **Web** — full product (owner dashboard + public booking / manage pages)
-- **Android / iOS** — owner shell only (login + dashboard). Public booking stays on the web for links, embeds, and QR codes.
+- **Web** - full product (owner dashboard + public booking / manage pages)
+- **Android / iOS** - owner shell only (login + dashboard). Public booking stays on the web for links, embeds, and QR codes.
 
 Nothing in the web deploy path changes: `pnpm build` / Vercel still ship the normal SPA.
 

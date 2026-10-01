@@ -82,7 +82,7 @@ class OwnerAuthOtpService {
     } catch (err: any) {
       const msg = String(err?.message || err || '');
       console.error('Owner auth OTP email failed:', msg);
-      // Fail closed — never claim delivery succeeded. Distinguish misconfig vs provider reject.
+      // Fail closed - never claim delivery succeeded. Distinguish misconfig vs provider reject.
       if (/not configured|RESEND_API_KEY|SMTP_USER/i.test(msg)) {
         throw this.httpError(
           503,
@@ -92,7 +92,7 @@ class OwnerAuthOtpService {
       if (/ETIMEDOUT|ECONNREFUSED|Connection timeout/i.test(msg)) {
         throw this.httpError(
           503,
-          'Email send timed out. On Render free tier, Gmail SMTP is blocked — use RESEND_API_KEY instead.'
+          'Email send timed out. On Render free tier, Gmail SMTP is blocked - use RESEND_API_KEY instead.'
         );
       }
       throw this.httpError(
