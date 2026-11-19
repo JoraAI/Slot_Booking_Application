@@ -9,6 +9,7 @@ import type {
   InvoiceListItem,
   Product,
   Service,
+  ServiceCategory,
   Staff,
 } from '../../types'
 
@@ -195,8 +196,12 @@ export const InvoicesPage: React.FC = () => {
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([])
   const [eligible, setEligible] = useState<EligibleBookingForInvoice[]>([])
   const [services, setServices] = useState<Service[]>([])
+  const [categories, setCategories] = useState<ServiceCategory[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<'all' | string>('all')
+  const [productSearch, setProductSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(
     searchParams.get('dateFrom') || iso(new Date(Date.now() - 30 * 86400000)),
@@ -233,7 +238,7 @@ export const InvoicesPage: React.FC = () => {
   const load = async () => {
     setLoading(true)
     try {
-      const [inv, elig, svc, prod, staff] = await Promise.all([
+      const [inv, elig, svc, cats, prod, staff] = await Promise.all([
         api.getInvoices({
           dateFrom,
           dateTo,
@@ -244,12 +249,14 @@ export const InvoicesPage: React.FC = () => {
         }),
         api.getEligibleInvoiceBookings(),
         api.getServices().catch(() => [] as Service[]),
+        api.getCategories().catch(() => [] as ServiceCategory[]),
         api.getProducts().catch(() => [] as Product[]),
         api.getStaff().catch(() => [] as Staff[]),
       ])
       setInvoices(inv)
       setEligible(elig.bookings)
       setServices((svc || []).filter((s) => s.isActive !== false))
+      setCategories((cats || []).filter((c) => c.isActive !== false))
       setProducts((prod || []).filter((p) => p.isActive !== false))
       setStaffList((staff || []).filter((s) => s.isActive !== false))
     } catch (e: any) {
@@ -271,6 +278,55 @@ export const InvoicesPage: React.FC = () => {
   }
 
   const selectedLines = useMemo(() => Object.values(selected), [selected])
+
+  const filteredServices = useMemo(() => {
+    const query = serviceSearch.trim().toLowerCase()
+    return services.filter((service) => {
+      const matchesCategory = serviceCategoryFilter === 'all' || service.categoryId === serviceCategoryFilter
+      const matchesSearch = !query || service.name.toLowerCase().includes(query)
+      return matchesCategory && matchesSearch
+    })
+  }, [services, serviceSearch, serviceCategoryFilter])
+
+  const servicesByCategory = useMemo(() => {
+    const catOrder = new Map(categories.map((c, i) => [c.id, i]))
+    const catName = new Map(categories.map((c) => [c.id, c.name]))
+    const groups = new Map<string, { id: string; name: string; services: Service[] }>()
+    for (const service of filteredServices) {
+      const id = service.categoryId || '_uncategorized'
+      const name = catName.get(service.categoryId) || service.category?.name || 'Other'
+      if (!groups.has(id)) groups.set(id, { id, name, services: [] })
+      groups.get(id)!.services.push(service)
+    }
+    return [...groups.values()].sort((a, b) => {
+      const ai = catOrder.has(a.id) ? catOrder.get(a.id)! : 9999
+      const bi = catOrder.has(b.id) ? catOrder.get(b.id)! : 9999
+      return ai - bi || a.name.localeCompare(b.name)
+    })
+  }, [filteredServices, categories])
+
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase()
+    if (!query) return products
+    return products.filter((product) => product.name.toLowerCase().includes(query))
+  }, [products, productSearch])
+
+  const resetCatalogFilters = () => {
+    setServiceSearch('')
+    setServiceCategoryFilter('all')
+    setProductSearch('')
+  }
+
+  const openWalkInForm = () => {
+    resetCatalogFilters()
+    setShowForm(true)
+  }
+
+  const closeWalkInForm = () => {
+    setShowForm(false)
+    resetCatalogFilters()
+  }
+
   const subtotal = useMemo(
     () => selectedLines.reduce((sum, row) => sum + row.quantity * row.unitPrice, 0),
     [selectedLines],
@@ -426,7 +482,7 @@ export const InvoicesPage: React.FC = () => {
         staffId: form.staffId.trim() || null,
       })
       toast.success(`Invoice ${inv.invoiceNumber} created`)
-      setShowForm(false)
+      closeWalkInForm()
       setSelected({})
       setForm({ ...emptyForm })
       load()
@@ -486,7 +542,7 @@ export const InvoicesPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Invoices</h1>
           <p className="text-sm text-gray-500 mt-1">Issue invoices for walk-ins or completed bookings without online payment.</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">
+        <button onClick={openWalkInForm} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90">
           + New walk-in invoice
         </button>
       </div>
@@ -653,7 +709,7 @@ export const InvoicesPage: React.FC = () => {
           <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Walk-in invoice</h2>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={closeWalkInForm} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2">
@@ -727,44 +783,125 @@ export const InvoicesPage: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Services</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Services</h3>
+                {services.length > 0 && (
+                  <span className="text-[11px] text-gray-400">{filteredServices.length} of {services.length}</span>
+                )}
+              </div>
               {services.length === 0 ? (
                 <p className="text-xs text-gray-500">No active services. Add services under Services, or use a custom line.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
-                  {services.map((s) => {
-                    const key = `service:${s.id}`
-                    const checked = Boolean(selected[key])
-                    return (
-                      <label key={s.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <input type="checkbox" checked={checked} onChange={() => toggleCatalogItem('service', s)} className="rounded border-gray-300" />
-                        <span className="flex-1">{s.name}</span>
-                        <span className="text-gray-500">₹{Number(s.price).toLocaleString('en-IN')}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Category</label>
+                      <select
+                        value={serviceCategoryFilter}
+                        onChange={(e) => setServiceCategoryFilter(e.target.value)}
+                        className={inputCls}
+                        aria-label="Filter services by category"
+                      >
+                        <option value="all">All categories</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Search</label>
+                      <input
+                        type="search"
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        placeholder="Type to find a service"
+                        className={inputCls}
+                        aria-label="Search services"
+                      />
+                    </div>
+                  </div>
+                  {filteredServices.length === 0 ? (
+                    <p className="text-xs text-gray-500">No services match</p>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                      {(serviceCategoryFilter === 'all' ? servicesByCategory : [{
+                        id: serviceCategoryFilter,
+                        name: categories.find((c) => c.id === serviceCategoryFilter)?.name || '',
+                        services: filteredServices,
+                      }]).map((group) => (
+                        <div key={group.id}>
+                          {serviceCategoryFilter === 'all' && group.name && (
+                            <div className="sticky top-0 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-800">
+                              {group.name}
+                            </div>
+                          )}
+                          {group.services.map((s) => {
+                            const key = `service:${s.id}`
+                            const checked = Boolean(selected[key])
+                            return (
+                              <label
+                                key={s.id}
+                                className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleCatalogItem('service', s)}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="flex-1">{s.name}</span>
+                                <span className="text-gray-500">₹{Number(s.price).toLocaleString('en-IN')}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Products</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Products</h3>
+                {products.length > 0 && (
+                  <span className="text-[11px] text-gray-400">{filteredProducts.length} of {products.length}</span>
+                )}
+              </div>
               {products.length === 0 ? (
                 <p className="text-xs text-gray-500">No active products. Add products under Products, or use a custom line.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
-                  {products.map((p) => {
-                    const key = `product:${p.id}`
-                    const checked = Boolean(selected[key])
-                    return (
-                      <label key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <input type="checkbox" checked={checked} onChange={() => toggleCatalogItem('product', p)} className="rounded border-gray-300" />
-                        <span className="flex-1">{p.name}</span>
-                        <span className="text-gray-500">₹{Number(p.price).toLocaleString('en-IN')}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Search</label>
+                    <input
+                      type="search"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Type to find a product"
+                      className={inputCls}
+                      aria-label="Search products"
+                    />
+                  </div>
+                  {filteredProducts.length === 0 ? (
+                    <p className="text-xs text-gray-500">No products match</p>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                      {filteredProducts.map((p) => {
+                        const key = `product:${p.id}`
+                        const checked = Boolean(selected[key])
+                        return (
+                          <label key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <input type="checkbox" checked={checked} onChange={() => toggleCatalogItem('product', p)} className="rounded border-gray-300" />
+                            <span className="flex-1">{p.name}</span>
+                            <span className="text-gray-500">₹{Number(p.price).toLocaleString('en-IN')}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -914,7 +1051,7 @@ export const InvoicesPage: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">Cancel</button>
+              <button onClick={closeWalkInForm} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">Cancel</button>
               <button onClick={createWalkIn} disabled={saving} className="flex-1 py-2.5 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
                 {saving ? 'Saving…' : 'Create invoice'}
               </button>
