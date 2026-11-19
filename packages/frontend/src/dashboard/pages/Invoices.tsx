@@ -201,6 +201,7 @@ export const InvoicesPage: React.FC = () => {
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [serviceSearch, setServiceSearch] = useState('')
   const [serviceCategoryFilter, setServiceCategoryFilter] = useState<'all' | string>('all')
+  const [productSearch, setProductSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState(
     searchParams.get('dateFrom') || iso(new Date(Date.now() - 30 * 86400000)),
@@ -304,19 +305,26 @@ export const InvoicesPage: React.FC = () => {
     })
   }, [filteredServices, categories])
 
-  const resetServiceFilters = () => {
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase()
+    if (!query) return products
+    return products.filter((product) => product.name.toLowerCase().includes(query))
+  }, [products, productSearch])
+
+  const resetCatalogFilters = () => {
     setServiceSearch('')
     setServiceCategoryFilter('all')
+    setProductSearch('')
   }
 
   const openWalkInForm = () => {
-    resetServiceFilters()
+    resetCatalogFilters()
     setShowForm(true)
   }
 
   const closeWalkInForm = () => {
     setShowForm(false)
-    resetServiceFilters()
+    resetCatalogFilters()
   }
 
   const subtotal = useMemo(
@@ -775,31 +783,42 @@ export const InvoicesPage: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Services</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Services</h3>
+                {services.length > 0 && (
+                  <span className="text-[11px] text-gray-400">{filteredServices.length} of {services.length}</span>
+                )}
+              </div>
               {services.length === 0 ? (
                 <p className="text-xs text-gray-500">No active services. Add services under Services, or use a custom line.</p>
               ) : (
                 <>
                   <div className="grid sm:grid-cols-2 gap-2">
-                    <select
-                      value={serviceCategoryFilter}
-                      onChange={(e) => setServiceCategoryFilter(e.target.value)}
-                      className={inputCls}
-                      aria-label="Filter services by category"
-                    >
-                      <option value="all">All categories</option>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="search"
-                      value={serviceSearch}
-                      onChange={(e) => setServiceSearch(e.target.value)}
-                      placeholder="Search services…"
-                      className={inputCls}
-                      aria-label="Search services"
-                    />
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Category</label>
+                      <select
+                        value={serviceCategoryFilter}
+                        onChange={(e) => setServiceCategoryFilter(e.target.value)}
+                        className={inputCls}
+                        aria-label="Filter services by category"
+                      >
+                        <option value="all">All categories</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Search</label>
+                      <input
+                        type="search"
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        placeholder="Type to find a service"
+                        className={inputCls}
+                        aria-label="Search services"
+                      />
+                    </div>
                   </div>
                   {filteredServices.length === 0 ? (
                     <p className="text-xs text-gray-500">No services match</p>
@@ -844,23 +863,45 @@ export const InvoicesPage: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Products</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Products</h3>
+                {products.length > 0 && (
+                  <span className="text-[11px] text-gray-400">{filteredProducts.length} of {products.length}</span>
+                )}
+              </div>
               {products.length === 0 ? (
                 <p className="text-xs text-gray-500">No active products. Add products under Products, or use a custom line.</p>
               ) : (
-                <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
-                  {products.map((p) => {
-                    const key = `product:${p.id}`
-                    const checked = Boolean(selected[key])
-                    return (
-                      <label key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-                        <input type="checkbox" checked={checked} onChange={() => toggleCatalogItem('product', p)} className="rounded border-gray-300" />
-                        <span className="flex-1">{p.name}</span>
-                        <span className="text-gray-500">₹{Number(p.price).toLocaleString('en-IN')}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Search</label>
+                    <input
+                      type="search"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Type to find a product"
+                      className={inputCls}
+                      aria-label="Search products"
+                    />
+                  </div>
+                  {filteredProducts.length === 0 ? (
+                    <p className="text-xs text-gray-500">No products match</p>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                      {filteredProducts.map((p) => {
+                        const key = `product:${p.id}`
+                        const checked = Boolean(selected[key])
+                        return (
+                          <label key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <input type="checkbox" checked={checked} onChange={() => toggleCatalogItem('product', p)} className="rounded border-gray-300" />
+                            <span className="flex-1">{p.name}</span>
+                            <span className="text-gray-500">₹{Number(p.price).toLocaleString('en-IN')}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
