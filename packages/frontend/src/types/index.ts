@@ -651,6 +651,16 @@ export interface InvoiceListItem {
   } | null
 }
 
+export interface InvoiceDetail extends InvoiceListItem {
+  lineItems: InvoiceLineItem[]
+  notes?: string | null
+  paymentRef?: string | null
+  cgstAmount?: number
+  sgstAmount?: number
+  igstAmount?: number
+  updatedAt?: string
+}
+
 export interface EligibleBookingForInvoice {
   id: string
   customerName: string

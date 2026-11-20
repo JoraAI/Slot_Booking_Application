@@ -4123,12 +4123,13 @@ ownerRouter.post('/invoices/from-booking/:bookingId', async (req: AuthRequest, r
 });
 
 /**
- * GET /owner/invoices/:id - invoice detail JSON.
+ * GET /owner/invoices/:id - invoice detail JSON (includes lineItems for edit).
  */
 ownerRouter.get('/invoices/:id', async (req: AuthRequest, res: Response) => {
   try {
+    const businessId = req.owner!.businessId;
     const invoice = await prisma.invoice.findFirst({
-      where: { id: req.params.id, businessId: req.owner!.businessId },
+      where: { id: req.params.id, businessId },
       include: {
         booking: {
           select: {
@@ -4139,9 +4140,41 @@ ownerRouter.get('/invoices/:id', async (req: AuthRequest, res: Response) => {
       },
     });
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-    res.json(invoice);
+    let staffName: string | null = null;
+    if (invoice.staffId) {
+      const staff = await prisma.staff.findFirst({
+        where: { id: invoice.staffId, businessId },
+        select: { name: true },
+      });
+      staffName = staff?.name || null;
+    }
+    res.json(invoiceService.toDetail({ ...invoice, staffName }));
   } catch (error: any) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /owner/invoices/:id - update an existing invoice in place (same number).
+ * Recalculates totals; used for extras / price corrections after issue.
+ */
+ownerRouter.put('/invoices/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = createWalkInInvoiceSchema.parse(req.body);
+    const lineItems = parsed.lineItems.map((row) => ({
+      ...row,
+      amount: row.amount ?? row.quantity * row.unitPrice,
+    }));
+    const invoice = await invoiceService.updateInvoice(req.owner!.businessId, req.params.id, {
+      ...parsed,
+      lineItems,
+    });
+    res.json(invoiceService.toListItem(invoice));
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors[0]?.message || 'Invalid request' });
+    }
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
