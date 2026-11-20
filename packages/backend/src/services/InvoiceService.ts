@@ -216,6 +216,136 @@ class InvoiceService {
     };
   }
 
+  /** Full invoice payload for edit / detail screens. */
+  toDetail(invoice: any) {
+    return {
+      ...this.toListItem(invoice),
+      lineItems: (invoice.lineItems as InvoiceLineItem[]) || [],
+      notes: invoice.notes ?? null,
+      paymentRef: invoice.paymentRef ?? null,
+      cgstAmount: invoice.cgstAmount ?? 0,
+      sgstAmount: invoice.sgstAmount ?? 0,
+      igstAmount: invoice.igstAmount ?? 0,
+      updatedAt: invoice.updatedAt,
+    };
+  }
+
+  private computeInvoiceMoney(
+    business: { defaultGstPercent?: number | null },
+    lineItems: InvoiceLineItem[],
+    opts: {
+      source: InvoiceSource;
+      taxAmount?: number;
+      applyGst?: boolean;
+      gstPercent?: number | null;
+      interState?: boolean;
+      discountType?: 'PERCENTAGE' | 'FLAT' | null;
+      discountValue?: number | null;
+    }
+  ) {
+    const subtotal = this.round2(this.sumLineItems(lineItems));
+    const discount = this.computeDiscount(subtotal, {
+      discountType: opts.discountType,
+      discountValue: opts.discountValue,
+    });
+    const taxable = this.round2(subtotal - discount.discountAmount);
+
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+    let igstAmount = 0;
+    let taxAmount = this.round2(opts.taxAmount ?? 0);
+
+    const shouldAutoGst =
+      opts.applyGst === true ||
+      (opts.applyGst !== false &&
+        (opts.source === 'walk_in' || opts.source === 'manual') &&
+        (opts.gstPercent != null || (Number(business.defaultGstPercent) || 0) > 0));
+    if (shouldAutoGst && (opts.taxAmount == null || opts.applyGst === true)) {
+      const rate = opts.gstPercent != null ? Number(opts.gstPercent) : Number(business.defaultGstPercent || 0);
+      const gst = this.computeGst(taxable, rate, { interState: !!opts.interState });
+      cgstAmount = gst.cgstAmount;
+      sgstAmount = gst.sgstAmount;
+      igstAmount = gst.igstAmount;
+      taxAmount = gst.taxAmount;
+    } else if (taxAmount > 0 && !cgstAmount && !sgstAmount && !igstAmount) {
+      const half = this.round2(taxAmount / 2);
+      cgstAmount = half;
+      sgstAmount = this.round2(taxAmount - half);
+    }
+
+    const total = this.round2(taxable + taxAmount);
+    if (total <= 0) {
+      const err: any = new Error(
+        discount.discountAmount > 0
+          ? 'Invoice total must be greater than zero after discount'
+          : 'Invoice total must be greater than zero'
+      );
+      err.status = 400;
+      throw err;
+    }
+
+    return { subtotal, discount, taxable, cgstAmount, sgstAmount, igstAmount, taxAmount, total };
+  }
+
+  private async applyProductSalesForInvoice(
+    tx: any,
+    businessId: string,
+    invoiceId: string,
+    invoiceNumber: string,
+    lineItems: InvoiceLineItem[],
+    staffId: string | null
+  ) {
+    for (const line of lineItems) {
+      if (!line.productId) continue;
+      const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+      const unitPrice = this.round2(Number(line.unitPrice) || 0);
+      await tx.productSale.create({
+        data: {
+          businessId,
+          productId: line.productId,
+          quantity: qty,
+          unitPrice,
+          totalAmount: this.round2(qty * unitPrice),
+          invoiceId,
+          staffId,
+          note: `Invoice ${invoiceNumber}`,
+        },
+      });
+      const product = await tx.product.findFirst({
+        where: { id: line.productId, businessId },
+        select: { id: true, stockQty: true },
+      });
+      if (product && product.stockQty != null) {
+        await tx.product.update({
+          where: { id: product.id },
+          data: { stockQty: Math.max(0, product.stockQty - qty) },
+        });
+      }
+    }
+  }
+
+  private async reverseProductSalesForInvoice(tx: any, businessId: string, invoiceId: string) {
+    const sales = await tx.productSale.findMany({
+      where: { businessId, invoiceId },
+      select: { id: true, productId: true, quantity: true },
+    });
+    for (const sale of sales) {
+      const product = await tx.product.findFirst({
+        where: { id: sale.productId, businessId },
+        select: { id: true, stockQty: true },
+      });
+      if (product && product.stockQty != null) {
+        await tx.product.update({
+          where: { id: product.id },
+          data: { stockQty: product.stockQty + sale.quantity },
+        });
+      }
+    }
+    if (sales.length) {
+      await tx.productSale.deleteMany({ where: { businessId, invoiceId } });
+    }
+  }
+
   async createInvoiceRecord(
     businessId: string,
     data: {
@@ -248,47 +378,15 @@ class InvoiceService {
       throw err;
     }
 
-    const subtotal = this.round2(this.sumLineItems(data.lineItems));
-    const discount = this.computeDiscount(subtotal, {
+    const money = this.computeInvoiceMoney(business, data.lineItems, {
+      source: data.source,
+      taxAmount: data.taxAmount,
+      applyGst: data.applyGst,
+      gstPercent: data.gstPercent,
+      interState: data.interState,
       discountType: data.discountType,
       discountValue: data.discountValue,
     });
-    const taxable = this.round2(subtotal - discount.discountAmount);
-
-    let cgstAmount = 0;
-    let sgstAmount = 0;
-    let igstAmount = 0;
-    let taxAmount = this.round2(data.taxAmount ?? 0);
-
-    const shouldAutoGst =
-      data.applyGst === true ||
-      (data.applyGst !== false &&
-        (data.source === 'walk_in' || data.source === 'manual') &&
-        (data.gstPercent != null || (Number(business.defaultGstPercent) || 0) > 0));
-    if (shouldAutoGst && (data.taxAmount == null || data.applyGst === true)) {
-      const rate = data.gstPercent != null ? Number(data.gstPercent) : Number(business.defaultGstPercent || 0);
-      const gst = this.computeGst(taxable, rate, { interState: !!data.interState });
-      cgstAmount = gst.cgstAmount;
-      sgstAmount = gst.sgstAmount;
-      igstAmount = gst.igstAmount;
-      taxAmount = gst.taxAmount;
-    } else if (taxAmount > 0 && !cgstAmount && !sgstAmount && !igstAmount) {
-      // Legacy lump tax → treat as CGST+SGST split for display.
-      const half = this.round2(taxAmount / 2);
-      cgstAmount = half;
-      sgstAmount = this.round2(taxAmount - half);
-    }
-
-    const total = this.round2(taxable + taxAmount);
-    if (total <= 0) {
-      const err: any = new Error(
-        discount.discountAmount > 0
-          ? 'Invoice total must be greater than zero after discount'
-          : 'Invoice total must be greater than zero'
-      );
-      err.status = 400;
-      throw err;
-    }
     const invoiceNumber = await this.nextInvoiceNumber(businessId);
 
     const invoice = await prisma.$transaction(async (tx) => {
@@ -301,15 +399,15 @@ class InvoiceService {
           customerPhone: data.customerPhone ?? null,
           customerEmail: data.customerEmail ?? null,
           lineItems: data.lineItems as any,
-          subtotal,
-          taxAmount,
-          cgstAmount,
-          sgstAmount,
-          igstAmount,
-          discountType: discount.discountType,
-          discountValue: discount.discountValue,
-          discountAmount: discount.discountAmount,
-          total,
+          subtotal: money.subtotal,
+          taxAmount: money.taxAmount,
+          cgstAmount: money.cgstAmount,
+          sgstAmount: money.sgstAmount,
+          igstAmount: money.igstAmount,
+          discountType: money.discount.discountType,
+          discountValue: money.discount.discountValue,
+          discountAmount: money.discount.discountAmount,
+          total: money.total,
           currency: data.currency || 'INR',
           notes: data.notes ?? null,
           paymentMethod: data.paymentMethod ?? null,
@@ -329,33 +427,14 @@ class InvoiceService {
       });
 
       if (data.syncProductSales) {
-        for (const line of data.lineItems) {
-          if (!line.productId) continue;
-          const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
-          const unitPrice = this.round2(Number(line.unitPrice) || 0);
-          await tx.productSale.create({
-            data: {
-              businessId,
-              productId: line.productId,
-              quantity: qty,
-              unitPrice,
-              totalAmount: this.round2(qty * unitPrice),
-              invoiceId: created.id,
-              staffId: data.staffId ?? null,
-              note: `Invoice ${created.invoiceNumber}`,
-            },
-          });
-          const product = await tx.product.findFirst({
-            where: { id: line.productId, businessId },
-            select: { id: true, stockQty: true },
-          });
-          if (product && product.stockQty != null) {
-            await tx.product.update({
-              where: { id: product.id },
-              data: { stockQty: Math.max(0, product.stockQty - qty) },
-            });
-          }
-        }
+        await this.applyProductSalesForInvoice(
+          tx,
+          businessId,
+          created.id,
+          created.invoiceNumber,
+          data.lineItems,
+          data.staffId ?? null
+        );
       }
 
       // Upsert customer phonebook from walk-in / manual invoices
@@ -474,6 +553,20 @@ class InvoiceService {
     return invoice;
   }
 
+  private async resolveStaffId(businessId: string, staffId?: string | null): Promise<string | null> {
+    if (!staffId) return null;
+    const staff = await prisma.staff.findFirst({
+      where: { id: staffId, businessId, isActive: true },
+      select: { id: true },
+    });
+    if (!staff) {
+      const err: any = new Error('Selected staff is invalid or inactive');
+      err.status = 400;
+      throw err;
+    }
+    return staff.id;
+  }
+
   async createWalkInInvoice(
     businessId: string,
     payload: {
@@ -502,19 +595,7 @@ class InvoiceService {
       err.status = 400;
       throw err;
     }
-    let staffId: string | null = payload.staffId ?? null;
-    if (staffId) {
-      const staff = await prisma.staff.findFirst({
-        where: { id: staffId, businessId, isActive: true },
-        select: { id: true },
-      });
-      if (!staff) {
-        const err: any = new Error('Selected staff is invalid or inactive');
-        err.status = 400;
-        throw err;
-      }
-      staffId = staff.id;
-    }
+    const staffId = await this.resolveStaffId(businessId, payload.staffId);
     return this.createInvoiceRecord(businessId, {
       bookingId: null,
       customerName: payload.customerName.trim(),
@@ -533,6 +614,127 @@ class InvoiceService {
       staffId,
       syncProductSales: true,
     });
+  }
+
+  /**
+   * Update an existing invoice in place (same invoice number / issuedAt).
+   * Recalculates money fields and resyncs ProductSale + stock for product lines.
+   */
+  async updateInvoice(
+    businessId: string,
+    invoiceId: string,
+    payload: {
+      customerName: string;
+      customerPhone?: string | null;
+      customerEmail?: string | null;
+      lineItems: InvoiceLineItem[];
+      taxAmount?: number;
+      applyGst?: boolean;
+      gstPercent?: number | null;
+      notes?: string | null;
+      paymentMethod?: string | null;
+      paymentRef?: string | null;
+      discountType?: 'PERCENTAGE' | 'FLAT' | null;
+      discountValue?: number | null;
+      staffId?: string | null;
+    }
+  ) {
+    if (!payload.customerName?.trim()) {
+      const err: any = new Error('Customer name is required');
+      err.status = 400;
+      throw err;
+    }
+    if (!payload.lineItems?.length) {
+      const err: any = new Error('At least one line item is required');
+      err.status = 400;
+      throw err;
+    }
+
+    const existing = await prisma.invoice.findFirst({
+      where: { id: invoiceId, businessId },
+    });
+    if (!existing) {
+      const err: any = new Error('Invoice not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const business = await prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) {
+      const err: any = new Error('Business not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const staffId = await this.resolveStaffId(businessId, payload.staffId);
+    const source = (existing.source as InvoiceSource) || 'manual';
+    const money = this.computeInvoiceMoney(business, payload.lineItems, {
+      source,
+      taxAmount: payload.taxAmount,
+      applyGst: payload.applyGst,
+      gstPercent: payload.gstPercent,
+      discountType: payload.discountType,
+      discountValue: payload.discountValue,
+    });
+
+    const invoice = await prisma.$transaction(async (tx) => {
+      await this.reverseProductSalesForInvoice(tx, businessId, existing.id);
+
+      const updated = await tx.invoice.update({
+        where: { id: existing.id },
+        data: {
+          customerName: payload.customerName.trim(),
+          customerPhone: payload.customerPhone ?? null,
+          customerEmail: payload.customerEmail ?? null,
+          lineItems: payload.lineItems as any,
+          subtotal: money.subtotal,
+          taxAmount: money.taxAmount,
+          cgstAmount: money.cgstAmount,
+          sgstAmount: money.sgstAmount,
+          igstAmount: money.igstAmount,
+          discountType: money.discount.discountType,
+          discountValue: money.discount.discountValue,
+          discountAmount: money.discount.discountAmount,
+          total: money.total,
+          notes: payload.notes ?? null,
+          paymentMethod: payload.paymentMethod ?? existing.paymentMethod,
+          paymentRef: payload.paymentRef !== undefined ? payload.paymentRef : existing.paymentRef,
+          staffId,
+        },
+        include: {
+          booking: {
+            select: {
+              id: true, date: true, startTime: true, endTime: true, status: true,
+              serviceNameSnapshot: true, paymentStatus: true,
+            },
+          },
+        },
+      });
+
+      // Resync product sales for walk-in / manual (and any invoice that already had product lines).
+      if (source === 'walk_in' || source === 'manual' || payload.lineItems.some((l) => l.productId)) {
+        await this.applyProductSalesForInvoice(
+          tx,
+          businessId,
+          updated.id,
+          updated.invoiceNumber,
+          payload.lineItems,
+          staffId
+        );
+      }
+
+      if (source === 'walk_in' || source === 'manual') {
+        await customerService.upsertContact(businessId, {
+          name: payload.customerName.trim(),
+          phone: payload.customerPhone,
+          email: payload.customerEmail,
+        }, { db: tx }).catch(() => {});
+      }
+
+      return updated;
+    });
+
+    return invoice;
   }
 
   /** Generate a compact invoice PDF for email attachment + WhatsApp document header. */

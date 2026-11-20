@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import type {
   CustomerContact,
   EligibleBookingForInvoice,
+  InvoiceDetail,
   InvoiceLineItem,
   InvoiceListItem,
   Product,
@@ -213,6 +214,8 @@ export const InvoicesPage: React.FC = () => {
   const [staffFilter, setStaffFilter] = useState(searchParams.get('staffId') || '')
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('paymentMethod') || '')
   const [showForm, setShowForm] = useState(false)
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
+  const [editingInvoiceNumber, setEditingInvoiceNumber] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -311,6 +314,20 @@ export const InvoicesPage: React.FC = () => {
     return products.filter((product) => product.name.toLowerCase().includes(query))
   }, [products, productSearch])
 
+  const emptyForm = {
+    customerName: '',
+    customerPhone: '',
+    customerEmail: '',
+    paymentMethod: 'cash' as const,
+    notes: '',
+    customDescription: '',
+    customAmount: '',
+    discountEnabled: false,
+    discountType: 'PERCENTAGE' as const,
+    discountValue: '',
+    staffId: '',
+  }
+
   const resetCatalogFilters = () => {
     setServiceSearch('')
     setServiceCategoryFilter('all')
@@ -319,12 +336,91 @@ export const InvoicesPage: React.FC = () => {
 
   const openWalkInForm = () => {
     resetCatalogFilters()
+    setEditingInvoiceId(null)
+    setEditingInvoiceNumber(null)
+    setSelected({})
+    setForm({ ...emptyForm })
     setShowForm(true)
   }
 
   const closeWalkInForm = () => {
     setShowForm(false)
+    setEditingInvoiceId(null)
+    setEditingInvoiceNumber(null)
     resetCatalogFilters()
+  }
+
+  const openEditInvoice = async (inv: InvoiceListItem) => {
+    setSaving(true)
+    try {
+      const detail: InvoiceDetail = await api.getInvoice(inv.id)
+      const nextSelected: Record<string, SelectedLine> = {}
+      const lines = detail.lineItems || []
+      lines.forEach((line, idx) => {
+        const qty = Math.max(1, Number(line.quantity) || 1)
+        const unitPrice = Number(line.unitPrice) || 0
+        if (line.serviceId) {
+          const key = `service:${line.serviceId}`
+          nextSelected[key] = {
+            key,
+            kind: 'service',
+            id: line.serviceId,
+            description: line.description,
+            quantity: qty,
+            unitPrice,
+          }
+          return
+        }
+        if (line.productId) {
+          const key = `product:${line.productId}`
+          nextSelected[key] = {
+            key,
+            kind: 'product',
+            id: line.productId,
+            description: line.description,
+            quantity: qty,
+            unitPrice,
+          }
+          return
+        }
+        const key = `custom:${idx}:${line.description}`
+        nextSelected[key] = {
+          key,
+          kind: 'custom',
+          description: line.description,
+          quantity: qty,
+          unitPrice,
+        }
+      })
+      const pay = String(detail.paymentMethod || 'cash')
+      const paymentMethod = (['cash', 'upi', 'card', 'other'].includes(pay) ? pay : 'cash') as
+        | 'cash'
+        | 'upi'
+        | 'card'
+        | 'other'
+      setForm({
+        customerName: detail.customerName || '',
+        customerPhone: detail.customerPhone || '',
+        customerEmail: detail.customerEmail || '',
+        paymentMethod,
+        notes: detail.notes || '',
+        customDescription: '',
+        customAmount: '',
+        discountEnabled: Boolean(detail.discountType && Number(detail.discountValue) > 0),
+        discountType: detail.discountType === 'FLAT' ? 'FLAT' : 'PERCENTAGE',
+        discountValue: detail.discountValue != null ? String(detail.discountValue) : '',
+        staffId: detail.staffId || '',
+      })
+      setSelected(nextSelected)
+      setEditingInvoiceId(detail.id)
+      setEditingInvoiceNumber(detail.invoiceNumber)
+      resetCatalogFilters()
+      setShowForm(true)
+    } catch (e: any) {
+      toast.error(e.message || 'Could not load invoice')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const subtotal = useMemo(
@@ -342,19 +438,6 @@ export const InvoicesPage: React.FC = () => {
   }, [form.discountEnabled, form.discountType, form.discountValue, subtotal])
   const total = Math.max(0, Math.round((subtotal - discountPreview) * 100) / 100)
 
-  const emptyForm = {
-    customerName: '',
-    customerPhone: '',
-    customerEmail: '',
-    paymentMethod: 'cash' as const,
-    notes: '',
-    customDescription: '',
-    customAmount: '',
-    discountEnabled: false,
-    discountType: 'PERCENTAGE' as const,
-    discountValue: '',
-    staffId: '',
-  }
   const toggleCatalogItem = (kind: 'service' | 'product', item: { id: string; name: string; price: number }) => {
     const key = `${kind}:${item.id}`
     setSelected((prev) => {
@@ -436,7 +519,7 @@ export const InvoicesPage: React.FC = () => {
     }
   }
 
-  const createWalkIn = async () => {
+  const saveInvoice = async () => {
     if (!form.customerName.trim()) {
       toast.error('Customer name is required')
       return
@@ -468,26 +551,32 @@ export const InvoicesPage: React.FC = () => {
         return
       }
     }
+    const payload = {
+      customerName: form.customerName.trim(),
+      customerPhone: form.customerPhone.trim() || null,
+      customerEmail: form.customerEmail.trim() || null,
+      lineItems,
+      paymentMethod: form.paymentMethod,
+      notes: form.notes.trim() || null,
+      discountType: form.discountEnabled ? form.discountType : null,
+      discountValue: form.discountEnabled ? Number(form.discountValue) : null,
+      staffId: form.staffId.trim() || null,
+    }
     setSaving(true)
     try {
-      const inv = await api.createWalkInInvoice({
-        customerName: form.customerName.trim(),
-        customerPhone: form.customerPhone.trim() || null,
-        customerEmail: form.customerEmail.trim() || null,
-        lineItems,
-        paymentMethod: form.paymentMethod,
-        notes: form.notes.trim() || null,
-        discountType: form.discountEnabled ? form.discountType : null,
-        discountValue: form.discountEnabled ? Number(form.discountValue) : null,
-        staffId: form.staffId.trim() || null,
-      })
-      toast.success(`Invoice ${inv.invoiceNumber} created`)
+      if (editingInvoiceId) {
+        const inv = await api.updateInvoice(editingInvoiceId, payload)
+        toast.success(`Invoice ${inv.invoiceNumber} updated`)
+      } else {
+        const inv = await api.createWalkInInvoice(payload)
+        toast.success(`Invoice ${inv.invoiceNumber} created`)
+      }
       closeWalkInForm()
       setSelected({})
       setForm({ ...emptyForm })
       load()
     } catch (e: any) {
-      toast.error(e.message || 'Could not create invoice')
+      toast.error(e.message || (editingInvoiceId ? 'Could not update invoice' : 'Could not create invoice'))
     } finally {
       setSaving(false)
     }
@@ -501,6 +590,13 @@ export const InvoicesPage: React.FC = () => {
     const busy = sendingId === inv.id
     return (
       <div className="flex flex-wrap gap-2 justify-end">
+        <button
+          onClick={() => openEditInvoice(inv)}
+          disabled={saving}
+          className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+        >
+          Edit
+        </button>
         <button onClick={() => openInvoice(inv.id)} className="text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
           View / Download
         </button>
@@ -708,9 +804,18 @@ export const InvoicesPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Walk-in invoice</h2>
+              <h2 className="text-lg font-semibold">
+                {editingInvoiceId
+                  ? `Edit invoice ${editingInvoiceNumber || ''}`.trim()
+                  : 'Walk-in invoice'}
+              </h2>
               <button onClick={closeWalkInForm} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
+            {editingInvoiceId && (
+              <p className="text-xs text-gray-500 -mt-2">
+                Change line prices to charge extras, add services/products, then save. Invoice number stays the same.
+              </p>
+            )}
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium mb-1">Customer name *</label>
@@ -932,8 +1037,8 @@ export const InvoicesPage: React.FC = () => {
               <div className="bg-gray-50 dark:bg-gray-800/60 rounded-lg p-3 space-y-2 text-sm">
                 <h3 className="font-semibold text-xs uppercase text-gray-500">Selected lines</h3>
                 {selectedLines.map((row) => (
-                  <div key={row.key} className="flex items-center gap-2">
-                    <span className="flex-1 truncate">{row.description}</span>
+                  <div key={row.key} className="flex flex-wrap items-center gap-2">
+                    <span className="flex-1 min-w-[8rem] truncate">{row.description}</span>
                     <input
                       type="number"
                       min={1}
@@ -942,9 +1047,25 @@ export const InvoicesPage: React.FC = () => {
                         const quantity = Math.max(1, Number(e.target.value) || 1)
                         setSelected((prev) => ({ ...prev, [row.key]: { ...row, quantity } }))
                       }}
-                      className="w-16 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-sm bg-white dark:bg-gray-900"
+                      className="w-14 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-sm bg-white dark:bg-gray-900"
+                      aria-label="Quantity"
                     />
-                    <span className="w-20 text-right">₹{(row.quantity * row.unitPrice).toLocaleString('en-IN')}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400">₹</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={row.unitPrice}
+                        onChange={(e) => {
+                          const unitPrice = Math.max(0, Number(e.target.value) || 0)
+                          setSelected((prev) => ({ ...prev, [row.key]: { ...row, unitPrice } }))
+                        }}
+                        className="w-20 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-sm bg-white dark:bg-gray-900"
+                        aria-label="Unit price"
+                      />
+                    </div>
+                    <span className="w-20 text-right text-gray-600">₹{(row.quantity * row.unitPrice).toLocaleString('en-IN')}</span>
                     <button
                       type="button"
                       onClick={() => setSelected((prev) => {
@@ -1052,8 +1173,12 @@ export const InvoicesPage: React.FC = () => {
             </div>
             <div className="flex gap-2">
               <button onClick={closeWalkInForm} className="flex-1 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm">Cancel</button>
-              <button onClick={createWalkIn} disabled={saving} className="flex-1 py-2.5 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                {saving ? 'Saving…' : 'Create invoice'}
+              <button onClick={saveInvoice} disabled={saving} className="flex-1 py-2.5 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                {saving
+                  ? 'Saving…'
+                  : editingInvoiceId
+                    ? 'Save changes'
+                    : 'Create invoice'}
               </button>
             </div>
           </div>

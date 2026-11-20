@@ -978,6 +978,29 @@ class ApiClient {
     })
   }
 
+  getInvoice(invoiceId: string) {
+    return this.request<import('../types').InvoiceDetail>(`/owner/invoices/${invoiceId}`)
+  }
+
+  updateInvoice(invoiceId: string, data: {
+    customerName: string
+    customerPhone?: string | null
+    customerEmail?: string | null
+    lineItems: import('../types').InvoiceLineItem[]
+    taxAmount?: number
+    notes?: string | null
+    paymentMethod?: string
+    paymentRef?: string | null
+    discountType?: 'PERCENTAGE' | 'FLAT' | null
+    discountValue?: number | null
+    staffId?: string | null
+  }) {
+    return this.request<import('../types').InvoiceListItem>(`/owner/invoices/${invoiceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
   issueBookingInvoice(bookingId: string, data?: { amount?: number; paymentMethod?: string; notes?: string }) {
     return this.request<import('../types').InvoiceListItem>(`/owner/invoices/from-booking/${bookingId}`, {
       method: 'POST',
