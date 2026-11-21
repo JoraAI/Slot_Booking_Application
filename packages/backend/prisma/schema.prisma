@@ -185,7 +185,7 @@ model Business {
   enableWaitlist          Boolean   @default(false)
   enableRecurring         Boolean   @default(false)
   enablePayments          Boolean   @default(false)
-  enableMultiStaff        Boolean   @default(false)
+  enableMultiStaff        Boolean   @default(true)
   paymentMode             String    @default("none") // 'full' | 'deposit' | 'none'
   depositAmount           Float?
   depositPercentage       Float?

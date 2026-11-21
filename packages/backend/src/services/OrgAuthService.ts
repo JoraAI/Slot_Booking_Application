@@ -243,6 +243,7 @@ export const orgAuthService = {
           ...(input.googleSub ? { googleSub: input.googleSub } : {}),
           emailVerifiedAt: input.emailVerifiedAt,
           slotGranularityMinutes: 15,
+          enableMultiStaff: true,
           workingHours: {
             create: [
               { dayOfWeek: 0, openTime: '10:00', closeTime: '18:00', isOpen: true },
